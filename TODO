@@ -86,6 +86,21 @@ Ongoing:
 - Player comparison for mappacks (add speedrun, G++/G--, ...)
 - Instead of calling the compiled version of STB's SHA1, do it natively (gem with native extensions?)
 
+\\ ------------------------ SQL -----------------------
+
+General tips:
+- https://dba.stackexchange.com/questions/311593/mysql-indexes-on-all-column-combinations
+
+Indices:
+- https://mysql.rjweb.org/doc.php/index_cookbook_mysql
+
+Partitioning:
+- https://mysql.rjweb.org/doc.php/partitionmaint
+
+Memory tables (for userlevels, read-only): 
+- https://dev.mysql.com/doc/refman/8.0/en/memory-storage-engine.html
+- https://stackoverflow.com/questions/10692398/how-do-i-make-a-mysql-database-run-completely-in-memory
+
 \\ ------------------------ mappacker -----------------------
 
 

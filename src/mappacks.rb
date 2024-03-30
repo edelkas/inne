@@ -1331,7 +1331,7 @@ module Map
         (0 ... c_list.size - 1).each{ |f|
           p1 = [off_x + c_list[f][0],     off_y + c_list[f][1]    ]
           p2 = [off_x + c_list[f + 1][0], off_y + c_list[f + 1][1]]
-          background.line(p1: p1, p2: p2, color: gif[:colors][:ninja][i], weight: 2)
+          background.line(p1: p1, p2: p2, color: gif[:colors][:ninja][i], weight: info[:h].is_level? ? 2 : 1)
         }
       }
       off_x += dim * (COLUMNS + 3)
