@@ -1765,7 +1765,7 @@ module Map
     names = scores.map{ |s| s.player.print_name }
     wrong_names = names.each_with_index.select{ |_, i| !valids[i] }.map(&:first)
     event << error.strip if !error.empty?
-    event << "Replay #{format_board(board)} #{'trace'.pluralize(names.count)} for #{names.to_sentence} in #{userlevel ? "userlevel #{verbatim(h.name)}" : h.name} using palette #{verbatim(palette)}:"
+    event << "Replay #{format_board(board)} #{'trace'.pluralize(names.count)} for #{names.to_sentence} in #{userlevel ? "userlevel #{verbatim(h.name)} by #{verbatim(h.author.name)}" : h.name} using palette #{verbatim(palette)}:"
     texts = h.format_scores(np: gif ? 0 : 11, mode: board, ranks: ranks, join: false, cools: false, stars: false)
     event << "(**Warning**: #{'Trace'.pluralize(wrong_names.count)} for #{wrong_names.to_sentence} #{wrong_names.count == 1 ? 'is' : 'are'} likely incorrect)." if valids.count(false) > 0
 
