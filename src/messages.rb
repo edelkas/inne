@@ -1367,26 +1367,26 @@ def send_splits(event)
       wait_msg.delete if !wait_msg.nil? rescue nil
 
       # Export input files
-      File.binwrite('inputs_episode', scores[rank].demo.demo)
+      File.binwrite(NTRACE_INPUTS_E, scores[rank].demo.demo)
       ep.levels.each_with_index{ |l, i|
         map = !l.is_a?(Map) ? MappackLevel.find(l.id) : l
-        File.binwrite("map_data_#{i}", map.dump_level)
+        File.binwrite(NTRACE_MAP_DATA_E % i, map.dump_level)
       }
       shell("python3 #{PATH_NTRACE}")
 
       # Read output files
-      file = File.binread('output.txt') rescue nil
+      file = File.binread(NTRACE_OUTPUT_E) rescue nil
       if !file.nil?
         valid = file.scan(/True|False/).map{ |b| b == 'True' }
         ep_splits = file.split(/True|False/)[1..-1].map{ |d|
           round_score(d.strip.to_i.to_f / 60.0)
         }
         ep_scores = scores_from_splits(ep_splits, offset: 90.0)
-        FileUtils.rm(['output.txt'])
+        FileUtils.rm([NTRACE_OUTPUT_E])
       end
 
       # Cleanup
-      FileUtils.rm(['inputs_episode', *Dir.glob('map_data_*')])
+      FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
     end
   end
 
@@ -1449,7 +1449,7 @@ def update_ntrace(event)
   yes = []
   no = []
 
-  ['ntrace', 'nsim', 'nplay'].each{ |filename| 
+  ['ntrace', 'nsim', 'nplay'].each{ |filename|
     # Fetch attached file and perform integrity checks
     files = event.message.attachments.select{ |a| a.filename == "#{filename}.py" }
     if files.size == 0

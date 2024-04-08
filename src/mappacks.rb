@@ -1169,7 +1169,7 @@ module Map
     end
 
     # Render ninja markers for this _single_ frame
-    rad = ANIMATION_RADIUS    
+    rad = ANIMATION_RADIUS
     e1 = Gifenc::Geometry::E1
     e2 = Gifenc::Geometry::E2
     markers = []
@@ -1444,7 +1444,7 @@ module Map
       delay:      ANIMATION_DELAY_NORMAL, # Time between frames, in 1/100ths sec
       coords:     [],                     # Coordinates of routes to trace, per level and player
       demos:      [],                     # Run inputs, for input display, per level and player
-      texts:      [],                     # Texts for the legend      
+      texts:      [],                     # Texts for the legend
       collisions: {},                     # Collected objects in the runs, keyed by frame
       spoiler:    false,                  # Whether the screenshot should be spoilered in Discord
       v:          nil                     # Version of the map data to use (nil = latest)
@@ -3247,7 +3247,7 @@ class MappackScore < ActiveRecord::Base
   # Calculate the score using ntrace
   def ntrace_score
     return false if !highscoreable || !demo || !demo.demo
-    res = ntrace(highscoreable.dump_level, [demo.demo], true)
+    res = ntrace(highscoreable.dump_level, [demo.demo], silent: true)
     return false if !res[:success] || res[:valid] != [true]
     score = res[:msg].split("\n").last
     return false if !score || score.strip.empty?

@@ -1280,18 +1280,26 @@ def compute_name(id, type)
   end
 end
 
-# Execute ntrace and parse the output. It assumes the input files have already
-# been exported previously.
-def ntrace(map_data, demos, silent: false, debug: false)
+# Execute ntrace and parse the output.
+def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
   # Export files for ntrace to read
-  File.binwrite('map_data', map_data)
-  demos.each_with_index{ |demo, i| File.binwrite("inputs_#{i}", demo) }
+  if splits
+    File.binwrite(NTRACE_INPUTS_E, demo_data)
+    map_data.each_with_index{ |map, i| File.binwrite(NTRACE_MAP_DATA_E % i, map) }
+  else
+    demo_data.each_with_index{ |demo, i| File.binwrite(NTRACE_INPUTS % i, demo) }
+    File.binwrite(NTRACE_MAP_DATA, map_data)
+  end
 
   # Execute ntrace and save output
   stdout, stderr, status = shell("python3 #{PATH_NTRACE}", output: true)
   ret = [stdout, stderr].join("\n\n")
-  FileUtils.rm(['map_data', *Dir.glob('inputs_*')])
-  output = 'output.bin'
+  if splits
+    FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
+  else
+    FileUtils.rm([NTRACE_MAP_DATA, *Dir.glob(NTRACE_INPUTS % '*')])
+  end
+  output = splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT
 
   # If ntrace failed, return or perror
   if !status.success? || !File.file?(output)

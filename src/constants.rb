@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = false # Switch to the local test bot
+TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = true  # Execute all threads
+DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -196,11 +196,18 @@ ANIM_GC      = false # Garbage collect periodically when generating frames
 ANIM_GC_STEP = 100   # How many frames to render before running the GC
 
 # <---------------------------------------------------------------------------->
-# <------                      FEATURE VARIABLES                         ------>
+# <------                       NTRACE VARIABLES                         ------>
 # <---------------------------------------------------------------------------->
 
-FEATURE_NTRACE  = true # Enable SimVYo's ntrace tool (required Python 3)
-FEATURE_ANIMATE = true # Enable animation for traces (requires FFmpeg)
+FEATURE_NTRACE  = true # Enable SimVYo's ntrace tool (requires Python 3)
+FEATURE_ANIMATE = true # Enable animation for traces
+
+NTRACE_MAP_DATA   = 'map_data'
+NTRACE_MAP_DATA_E = "map_data_%s"
+NTRACE_INPUTS     = "inputs_%s"
+NTRACE_INPUTS_E   = 'inputs_episode'
+NTRACE_OUTPUT     = 'output.bin'
+NTRACE_OUTPUT_E   = 'output.txt'
 
 # <---------------------------------------------------------------------------->
 # <------                  MONKEY PATCHING VARIABLES                     ------>
