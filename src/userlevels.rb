@@ -149,7 +149,7 @@ class UserlevelScore < ActiveRecord::Base
   end
 
   def self.global
-    newest(MIN_ID)
+    self
   end
 
   def self.retrieve_scores(full, mode = nil, author_id = nil)
@@ -583,7 +583,7 @@ class Userlevel < ActiveRecord::Base
   end
 
   def self.global
-    newest(MIN_ID)
+    self
   end
 
   # find the optimal score / amount of whatever rankings or stat
@@ -710,16 +710,16 @@ class Userlevel < ActiveRecord::Base
     bench(:start) if BENCHMARK
     case type
     when :rank
-      scores = scores.where("#{ties ? "tied_rank" : "rank"} <= #{par}")
+      scores = scores.where(par < 19 ? "#{ties ? "tied_rank" : "rank"} #{par == 0 ? '=' : '<='} #{par}" : '')
                      .group(:player_id)
                      .order('count_id desc')
                      .count(:id)
     when :tied
-      scores_w  = scores.where("tied_rank <= #{par}")
+      scores_w  = scores.where("tied_rank #{par == 0 ? '=' : '<='} #{par}")
                         .group(:player_id)
                         .order('count_id desc')
                         .count(:id)
-      scores_wo = scores.where("rank <= #{par}")
+      scores_wo = scores.where("rank #{par == 0 ? '=' : '<='} #{par}")
                         .group(:player_id)
                         .order('count_id desc')
                         .count(:id)
@@ -764,6 +764,8 @@ class Userlevel < ActiveRecord::Base
                     .to_h
     scores = scores.map{ |p, c| [players[p], c] }
     scores.reject!{ |p, c| c <= 0  } unless type == :avg_rank
+    bench(:step) if BENCHMARK
+
     scores
   end
 

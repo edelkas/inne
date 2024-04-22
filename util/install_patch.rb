@@ -1,9 +1,10 @@
 require 'rbconfig'
 
-TEST = false
-TARGET = "https://dojo.nplusplus.ninja"
+TEST      = false
+TARGET    = "https://dojo.nplusplus.ninja"
 HOST_TEST = "127.0.0.1"
-HOST = "45.32.150.168"
+HOST      = "45.32.150.168"
+PORT      = 8126
 
 def find_lib
   paths = {
@@ -30,13 +31,13 @@ case ARGV.size
 when 0, 1
   puts "Missing args"
 when 2, 3
-  port = ARGV[1].to_i
-  pack = ARGV[2].nil? ? '' : '/' + ARGV[2]
-  if port.to_s != ARGV[1] || port <= 1024 || port >= 65536
+  pack = ARGV[1]
+  port = (ARGV[2] || PORT).to_i
+  if port <= 1024 || port >= 65536
     puts "Incorrect port"
     exit
   end
-  proxy = "#{TEST ? HOST_TEST : HOST}:#{port}#{pack}"
+  proxy = "#{TEST ? HOST_TEST : HOST}:#{port}/#{pack}"
   if proxy.length > TARGET.length
     puts "Mappack name is too long"
     exit
