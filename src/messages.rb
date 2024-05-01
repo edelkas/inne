@@ -2618,7 +2618,7 @@ def submit_score(event)
       }
     else
       Downloadable.submit_zero_scores(
-        Userlevel.where('submitted = 0 AND completions >= 20'),
+        Userlevel.where('submitted = 0 AND completions >= 18'),
         event: event,
         msgs: msgs
       )
@@ -2629,7 +2629,7 @@ rescue => e
   lex(e, 'Failed to submit score.', event: event)
 end
 
-# Update how many completions a Metanet highscoreable (or all) has
+# Update how many completions a Metanet highscoreable / userlevel (or all) has
 def update_completions(event)
   msg = remove_command(parse_message(event))
   flags = parse_flags(msg)

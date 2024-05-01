@@ -168,9 +168,7 @@ class UserlevelScore < ActiveRecord::Base
 
   # Count top20 scores for all userlevels and fill their completions field
   # Delicate pure SQL, doable in Rails?
-  #   - full: Fill completions of levels with over 20 scores too
   def self.seed_completions(full = false)
-    add = !full ? ' AND t.cnt < 20' : ''
     query = %{
       UPDATE
         userlevels,
@@ -181,7 +179,7 @@ class UserlevelScore < ActiveRecord::Base
           ORDER BY uid ASC
         ) t
       SET userlevels.completions = t.cnt
-      WHERE userlevels.id = t.uid#{add};
+      WHERE userlevels.completions < 20 AND userlevels.id = t.uid;
     }.gsub(/\s+/, ' ').strip
     sql(query)
     Userlevel.where(completions: nil).update_all(completions: 0)
