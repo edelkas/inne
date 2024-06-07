@@ -1455,7 +1455,7 @@ module Map
 
     anim = false if !FEATURE_ANIMATE
     gif = !coords.empty?
-    filename =  "#{spoiler ? 'SPOILER_' : ''}#{h.name}.#{gif ? 'gif' : 'png'}"
+    filename =  "#{spoiler ? 'SPOILER_' : ''}#{sanitize_filename(h.name)}.#{gif ? 'gif' : 'png'}"
     memory = [] if BENCH_IMAGES
     $time = 0
 
@@ -1805,7 +1805,7 @@ module Map
 
     # Send image file
     ext = gif ? 'gif' : 'png'
-    send_file(event, trace, "#{name}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}", true)
+    send_file(event, trace, "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}", true)
 
     # Output debug info
     if debug
