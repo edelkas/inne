@@ -2503,8 +2503,8 @@ class MappackLevel < ActiveRecord::Base
   include Map
   include MappackHighscoreable
   include Levelish
-  alias_attribute :scores, :mappack_scores
-  alias_attribute :hashes, :mappack_hashes
+  alias_attribute :scores,  :mappack_scores
+  alias_attribute :hashes,  :mappack_hashes
   alias_attribute :episode, :mappack_episode
   has_many :mappack_scores, as: :highscoreable
   has_many :mappack_hashes, as: :highscoreable, dependent: :delete_all

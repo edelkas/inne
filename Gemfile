@@ -3,7 +3,7 @@ source 'https://rubygems.org' do
   gem 'discordrb', github: 'shardlab/discordrb', branch: 'main'
   gem 'activerecord'
   gem 'yaml_db'
-  gem 'rails', '~> 5.1.5'
+  gem 'rails'
   gem 'mysql2'
   gem 'damerau-levenshtein'
   gem 'rubyzip'
@@ -16,6 +16,7 @@ source 'https://rubygems.org' do
     gem 'oily_png', github: 'edelkas/oily_png', branch: 'dev'
     gem 'gifenc', github: 'edelkas/gifenc', branch: 'master'
     gem 'matplotlib'
+    gem 'rexml'
     gem 'svg-graph'
   end
 

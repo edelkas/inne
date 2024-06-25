@@ -217,7 +217,7 @@ def send_report
   send_message($channel, content: "**Daily highscoring summary**:\n" + total)
 
   $active_tasks[:report] = false
-  succ("Highscoring report sent")  
+  succ("Highscoring report sent")
   return true
 ensure
   $active_tasks[:report] = false
@@ -380,7 +380,7 @@ def update_histories
   return true
 rescue => e
   lex(e, "Updating histories")
-  return false  
+  return false
 ensure
   $active_tasks[:histories] = false
 end
@@ -418,7 +418,7 @@ def update_userlevel_histories
 
   $active_tasks[:userlevel_histories] = false
   succ("Updated userlevel histories")
-  return true   
+  return true
 rescue => e
   lex(e, "Updating userlevel histories")
   return false
@@ -527,7 +527,7 @@ def update_userlevel_tabs
   }
   $active_tasks[:tabs] = false
   succ("Downloaded userlevel tabs")
-  return true   
+  return true
 rescue => e
   lex(e, "Downloading userlevel tabs")
   return false
@@ -634,12 +634,14 @@ def start_level_of_the_day(ctp = false)
     story_day = false
 
     # Test lotd/eotw/cotm immediately
-    if TEST && (ctp ? TEST_CTP_LOTD : TEST_LOTD)
-      send_channel_next(Level, ctp)
-      send_channel_next(Episode, ctp)
-      send_channel_next(Story, ctp)
-      send_channel_episode_reminder(ctp)
-      send_channel_story_reminder(ctp)
+    if TEST
+      if (ctp ? TEST_CTP_LOTD : TEST_LOTD)
+        send_channel_next(Level, ctp)
+        send_channel_next(Episode, ctp)
+        send_channel_next(Story, ctp)
+        send_channel_episode_reminder(ctp)
+        send_channel_story_reminder(ctp)
+      end
       return
     end
 
@@ -702,7 +704,7 @@ def start_level_of_the_day(ctp = false)
       sleep(0.25)
       send_channel_story_reminder(ctp)
     end
-    
+
     $active_tasks[:lotd] = false
   end
 rescue => e

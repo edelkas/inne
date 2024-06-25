@@ -241,7 +241,7 @@ module Log
 
   # Handle exceptions
   def self.exception(e, msg = '', **kwargs)
-    write(msg, :error, kwargs)
+    write(msg, :error, **kwargs)
     write(e.message, :error)
     write(e.backtrace.join("\n"), :debug) if LOG_BACKTRACES
     msg
@@ -259,17 +259,17 @@ module Log
 end
 
 # Shortcuts for different logging methods
-def log   (msg, **kwargs)    Log.write(msg, :info,  kwargs) end
-def warn  (msg, **kwargs)    Log.write(msg, :warn,  kwargs) end
-def err   (msg, **kwargs)    Log.write(msg, :error, kwargs) end
-def msg   (msg, **kwargs)    Log.write(msg, :msg,   kwargs) end
-def succ  (msg, **kwargs)    Log.write(msg, :good,  kwargs) end
-def dbg   (msg, **kwargs)    Log.write(msg, :debug, kwargs) end
-def lin   (msg, **kwargs)    Log.write(msg, :in,    kwargs) end
-def lout  (msg, **kwargs)    Log.write(msg, :out,   kwargs) end
-def fatal (msg, **kwargs)    Log.write(msg, :fatal, kwargs) end
-def lex   (e, msg, **kwargs) Log.exception(e, msg, kwargs)  end
-def ld    (msg)              Log.discord(msg)               end
+def log   (msg, **kwargs)    Log.write(msg, :info,  **kwargs) end
+def warn  (msg, **kwargs)    Log.write(msg, :warn,  **kwargs) end
+def err   (msg, **kwargs)    Log.write(msg, :error, **kwargs) end
+def msg   (msg, **kwargs)    Log.write(msg, :msg,   **kwargs) end
+def succ  (msg, **kwargs)    Log.write(msg, :good,  **kwargs) end
+def dbg   (msg, **kwargs)    Log.write(msg, :debug, **kwargs) end
+def lin   (msg, **kwargs)    Log.write(msg, :in,    **kwargs) end
+def lout  (msg, **kwargs)    Log.write(msg, :out,   **kwargs) end
+def fatal (msg, **kwargs)    Log.write(msg, :fatal, **kwargs) end
+def lex   (e, msg, **kwargs) Log.exception(e, msg, **kwargs)  end
+def ld    (msg)              Log.discord(msg)                 end
 
 # <---------------------------------------------------------------------------->
 # <------                     EXCEPTION HANDLING                         ------>

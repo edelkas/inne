@@ -2039,12 +2039,18 @@ rescue => e
 end
 
 def send_test(event)
-  palette = Gifenc::ColorTable.new([0xFFFFFF, 0])
-  gif = Gifenc::Gif.new(128, 128, gct: palette, color: 0)
-  gif.images << Gifenc::Image.new(128, 128, color: 0)
-  font = parse_bmfont('retro')
-  txt2gif("OOooooooooooOOO", gif.images.last, font, 15, 14, 1)
-  gif.save('test.gif')
+  palettes = []
+  Level.all.each_with_index{ |l, i|
+    dbg(i.to_s.rjust(4), progress: true)
+    palette = Map::THEMES.sample
+    palettes << "#{l.name} (#{l.longname}) -> #{palette}"
+    Dir.mkdir("screenies") unless Dir.exist?("screenies")
+    File.binwrite(
+      "screenies/#{l.name.gsub('?', 'SS').gsub('!', 'SS2')}.png",
+      l.map.screenshot(palette)
+    )
+  }
+  File.write("palettes.txt", palettes.join("\n"))
 end
 
 def send_reaction(event)

@@ -12,4 +12,4 @@ outte:
   wait_timeout:      60   # Time in seconds to disconnect stale db conns
   idle_timeout:      60   # Time in seconds to close stale db conns (reaper)
   reaping_frequency: 60   # Time in seconds to run the db conn reaper
-  reconnect:         true
+#  reconnect:         true
