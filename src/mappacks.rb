@@ -1858,7 +1858,6 @@ class Mappack < ActiveRecord::Base
   has_many :mappack_episodes
   has_many :mappack_stories
   has_many :mappack_channels
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   # Parse all mappacks in the mappack directory into the database
   #   update - Update preexisting mappacks (otherwise, only parses newly added ones)
@@ -1973,7 +1972,7 @@ class Mappack < ActiveRecord::Base
 
     if !hard
       # Soft updates: Ensure the new tabs will replace the old ones precisely
-      tabs_old = MappackLevel.where(mappack_id: id).distinct.pluck('tab AS tab_int').sort
+      tabs_old = MappackLevel.where(mappack_id: id).distinct.pluck('`tab` AS `tab_int`').sort
       tabs_new = files.map{ |f|
         tab = TABS_NEW.values.find{ |att| att[:files].key?(f[0..-5]) }
         tab ? tab[:mode] * 7 + tab[:tab] : nil

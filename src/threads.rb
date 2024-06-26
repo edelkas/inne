@@ -3,7 +3,7 @@
 # updating the database scores, publishing the lotd, etc.
 #
 # See the TASK VARIABLES in src/constants.rb for configuration. See the end
-# of the file for thethread list and joining thread.
+# of the file for the thread list and joining thread.
 
 require_relative 'constants.rb'
 require_relative 'utils.rb'
