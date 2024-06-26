@@ -494,7 +494,7 @@ def getmem(ps = false)
     line = f.find{ |l| l=~ /vmrss/i }
   end
   return 0 if !line
-  name, value, unit = line.downcase.split
+  _, value, unit = line.downcase.split
   conversion = 1024 ** ['b', 'kb', 'mb', 'gb', 'tb'].index(unit)
   value.to_f * conversion / 1024 ** 2
 rescue
@@ -1086,7 +1086,10 @@ def normalize_type(type, empty: false, mappack: false)
   type = DEFAULT_TYPES.map(&:constantize) if type.nil?
   type = [type] if !type.is_a?(Array)
   type = DEFAULT_TYPES.map(&:constantize) if !empty && type.empty?
-  type.map{ |t| mappack ? t.mappack : t.vanilla }
+  type.map{ |t|
+    t = t.constantize if t.is_a?(String)
+    mappack ? t.mappack : t.vanilla
+  }
 end
 
 # Normalize how highscoreable types are handled.
@@ -1412,7 +1415,6 @@ def create_svg(
     show_y_labels:              true,
     rotate_y_labels:            false,
     stagger_y_labels:           false,
-    scale_integers:             false,
     show_y_guidelines:          true,
 
     # Fonts
@@ -1597,7 +1599,6 @@ def check_permission(event, role)
       allowed: ['botmasters']
     }
   else
-    names = Role.owners(role).pluck(:name)
     {
       granted: Role.exists(event.user.id, role) || event.user.id == BOTMASTER_ID,
       allowed: role.pluralize #names

@@ -275,7 +275,6 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     interaction_add_select_menu_metanet_tab(view, tab)
     send_message(event, content: header + "\n" + rank, components: view)
   else
-    length = header.length + rank.length
     event << header
     count <= 20 ? event << rank : send_file(event, rank[4..-4], 'rankings.txt')
   end
@@ -405,7 +404,7 @@ def send_scores(event, map = nil, ret = false)
   res     = ""
 
   # Navigating scores goes into a different method (see below this one)
-  if !!msg[/nav((igat)((e)|(ing)))?\s*(high\s*)?scores/i] && !h.is_a?(MappackHighscoreable)
+  if nav && !h.is_a?(MappackHighscoreable)
     send_nav_scores(event)
     return
   end
@@ -456,7 +455,6 @@ end
 def send_nav_scores(event, offset: nil, date: nil)
   # Parse message parameters
   initial = parse_initial(event)
-  msg     = parse_message(event)
   scores  = parse_highscoreable(event)
 
   # Retrieve scores for specified date and highscoreable
@@ -515,7 +513,6 @@ end
 # since it's a very common combination
 def send_screenscores(event)
   # Parse message parameters
-  msg = parse_message(event)
   map = parse_highscoreable(event, mappack: true)
   ss  = send_screenshot(event, map, true)
   s   = send_scores(event, map, true)
@@ -528,7 +525,6 @@ end
 
 # Same, but sending the scores first and the screenshot second
 def send_scoreshot(event)
-  msg = parse_message(event)
   map = parse_highscoreable(event, mappack: true)
   s   = send_scores(event, map, true)
   ss  = send_screenshot(event, map, true)
@@ -598,7 +594,6 @@ def send_community(event)
   msg  = parse_message(event)
   tabs = parse_tabs(msg)
   rank = parse_range(msg)[0..1].max - 1
-  puts rank
   has_secrets = !(tabs & [:SS, :SS2]).empty? || tabs.empty?
   has_episodes = !(tabs - [:SS, :SS2]).empty? || tabs.empty?
 
@@ -796,7 +791,7 @@ def send_worst(event, worst = true)
   fmt  = board == 'sr' ? 'd' : '.3f'
   pad1 = list.map{ |level, gap| level.length }.max
   pad2 = list.map{ |level, gap| gap }.max.to_i.to_s.length + (board == 'sr' ? 0 : 4)
-  list = list.map{ |level, gap| "#{"%-#{pad1}s" % [level]} - #{"%#{pad2}#{fmt}" % [gap]}" }.join("\n")
+  list = list.map{ |level, gap| "#{"%-#{pad1}s" % [level]} - #{"%#{pad2}#{fmt}" % [round_score(gap)]}" }.join("\n")
 
   # Send response
   adverb  = worst ? 'most' : 'least'
@@ -813,7 +808,6 @@ end
 
 # Return level ID for a specified level name
 def send_level_id(event)
-  msg   = parse_message(event)
   level = parse_highscoreable(event, mappack: true)
   perror("Episodes and stories don't have a name!") if level.is_episode? || level.is_story?
   event << "#{level.longname} is level #{level.name}."
@@ -1095,7 +1089,6 @@ def send_challenges(event)
     perror("No asking for challenges outside of #{mentions} or DMs!")
   end
 
-  msg = parse_message(event)
   lvl = parse_highscoreable(event, mappack: true)
   perror("Mappacks don't have challenges (yet ¬‿¬)") if lvl.is_mappack?
   perror("#{lvl.class.to_s.pluralize.capitalize} don't have challenges!") if lvl.class != Level
@@ -1110,7 +1103,7 @@ end
 # (e.g. scores, screenshot, challenges, level id, ...)
 # 'page' parameters controls button page navigation when there are many results
 def send_query(event, page: nil)
-  lvl = parse_highscoreable(event, list: true, mappack: true, page: page)
+  parse_highscoreable(event, list: true, mappack: true, page: page)
 rescue => e
   lex(e, "Error performing query.", event: event)
 end
@@ -1310,7 +1303,6 @@ rescue => e
 end
 
 def send_download(event)
-  msg = parse_message(event)
   h   = parse_highscoreable(event, mappack: true, map: true)
   perror("Only levels can be downloaded") if !h.is_a?(Levelish)
   event << "Downloading #{h.format_name}:"
@@ -2592,7 +2584,6 @@ end
 def submit_score(event)
   msg = remove_command(parse_message(event))
   flags = parse_flags(msg)
-  hashes = flags.key?(:hashes)
 
   if !flags.key?(:all)
     # Submit a score to an individual highscoreable
@@ -2758,7 +2749,6 @@ def test_ntrace(event)
   msg   = remove_command(parse_message(event))
   flags = parse_flags(msg)
   tabs  = parse_tabs(flags[:tabs].to_s)
-  mode  = parse_mode(flags[:mode].to_s)
   if flags.key?(:mappack)
     if flags[:mappack]
       klass = MappackLevel.where(mappack: parse_mappack(flags[:mappack]))

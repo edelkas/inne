@@ -495,7 +495,7 @@ module Downloadable
   end
 
   def save_scores(updated)
-
+    ActiveRecord::Base.transaction do
       # Save stars so we can reassign them again later
       stars = scores.where(star: true).pluck(:player_id) if self.class != Userlevel
 
@@ -557,7 +557,7 @@ module Downloadable
 
       # Remove scores stuck at the bottom after ignoring cheaters
       scores.where(rank: (updated.size..19).to_a).delete_all
-
+    end
   end
 
   def update_scores(fast: false)
@@ -614,7 +614,7 @@ module Downloadable
     qt = TYPES[klass.capitalize][:qt]
     score = (1000 * round_score(score)).round.to_s
     version = [2842, 3009, 3096].include?(self.id) ? 1 : 2
-    hash = self.map.hash(c: true, v: version)
+    hash = self.map._hash(c: true, v: version)
     if !hash
       err("Couldn't compute #{fname} hash, not submitting #{pname} score.", discord: log)
       return
@@ -681,8 +681,8 @@ module Highscoreable
     type   = ensure_type(type, mappack: !mappack.nil?)
     type   = type.mappack if mappack
     klass  = mappack ? MappackScore.where(mappack: mappack) : Score
-    sfield = mappack ? "score_#{board}" : 'score'
-    rfield = mappack ?  "rank_#{board}" : 'rank'
+    sfield = (mappack ? "score_#{board}" : 'score').to_sym
+    rfield = (mappack ?  "rank_#{board}" : 'rank').to_sym
     scale  = mappack && board == 'hs' ? 60.0 : 1
     bench(:start) if BENCHMARK
 
@@ -690,7 +690,7 @@ module Highscoreable
     if !player_id.nil?
       ids = klass.where(highscoreable_type: type.to_s, rfield => 0, player_id: player_id)
       ids = ids.where(tab: tabs) if !tabs.empty?
-      ids = ids.pluck('highscoreable_id')
+      ids = ids.pluck('`highscoreable_id`')
     end
 
     # Fetch required scores and compute spreads
@@ -717,8 +717,8 @@ module Highscoreable
 
     # Retrieve player names
     pnames = klass.where(highscoreable_type: type.to_s, highscoreable_id: ret.keys, rfield => 0)
-                  .joins("INNER JOIN players ON players.id = player_id")
-                  .pluck('highscoreable_id', 'IF(display_name IS NOT NULL, display_name, name)')
+                  .joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
+                  .pluck('`highscoreable_id`', 'IF(`display_name` IS NOT NULL, `display_name`, `name`)')
                   .to_h
 
     # Format response
@@ -737,27 +737,27 @@ module Highscoreable
     # Prepare params
     type = type.mappack if mappack
     table = type.table_name
-    rfield = !mappack ? 'rank' : "rank_#{board}"
-    trfield = !mappack ? 'tied_rank' : "tied_rank_#{board}"
+    rfield = (!mappack ? 'rank' : "rank_#{board}").to_sym
+    trfield = (!mappack ? 'tied_rank' : "tied_rank_#{board}").to_sym
 
     # Retrieve highscoreables with more ties for 0th
     klass = mappack ? MappackScore : Score
     ret = !tabs.empty? ? klass.where(tab: tabs) : klass
     ret = ret.where(mappack: mappack) if mappack
-    ret = ret.joins("INNER JOIN #{table} ON #{table}.id = highscoreable_id")
+    ret = ret.joins("INNER JOIN `#{table}` ON `#{table}`.`id` = `highscoreable_id`")
              .where(highscoreable_type: type, trfield => 0)
              .group(:highscoreable_id)
-             .order(!maxed || mappack ? 'count(highscoreable_id) desc' : '', :highscoreable_id)
-             .having("count(highscoreable_id) >= #{MIN_TIES}")
+             .order(!maxed || mappack ? 'COUNT(`highscoreable_id`) DESC' : '', :highscoreable_id)
+             .having("COUNT(`highscoreable_id`) >= #{MIN_TIES}")
              .having(!player_id.nil? ? 'amount = 0' : '')
-             .pluck('highscoreable_id', 'count(highscoreable_id)', 'name', !player_id.nil? ? "count(if(player_id = #{player_id}, player_id, NULL)) AS amount" : '1')
+             .pluck('`highscoreable_id`', 'COUNT(`highscoreable_id`)', '`name`', !player_id.nil? ? "COUNT(IF(`player_id` = #{player_id}, `player_id`, NULL)) AS `amount`" : '1')
              .map{ |a, b, c| [a, [b, c]] }
              .to_h
 
     # Retrieve score counts for each highscoreable
     counts = klass.where(highscoreable_type: type, highscoreable_id: ret.keys)
                   .group(:highscoreable_id)
-                  .order('count(id) desc')
+                  .order('COUNT(`id`) DESC')
                   .count(:id) unless mappack
 
     # Filter highscoreables
@@ -769,8 +769,8 @@ module Highscoreable
     else
       # Fetch player names owning the 0ths on said highscoreables
       names = klass.where(highscoreable_type: type, highscoreable_id: ret.keys, rfield => 0)
-                    .joins("INNER JOIN players ON players.id = player_id")
-                    .pluck('highscoreable_id', 'IF(display_name IS NOT NULL, display_name, name)')
+                    .joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
+                    .pluck('`highscoreable_id`', 'IF(`display_name` IS NOT NULL, `display_name`, `name`)')
                     .to_h
 
       # Format response
@@ -807,15 +807,15 @@ module Highscoreable
 
     # Fetch level 0th sums
     lvls = query.where(highscoreable_type: mappack ? 'MappackLevel' : 'Level', rfield => 0)
-                .joins("INNER JOIN #{table} ON #{table}.id = highscoreable_id DIV #{count}")
-                .group("highscoreable_id DIV #{count}")
+                .joins("INNER JOIN `#{table}` ON `#{table}`.`id` = `highscoreable_id` DIV #{count}")
+                .group("`highscoreable_id` DIV #{count}")
                 .sum(sfield)
 
     # Fetch episode/story 0th scores and compute cleanliness
     ret = query.where(highscoreable_type: type, rfield => rank)
-               .joins("INNER JOIN #{table} ON #{table}.id = highscoreable_id")
-               .joins('INNER JOIN players ON players.id = player_id')
-               .pluck("#{table}.id", "#{table}.name", sfield, 'IF(display_name IS NULL, players.name, display_name)')
+               .joins("INNER JOIN `#{table}` ON `#{table}`.`id` = `highscoreable_id`")
+               .joins('INNER JOIN `players` ON `players`.`id` = `player_id`')
+               .pluck("`#{table}`.`id`", "`#{table}`.`name`", sfield, 'IF(`display_name` IS NULL, `players`.`name`, `display_name`)')
                .map{ |id, e, s, p| [e, round_score((lvls[id] - s).abs - offset), p] }
     bench(:step) if BENCHMARK
     ret
@@ -1209,8 +1209,8 @@ module Episodish
 
   def cleanliness(rank = 0, board = 'hs')
     klass  = !is_mappack? ? Score : MappackScore
-    rfield = !is_mappack? ? 'rank' : "rank_#{board}"
-    sfield = !is_mappack? ? 'score' : "score_#{board}"
+    rfield = (!is_mappack? ? 'rank' : "rank_#{board}").to_sym
+    sfield = (!is_mappack? ? 'score' : "score_#{board}").to_sym
     scale  = is_mappack? && board == 'hs' ? 60.0 : 1.0
     offset = !is_mappack? || board == 'hs' ? 4 * 90.0 : 0.0
 
@@ -1340,8 +1340,8 @@ module Storyish
 
   def cleanliness(rank = 0, board = 'hs')
     klass  = !is_mappack? ? Score : MappackScore
-    rfield = !is_mappack? ? 'rank' : "rank_#{board}"
-    sfield = !is_mappack? ? 'score' : "score_#{board}"
+    rfield = (!is_mappack? ? 'rank' : "rank_#{board}").to_sym
+    sfield = (!is_mappack? ? 'score' : "score_#{board}").to_sym
     scale  = is_mappack? && board == 'hs' ? 60.0 : 1.0
     offset = !is_mappack? || board == 'hs' ? 24 * 90.0 : 0.0
 
@@ -1455,9 +1455,7 @@ class Score < ActiveRecord::Base
     # Adapt params for mappacks, if necessary
     type = fix_type(type)
     mode = 'hs' if !['hs', 'sr'].include?(mode)
-    ttype = ties ? 'tied_rank' : 'rank'
-    ttype += "_#{mode}" if !mappack.nil?
-    ttype = "`#{ttype}`"
+    ttype = "#{ties ? 'tied_' : ''}rank#{mappack ? "_#{mode}" : ''}".to_sym
     if !mappack.nil?
       klass = MappackScore.where(mappack: mappack)
       klass = klass.where.not(ttype => nil) unless old
@@ -1473,8 +1471,8 @@ class Score < ActiveRecord::Base
            .where(!tabs.empty? ? { tab: tabs } : nil)
     )
     queries.push(
-      queries.last.where(!a.blank?  ? "#{ttype} >= #{a}" : nil)
-                  .where(!b.blank?  ? "#{ttype} < #{b}"  : nil)
+      queries.last.where(!a.blank?  ? "`#{ttype}` >= #{a}" : nil)
+                  .where(!b.blank?  ? "`#{ttype}` < #{b}"  : nil)
     )
     queries.push(
       queries.last.where(cool ? { cool: true } : nil)
@@ -1522,9 +1520,9 @@ class Score < ActiveRecord::Base
     scores   = scores.where.not(player: players) if !mappack.nil? && !players.empty?
 
     # Named fields
-    rankf  = mappack.nil? ? '`rank`' : "`rank_#{board}`"
-    trankf = "`tied_#{rankf}`"
-    scoref = mappack.nil? ? '`score`' : "`score_#{board}`"
+    rankf  = mappack.nil? ? 'rank' : "rank_#{board}"
+    trankf = "tied_#{rankf}"
+    scoref = mappack.nil? ? 'score' : "score_#{board}"
     scale  = !mappack.nil? && board == 'hs' ? 60.0 : 1.0
 
     # Perform specific rankings to filtered scores
@@ -1535,11 +1533,11 @@ class Score < ActiveRecord::Base
                      .order('`count_id` DESC')
                      .count(:id)
     when :tied_rank
-      scores_w  = scores.where("#{trankf} >= #{a} AND #{trankf} < #{b}")
+      scores_w  = scores.where("`#{trankf}` >= #{a} AND `#{trankf}` < #{b}")
                         .group(:player_id)
                         .order('`count_id` DESC')
                         .count(:id)
-      scores_wo = scores.where("#{rankf} >= #{a} AND #{rankf} < #{b}")
+      scores_wo = scores.where("`#{rankf}` >= #{a} AND `#{rankf}` < #{b}")
                         .group(:player_id)
                         .order('`count_id` DESC')
                         .count(:id)
@@ -1547,9 +1545,9 @@ class Score < ActiveRecord::Base
                        .sort_by{ |id, c| -c }
     when :singular
       types = type.map{ |t|
-        ids = scores.where(rankf => 1, trankf => b, highscoreable_type: t)
+        ids = scores.where(rankf.to_sym => 1, trankf.to_sym => b, highscoreable_type: t)
                     .pluck(:highscoreable_id)
-        scores.where(rankf => 0, highscoreable_type: t, highscoreable_id: ids)
+        scores.where(rankf.to_sym => 0, highscoreable_type: t, highscoreable_id: ids)
               .group(:player_id)
               .count(:id)
       }
@@ -1558,23 +1556,23 @@ class Score < ActiveRecord::Base
       }.sort_by{ |id, c| -c }
     when :points
       scores = scores.group(:player_id)
-                     .order("SUM(#{ties ? "20 - #{trankf}" : "20 - #{rankf}"}) DESC")
-                     .sum(ties ? "20 - #{trankf}" : "20 - #{rankf}")
+                     .order("SUM(#{ties ? "20 - `#{trankf}`" : "20 - `#{rankf}`"}) DESC")
+                     .sum(ties ? "20 - `#{trankf}`" : "20 - `#{rankf}`")
     when :avg_points
       scores = scores.select("COUNT(`player_id`)")
                      .group(:player_id)
                      .having("COUNT(`player_id`) >= #{min_scores(basetype, tabs, false, a, b, star, mappack)}")
-                     .order("avg(#{ties ? "20 - #{trankf}" : "20 - #{rankf}"}) DESC")
-                     .average(ties ? "20 - #{trankf}" : "20 - #{rankf}")
+                     .order("AVG(#{ties ? "20 - `#{trankf}`" : "20 - `#{rankf}`"}) DESC")
+                     .average(ties ? "20 - `#{trankf}`" : "20 - `#{rankf}`")
     when :avg_rank
       scores = scores.select("COUNT(`player_id`)")
                      .group(:player_id)
                      .having("COUNT(`player_id`) >= #{min_scores(basetype, tabs, false, a, b, star, mappack)}")
-                     .order("avg(#{ties ? trankf : rankf})")
-                     .average(ties ? trankf : rankf)
+                     .order("AVG(`#{ties ? trankf : rankf}`)")
+                     .average('`' + (ties ? trankf : rankf) + '`')
     when :avg_lead
       scores = scores.where(rankf => [0, 1])
-                     .pluck(:player_id, :highscoreable_id, scoref)
+                     .pluck(:player_id, :highscoreable_id, scoref.to_sym)
                      .group_by{ |s| s[1] }
                      .reject{ |h, s| s.size < 2 }
                      .map{ |h, s| [s[0][0], (s[0][2] - s[1][2]).abs] }
@@ -1584,8 +1582,8 @@ class Score < ActiveRecord::Base
     when :score
       asc = !mappack.nil? && board == 'sr'
       scores = scores.group(:player_id)
-                     .order(asc ? 'COUNT(`id`) DESC' : '', "SUM(#{scoref}) #{asc ? 'ASC' : 'DESC'}")
-                     .pluck("`player_id`, SUM(#{scoref}), COUNT(`id`)")
+                     .order(asc ? 'COUNT(`id`) DESC' : '', "SUM(`#{scoref}`) #{asc ? 'ASC' : 'DESC'}")
+                     .pluck("`player_id`, SUM(`#{scoref}`), COUNT(`id`)")
                      .map{ |id, score, count|
                         score = round_score(score.to_f / scale)
                         [
@@ -1596,30 +1594,30 @@ class Score < ActiveRecord::Base
                       }
     when :maxed
       scores = scores.where(highscoreable_id: Highscoreable.ties(basetype, tabs, nil, true, true, mappack, board))
-                     .where("#{trankf} = 0")
+                     .where("`#{trankf}` = 0")
                      .group(:player_id)
-                     .order("COUNT(id) DESC")
+                     .order("COUNT(`id`) DESC")
                      .count(:id)
     when :maxable
       scores = scores.where(highscoreable_id: Highscoreable.ties(basetype, tabs, nil, false, true, mappack, board))
-                     .where("#{trankf} = 0")
+                     .where("`#{trankf}` = 0")
                      .group(:player_id)
-                     .order("COUNT(id) DESC")
+                     .order("COUNT(`id`) DESC")
                      .count(:id)
     when :gp
-      query = scores.select(:player_id, :highscoreable_id, 'MAX(`gold`) AS gold')
+      query = scores.select(:player_id, :highscoreable_id, 'MAX(`gold`) AS `gold`')
                     .group(:player_id, :highscoreable_id)
       scores = MappackScore.from(query, :t)
                            .group(:player_id)
                            .order('`sum_t_gold` DESC')
-                           .sum('t.gold')
+                           .sum('`t`.`gold`')
     when :gm
-      query = scores.select(:player_id, :highscoreable_id, 'MIN(`gold`) AS gold')
+      query = scores.select(:player_id, :highscoreable_id, 'MIN(`gold`) AS `gold`')
                     .group(:player_id, :highscoreable_id)
       scores = MappackScore.from(query, :t)
                            .group(:player_id)
                            .order('COUNT(*) DESC', 'SUM(`gold`) ASC')
-                           .pluck('t.player_id', 'SUM(`gold`)', 'COUNT(*)')
+                           .pluck('`t`.`player_id`', 'SUM(`gold`)', 'COUNT(*)')
     end
 
     # Find players and save their display name, if it exists, or their name otherwise
@@ -1743,9 +1741,9 @@ class Score < ActiveRecord::Base
   def self.holders
     bench(:start) if BENCHMARK
     sql = %{
-      SELECT min, COUNT(min) FROM (
-        SELECT MIN(rank) AS min FROM scores GROUP BY player_id
-      ) AS t GROUP BY min;
+      SELECT `min`, COUNT(`min`) FROM (
+        SELECT MIN(`rank`) AS `min` FROM `scores` GROUP BY `player_id`
+      ) AS `t` GROUP BY `min`;
     }.gsub(/\s+/, ' ').strip
     res = ActiveRecord::Base.connection.execute(sql).to_h
     ranks = { 0 => res[0] }
@@ -1825,23 +1823,23 @@ class Player < ActiveRecord::Base
     t = type.to_s.downcase.pluralize
     bench(:start) if BENCHMARK
     ids = request.where(player: [p1, p2])
-                 .joins("INNER JOIN #{t} ON #{t}.id = scores.highscoreable_id")
+                 .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                  .group(:highscoreable_id)
-                 .having('count(highscoreable_id) > 1')
-                 .pluck('MIN(highscoreable_id)')
+                 .having('COUNT(`highscoreable_id`) > 1')
+                 .pluck('MIN(`highscoreable_id`)')
     scores1 = request.where(highscoreable_id: ids, player: p1)
-                     .joins("INNER JOIN #{t} ON #{t}.id = scores.highscoreable_id")
+                     .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                      .order(:highscoreable_id)
-                     .pluck(:rank, :highscoreable_id, "#{t}.name", :score)
+                     .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
     scores2 = request.where(highscoreable_id: ids, player: p2)
-                     .joins("INNER JOIN #{t} ON #{t}.id = scores.highscoreable_id")
+                     .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                      .order(:highscoreable_id)
-                     .pluck(:rank, :highscoreable_id, "#{t}.name", :score)
+                     .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
     scores = scores1.zip(scores2).group_by{ |s1, s2| s1[3] <=> s2[3] }
     s1 = request.where(player: p1)
                 .where.not(highscoreable_id: ids)
-                .joins("INNER JOIN #{t} ON #{t}.id = scores.highscoreable_id")
-                .pluck(:rank, :highscoreable_id, "#{t}.name", :score)
+                .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
+                .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
                 .group_by{ |s| s[0] }
                 .map{ |r, s| [r, s.sort_by{ |s| s[1] }] }
                 .to_h
@@ -1859,8 +1857,8 @@ class Player < ActiveRecord::Base
                          : {}
     s5 = request.where(player: p2)
                 .where.not(highscoreable_id: ids)
-                .joins("INNER JOIN #{t} ON #{t}.id = scores.highscoreable_id")
-                .pluck(:rank, :highscoreable_id, "#{t}.name", :score)
+                .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
+                .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
                 .group_by{ |s| s[0] }
                 .map{ |r, s| [r, s.sort_by{ |s| s[1] }] }
                 .to_h
@@ -2022,7 +2020,7 @@ class Player < ActiveRecord::Base
   end
 
   def top_ns(n, type, tabs, ties)
-    scores_by_type_and_tabs(type, tabs).where("#{ties ? "tied_rank" : "rank"} < #{n}")
+    scores_by_type_and_tabs(type, tabs).where("#{ties ? "`tied_rank`" : "`rank`"} < #{n}")
   end
 
   # Fetch player's scores (or, alternatively, missing scores) filtering by many
@@ -2059,23 +2057,23 @@ class Player < ActiveRecord::Base
       rankf = mappack.nil? ? 'rank' : "rank_#{board}"
       trankf = "tied_#{rankf}"
       if tied
-        q = "#{trankf} >= #{a} AND #{trankf} < #{b} AND NOT (#{rankf} >= #{a} AND #{rankf} < #{b})"
+        q = "`#{trankf}` >= #{a} AND `#{trankf}` < #{b} AND NOT (`#{rankf}` >= #{a} AND `#{rankf}` < #{b})"
       else
         rank_type = ties ? trankf : rankf
-        q = "#{rank_type} >= #{a} AND #{rank_type} < #{b}"
+        q = "`#{rank_type}` >= #{a} AND `#{rank_type}` < #{b}"
       end
       ret = ret.where(q)
     end
 
     # Filter scores by cool and star, if not in a mappack
     if mappack.nil?
-      ret = ret.where("#{missing ? 'NOT ' : ''}(cool = 1 AND star = 1)") if cool && star
+      ret = ret.where("#{missing ? 'NOT ' : ''}(`cool` = 1 AND `star` = 1)") if cool && star
       ret = ret.where(cool: !missing) if cool && !star
       ret = ret.where(star: !missing) if star && !cool
     end
 
     # Order results and return
-    ret.order(rankf, 'highscoreable_type DESC', 'highscoreable_id')
+    ret.order("`#{rankf}`", '`highscoreable_type` DESC', '`highscoreable_id`')
   end
 
   def cools(type, tabs, r1 = 0, r2 = 20, ties = false, missing = false)
@@ -2084,14 +2082,6 @@ class Player < ActiveRecord::Base
 
   def stars(type, tabs, r1 = 0, r2 = 20, ties = false, missing = false)
     range_ns(r1, r2, type, tabs, ties).where(star: !missing)
-  end
-
-  def scores_by_rank(type, tabs, r1 = 0, r2 = 20)
-    bench(:start) if BENCHMARK
-    ret = scores_by_type_and_tabs(type, tabs, :name).where("rank >= #{r1} AND rank < #{r2}")
-                                                    .order('rank, highscoreable_type DESC, highscoreable_id')
-    bench(:step) if BENCHMARK
-    ret
   end
 
   def score_counts(tabs, ties)
@@ -2127,35 +2117,35 @@ class Player < ActiveRecord::Base
     tname = type.table_name
     sfield = mappack ? "score_#{board}" : 'score'
     rfield = mappack ? "rank_#{board}" : 'rank'
-    klass = mappack ? MappackScore.where(mappack: mappack).where.not(rfield => nil) : Score
+    klass = mappack ? MappackScore.where(mappack: mappack).where.not(rfield.to_sym => nil) : Score
     klass = klass.where(tab: tabs) unless tabs.empty?
-    diff = "ABS(MAX(#{sfield}) - MIN(#{sfield}))"
+    diff = "ABS(MAX(`#{sfield}`) - MIN(`#{sfield}`))"
     diff += '/ 60.0' if mappack && board == 'hs'
 
     # Calculate gaps
     bench(:start) if BENCHMARK
-    list = klass.joins("INNER JOIN #{tname} ON #{tname}.id = highscoreable_id")
+    list = klass.joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `highscoreable_id`")
                 .where(highscoreable_type: type)
-                .where("#{rfield} = 0 OR player_id = #{self.id}")
+                .where("`#{rfield}` = 0 OR `player_id` = #{self.id}")
                 .group(:highscoreable_id)
-                .having('diff > 0')
-                .order("diff #{worst ? 'DESC' : 'ASC'}")
+                .having('`diff` > 0')
+                .order("`diff` #{worst ? 'DESC' : 'ASC'}")
                 .limit(full ? nil : NUM_ENTRIES)
-                .pluck(:name, "#{diff} AS diff")
+                .pluck(:name, "#{diff} AS `diff`")
     bench(:step) if BENCHMARK
     list
   end
 
   def points(type, tabs)
     bench(:start) if BENCHMARK
-    points = scores_by_type_and_tabs(type, tabs).sum('20 - rank')
+    points = scores_by_type_and_tabs(type, tabs).sum('20 - `rank`')
     bench(:step) if BENCHMARK
     points
   end
 
   def average_points(type, tabs)
     bench(:start) if BENCHMARK
-    scores = scores_by_type_and_tabs(type, tabs).average('20 - rank')
+    scores = scores_by_type_and_tabs(type, tabs).average('20 - `rank`')
     bench(:step) if BENCHMARK
     scores
   end
@@ -2170,7 +2160,7 @@ class Player < ActiveRecord::Base
   def singular_(type, tabs, plural = false)
     req = Score.where(highscoreable_type: type.to_s)
     req = req.where(tab: tabs) if !tabs.empty?
-    ids = req.where("rank = 1 AND tied_rank = #{plural ? 0 : 1}").pluck(:highscoreable_id)
+    ids = req.where("`rank` = 1 AND `tied_rank` = #{plural ? 0 : 1}").pluck(:highscoreable_id)
     scores_by_type_and_tabs(type, tabs, :name).where(rank: 0, highscoreable_id: ids)
   end
 
@@ -2215,29 +2205,29 @@ class Player < ActiveRecord::Base
         queryBasic = scores.where(highscoreable_type: type)
                           .where(!cool.blank? ? 'cool = 1' : '')
                           .where(!star.blank? ? 'star = 1' : '')
-        query = queryBasic.where(!a.blank? ? "#{ttype} >= #{a}" : '')
-                          .where(!b.blank? ? "#{ttype} < #{b}" : '')
+        query = queryBasic.where(!a.blank? ? "`#{ttype}` >= #{a}" : '')
+                          .where(!b.blank? ? "`#{ttype}` < #{b}" : '')
                           .group(:tab)
       end
       case rank
       when :rank
         query.count(:id).to_h
       when :tied_rank
-        scores1 = queryBasic.where("tied_rank >= #{a} AND tied_rank < #{b}")
+        scores1 = queryBasic.where("`tied_rank` >= #{a} AND `tied_rank` < #{b}")
                             .group(:tab)
                             .count(:id)
                             .to_h
-        scores2 = queryBasic.where("rank >= #{a} AND rank < #{b}")
+        scores2 = queryBasic.where("`rank` >= #{a} AND `rank` < #{b}")
                             .group(:tab)
                             .count(:id)
                             .to_h
         scores1.map{ |tab, count| [tab, count - scores2[tab]] }.to_h
       when :points
-        query.sum("20 - #{ttype}").to_h
+        query.sum("20 - `#{ttype}`").to_h
       when :score
         query.sum(:score).to_h
       when :avg_points
-        query.average("20 - #{ttype}").to_h
+        query.average("20 - `#{ttype}`").to_h
       when :avg_rank
         query.average(ttype).to_h
       when :maxed
@@ -2343,7 +2333,7 @@ class GlobalProperty < ActiveRecord::Base
   def self.set_saved_scores(type, curr, ctp = false)
     key = "saved_#{ctp ? 'ctp_' : ''}#{type.to_s.downcase}_scores"
     scores = curr.scores
-    scores = scores.where("rank_hs IS NOT NULL OR rank_sr IS NOT NULL") if ctp
+    scores = scores.where("`rank_hs` IS NOT NULL OR `rank_sr` IS NOT NULL") if ctp
     fields = [:player_id]
     if ctp
       fields << [:rank_hs, :score_hs, :rank_sr, :score_sr]

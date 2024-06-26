@@ -11,12 +11,12 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = false # Switch to the local test bot
+TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = true  # Execute all threads
+DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
-DEBUG          = true  # Breakpoint right after loading the bot
+DEBUG          = false # Breakpoint right after loading the bot
 
 # Test specific features
 TEST_REPORT    = false # Produces the report immediately once
@@ -100,7 +100,7 @@ EMOJIS_FOR_PLAY = [
 LOG_TO_CONSOLE  = true  # Log stuff to the terminal
 LOG_TO_FILE     = true  # Export logs to a file
 LOG_TO_DISCORD  = true  # Log select stuff to the botmaster's Discord DMs
-LOG_SQL         = false # Log _all_ SQL queries
+LOG_SQL         = true  # Log _all_ SQL queries
 LOG_SQL_TO_FILE = false # Log SQL queries to the logfile
 LOG_REPORT      = true  # Export new weekly scores to a file
 LOG_FILE_MAX    = 10 * 1024 ** 2 # Max log file size (10 MB)

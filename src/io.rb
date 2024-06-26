@@ -841,11 +841,6 @@ def parse_userlevel(event, userlevel = nil)
   end
 
   # --- FETCH userlevel(s)
-  empty = {
-    query: nil,
-    msg:   "You need to provide a map's title, ID, author, or author ID.",
-    count: 0
-  }
   query = Userlevel
   err   = ""
   count = 0
@@ -1066,13 +1061,13 @@ end
 def format_range(bott, rank, empty = false)
   return '' if empty
   if bott == rank - 1
-    header = "#{bott.ordinalize}"
+    "#{bott.ordinalize}"
   elsif bott == 0
-    header = format_rank(rank)
+    format_rank(rank)
   elsif rank == 20
-    header = format_bottom_rank(bott)
+    format_bottom_rank(bott)
   else
-    header = "#{bott.ordinalize}-#{(rank - 1).ordinalize}"
+    "#{bott.ordinalize}-#{(rank - 1).ordinalize}"
   end
 end
 

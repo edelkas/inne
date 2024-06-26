@@ -353,7 +353,7 @@ module Map
   #   c   - Use the C SHA1 implementation (vs. the default Ruby one)
   #   v   - Map version to hash
   #   pre - Serve precomputed hash stored in BadHash table
-  def hash(c: false, v: nil, pre: false)
+  def _hash(c: false, v: nil, pre: false)
     stored = l.hashes.where("version <= #{v}").order(:version).last rescue nil
     return stored if pre && stored
     map_data = dump_level(hash: true, version: v)
@@ -464,8 +464,6 @@ module Map
   # Find all touched objects in a given frame range by any ninja, and logically
   # collide with them, by either removing or toggling them.
   def self.collide_vs_objects(objects, objs, f, step, ppc)
-    scale = PPU * ppc / PPC
-
     # For every frame in the range, find collided objects by any ninja, by matching
     # the log returned by ntrace with the object dictionary
     collided_objects = []
@@ -1058,7 +1056,6 @@ module Map
   # timebars, input display...), and must be rectangular.
   def self.find_frame_bbox(f, coords, step, markers, demos, objects, atlas, trace: false, ppc: PPC)
     dim = 4 * ppc
-    rad = ANIMATION_RADIUS
     endpoints = []
 
     coords.each_with_index{ |c_list, i|
@@ -1115,7 +1112,6 @@ module Map
     bbox = image.bbox
 
     # Remove ninja markers and input display from previous frame
-    rad = ANIMATION_RADIUS
     markers.each{ |p1, p2|
       image.copy(
         src:    background,
@@ -2276,7 +2272,7 @@ module MappackHighscoreable
   def update_hashes(pre: false)
     hashes.clear
     versions.each{ |v|
-      hashes.create(version: v, sha1_hash: hash(c: true, v: v, pre: pre))
+      hashes.create(version: v, sha1_hash: _hash(c: true, v: v, pre: pre))
     }
     hashes.count
   end
@@ -2484,7 +2480,7 @@ module MappackHighscoreable
   #     then underflow, so we need to replicate this behaviour to match the hashes.
   def _verify_replay(ninja_check, score, c: true, v: nil)
     c_hash = hashes.find_by(version: v)
-    map_hash = c && c_hash ? c_hash.sha1_hash : hash(c: c, v: v)
+    map_hash = c && c_hash ? c_hash.sha1_hash : _hash(c: c, v: v)
     return true if !map_hash
     score = ((1000.0 * score / 60.0 + 0.5).floor % 2 ** 32).to_s
     sha1(map_hash + score, c: c) == ninja_check
@@ -2641,10 +2637,10 @@ class MappackEpisode < ActiveRecord::Base
 
   # Computes the episode's hash, which the game uses for integrity verifications
   # If 'pre', take the precomputed level hashes, otherwise compute them
-  def hash(c: false, v: nil, pre: false)
+  def _hash(c: false, v: nil, pre: false)
     hashes = levels.order(:id).map{ |l|
       stored = l.hashes.where("version <= #{v}").order(:version).last
-      c && pre && stored ? stored.sha1_hash : l.hash(c: c, v: v)
+      c && pre && stored ? stored.sha1_hash : l._hash(c: c, v: v)
     }.compact
     hashes.size < 5 ? nil : hashes.join
   end
@@ -2693,10 +2689,10 @@ class MappackStory < ActiveRecord::Base
 
   # Computes the story's hash, which the game uses for integrity verifications
   # If 'pre', take the precomputed level hashes, otherwise compute them
-  def hash(c: false, v: nil, pre: false)
+  def _hash(c: false, v: nil, pre: false)
     hashes = levels.order(:id).map{ |l|
       stored = l.hashes.where("version <= #{v}").order(:version).last
-      c && pre && stored ? stored.sha1_hash : l.hash(c: c, v: v)
+      c && pre && stored ? stored.sha1_hash : l._hash(c: c, v: v)
     }.compact
     return nil if hashes.size < 25
     work = 0.chr * 20

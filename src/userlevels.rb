@@ -228,7 +228,7 @@ class UserlevelPlayer < ActiveRecord::Base
 
   def range_s(rank1, rank2, ties, full = false, mode = nil, author_id = nil)
     t  = ties ? 'tied_rank' : 'rank'
-    ss = retrieve_scores(full, mode, author_id).where("#{t} >= #{rank1} AND #{t} <= #{rank2}")
+    retrieve_scores(full, mode, author_id).where("`#{t}` >= #{rank1} AND `#{t}` <= #{rank2}")
   end
 
   def range_h(rank1, rank2, ties, full = false, mode = nil, author_id = nil)
@@ -248,11 +248,11 @@ class UserlevelPlayer < ActiveRecord::Base
   end
 
   def points(ties, full = false, mode = nil, author_id = nil)
-    retrieve_scores(full, mode, author_id).sum(ties ? '20 - tied_rank' : '20 - rank')
+    retrieve_scores(full, mode, author_id).sum(ties ? '20 - `tied_rank`' : '20 - `rank`')
   end
 
   def avg_points(ties, full = false, mode = nil, author_id = nil)
-    retrieve_scores(full, mode, author_id).average(ties ? '20 - tied_rank' : '20 - rank')
+    retrieve_scores(full, mode, author_id).average(ties ? '20 - `tied_rank`' : '20 - `rank`')
   end
 
   def total_score(full = false, mode = nil, author_id = nil)
@@ -492,7 +492,7 @@ class Userlevel < ActiveRecord::Base
     return false if tab.nil?
 
     ActiveRecord::Base.transaction do
-      ids = levels[48 .. 48 + 44 * count - 1].scan(/./m).each_slice(44).to_a.each_with_index{ |l, i|
+      levels[48 .. 48 + 44 * count - 1].scan(/./m).each_slice(44).to_a.each_with_index{ |l, i|
         index = page * PART_SIZE + i
         return false if USERLEVEL_TABS[qt][:size] != -1 && index >= USERLEVEL_TABS[qt][:size]
         print("Updating #{MODES[mode].downcase} #{USERLEVEL_TABS[qt][:name]} map #{index + 1} / #{USERLEVEL_TABS[qt][:size]}...".ljust(80, " ") + "\r")
@@ -649,8 +649,8 @@ class Userlevel < ActiveRecord::Base
               .to_h
     # retrieve player names
     pnames = scores.where(userlevel_id: ret.keys, rank: 0)
-                   .joins("INNER JOIN userlevel_players ON userlevel_players.id = userlevel_scores.player_id")
-                   .pluck('userlevel_scores.userlevel_id', 'userlevel_players.name')
+                   .joins("INNER JOIN `userlevel_players` ON `userlevel_players`.`id` = `userlevel_scores`.`player_id`")
+                   .pluck('`userlevel_scores`.`userlevel_id`', '`userlevel_players`.`name`')
                    .to_h
     ret = ret.map{ |id, s| [id.to_s, s / 60.0, pnames[id]] }
     bench(:step) if BENCHMARK
@@ -669,22 +669,22 @@ class Userlevel < ActiveRecord::Base
     # retrieve most tied for 0th leves
     ret = scores.where(tied_rank: 0)
                 .group(:userlevel_id)
-                .order(!maxed ? 'count(userlevel_scores.id) desc' : '', :userlevel_id)
-                .having('count(userlevel_scores.id) >= 3')
-                .having(!player_id.nil? ? 'amount = 0' : '')
-                .pluck('userlevel_id', 'count(userlevel_scores.id)', !player_id.nil? ? "count(if(player_id = #{player_id}, player_id, NULL)) AS amount" : '1')
+                .order(!maxed ? 'COUNT(`userlevel_scores`.`id`) DESC' : '', :userlevel_id)
+                .having('COUNT(`userlevel_scores`.`id`) >= 3')
+                .having(!player_id.nil? ? '`amount` = 0' : '')
+                .pluck('`userlevel_id`', 'COUNT(`userlevel_scores`.`id`)', !player_id.nil? ? "COUNT(IF(`player_id` = #{player_id}, `player_id`, NULL)) AS `amount`" : '1')
                 .map{ |s| s[0..1] }
                 .to_h
     # retrieve total score counts for each level (to compare against the tie count and determine maxes)
     counts = scores.where(userlevel_id: ret.keys)
                    .group(:userlevel_id)
-                   .order('count(userlevel_scores.id) desc')
+                   .order('COUNT(`userlevel_scores`.`id`) DESC')
                    .count(:id)
     if !count
       # retrieve player names owning the 0ths on said level
       pnames = scores.where(userlevel_id: ret.keys, rank: 0)
-                     .joins("INNER JOIN userlevel_players ON userlevel_players.id = userlevel_scores.player_id")
-                     .pluck('userlevel_scores.userlevel_id', 'userlevel_players.name')
+                     .joins("INNER JOIN `userlevel_players` ON `userlevel_players`.`id` = `userlevel_scores`.`player_id`")
+                     .pluck('`userlevel_scores`.`userlevel_id`', '`userlevel_players`.`name`')
                      .to_h
       # retrieve userlevels
       userl = Userlevel.where(id: ret.keys)
@@ -708,37 +708,37 @@ class Userlevel < ActiveRecord::Base
     bench(:start) if BENCHMARK
     case type
     when :rank
-      scores = scores.where(par < 19 ? "#{ties ? "tied_rank" : "rank"} #{par == 0 ? '=' : '<='} #{par}" : '')
+      scores = scores.where(par < 19 ? "`#{ties ? "tied_rank" : "rank"}` #{par == 0 ? '=' : '<='} #{par}" : '')
                      .group(:player_id)
-                     .order('count_id desc')
+                     .order('`count_id` DESC')
                      .count(:id)
     when :tied
-      scores_w  = scores.where("tied_rank #{par == 0 ? '=' : '<='} #{par}")
+      scores_w  = scores.where("`tied_rank` #{par == 0 ? '=' : '<='} #{par}")
                         .group(:player_id)
-                        .order('count_id desc')
+                        .order('`count_id` DESC')
                         .count(:id)
-      scores_wo = scores.where("rank #{par == 0 ? '=' : '<='} #{par}")
+      scores_wo = scores.where("`rank` #{par == 0 ? '=' : '<='} #{par}")
                         .group(:player_id)
-                        .order('count_id desc')
+                        .order('`count_id` DESC')
                         .count(:id)
       scores = scores_w.map{ |id, count| [id, count - scores_wo[id].to_i] }
                        .sort_by{ |id, c| -c }
     when :points
       scores = scores.group(:player_id)
-                     .order("sum(#{ties ? "20 - tied_rank" : "20 - rank"}) desc")
-                     .sum(ties ? "20 - tied_rank" : "20 - rank")
+                     .order("SUM(#{ties ? "20 - `tied_rank`" : "20 - `rank`"}) DESC")
+                     .sum(ties ? "20 - `tied_rank`" : "20 - `rank`")
     when :avg_points
-      scores = scores.select("count(player_id)")
+      scores = scores.select("COUNT(`player_id`)")
                      .group(:player_id)
-                     .having("count(player_id) >= #{find_min(global, nil, author_id)}")
-                     .order("avg(#{ties ? "20 - tied_rank" : "20 - rank"}) desc")
-                     .average(ties ? "20 - tied_rank" : "20 - rank")
+                     .having("COUNT(`player_id`) >= #{find_min(global, nil, author_id)}")
+                     .order("AVG(#{ties ? "20 - `tied_rank`" : "20 - `rank`"}) DESC")
+                     .average(ties ? "20 - `tied_rank`" : "20 - `rank`")
     when :avg_rank
-      scores = scores.select("count(player_id)")
+      scores = scores.select("COUNT(`player_id`)")
                      .group(:player_id)
-                     .having("count(player_id) >= #{find_min(global, nil, author_id)}")
-                     .order("avg(#{ties ? "tied_rank" : "rank"})")
-                     .average(ties ? "tied_rank" : "rank")
+                     .having("COUNT(`player_id`) >= #{find_min(global, nil, author_id)}")
+                     .order("AVG(`#{ties ? "tied_rank" : "rank"}`)")
+                     .average(ties ? "`tied_rank`" : "`rank`")
     when :avg_lead
       scores = scores.where(rank: [0, 1])
                      .pluck(:player_id, :userlevel_id, :score)
@@ -750,13 +750,14 @@ class Userlevel < ActiveRecord::Base
                      .sort_by{ |p, s| -s }
     when :score
       scores = scores.group(:player_id)
-                     .order("sum(score) desc")
-                     .sum('score / 60')
+                     .order("SUM(`score`) DESC")
+                     .sum('`score` / 60')
     end
     bench(:step) if BENCHMARK
 
     scores = scores.take(NUM_ENTRIES) if !full
-    # find all players in advance (better performance)
+
+    # Find all players in advance (better performance)
     players = UserlevelPlayer.where(id: scores.map(&:first))
                     .map{ |p| [p.id, p] }
                     .to_h
@@ -1520,16 +1521,16 @@ def send_userlevel_mapping_summary(event)
   stats = "Maps:           #{count}\n"
   if author.nil?
     authors  = maps.distinct.count(:author_id)
-    prolific = maps.group(:author_id).order("count(id) desc").count(:id).first
-    popular  = maps.group(:author_id).order("sum(favs) desc").sum(:favs).first
-    refined  = maps.group(:author_id).order("avg(favs) desc").average(:favs).first
+    prolific = maps.group(:author_id).order("COUNT(`id`) DESC").count(:id).first
+    popular  = maps.group(:author_id).order("SUM(`favs`) DESC").sum(:favs).first
+    refined  = maps.group(:author_id).order("AVG(`favs`) DESC").average(:favs).first
     stats << "Authors:        #{authors}\n"
     stats << "Maps / author:  #{"%.3f" % (count.to_f / authors)}\n"
     stats << "Most maps:      #{prolific.last} (#{Userlevel.find_by(author_id: prolific.first).author.name})\n"
     stats << "Most ++'s:      #{popular.last} (#{Userlevel.find_by(author_id: popular.first).author.name})\n"
     stats << "Most avg ++'s:  #{"%.3f" % refined.last} (#{Userlevel.find_by(author_id: refined.first).author.name})\n"
   end
-  if !maps.empty?
+  if !maps.is_a?(Array) || !maps.empty?
     first = maps.order(:id).first
     stats << "First map:      #{first.date.strftime(DATE_FORMAT_OUTTE)} (#{first.id})\n"
     last = maps.order(id: :desc).first
@@ -1572,13 +1573,13 @@ def send_userlevel_highscoring_summary(event)
   if player.nil?
     min = full ? MIN_G_SCORES : MIN_U_SCORES
     scorers   = scores.distinct.count(:player_id)
-    prolific1 = scores.group(:player_id).order("count(id) desc").count(:id).first
-    prolific2 = scores.where("rank <= 9").group(:player_id).order("count(id) desc").count(:id).first
-    prolific3 = scores.where("rank <= 4").group(:player_id).order("count(id) desc").count(:id).first
-    prolific4 = scores.where("rank = 0").group(:player_id).order("count(id) desc").count(:id).first
-    highscore = scores.group(:player_id).order("sum(score) desc").sum(:score).first
-    manypoint = scores.group(:player_id).order("sum(20 - rank) desc").sum("20 - rank").first
-    averarank = scores.select("count(rank)").group(:player_id).having("count(rank) >= #{min}").order("avg(rank)").average(:rank).first
+    prolific1 = scores.group(:player_id).order("COUNT(`id`) DESC").count(:id).first
+    prolific2 = scores.where("`rank` <= 9").group(:player_id).order("COUNT(`id`) DESC").count(:id).first
+    prolific3 = scores.where("`rank` <= 4").group(:player_id).order("COUNT(`id`) DESC").count(:id).first
+    prolific4 = scores.where("`rank` = 0").group(:player_id).order("COUNT(`id`) DESC").count(:id).first
+    highscore = scores.group(:player_id).order("SUM(`score`) DESC").sum(:score).first
+    manypoint = scores.group(:player_id).order("SUM(20 - `rank`) DESC").sum("20 - `rank`").first
+    averarank = scores.select("COUNT(`rank`)").group(:player_id).having("COUNT(`rank`) >= #{min}").order("AVG(`rank`)").average(:rank).first
     maxes     = Userlevel.ties(nil, true,  full, true, nil, author_id)
     maxables  = Userlevel.ties(nil, false, full, true, nil, author_id)
     tls   = scores.where(rank: 0).sum(:score).to_f / 60.0
@@ -1603,12 +1604,12 @@ def send_userlevel_highscoring_summary(event)
   else
     tls = scores.sum(:score).to_f / 60.0
     stats << "Total Top20s: #{count_s}\n"
-    stats << "Total Top10s: #{scores.where("rank <= 9").count}\n"
-    stats << "Total Top5s:  #{scores.where("rank <= 4").count}\n"
-    stats << "Total 0ths:   #{scores.where("rank = 0").count}\n"
+    stats << "Total Top10s: #{scores.where("`rank` <= 9").count}\n"
+    stats << "Total Top5s:  #{scores.where("`rank` <= 4").count}\n"
+    stats << "Total 0ths:   #{scores.where("`rank` = 0").count}\n"
     stats << "Total score:  #{"%.3f" % tls}\n"
     stats << "Avg. score:   #{"%.3f" % (tls / count_s)}\n"
-    stats << "Total points: #{scores.sum("20 - rank")}\n"
+    stats << "Total points: #{scores.sum("20 - `rank`")}\n"
     stats << "Avg. rank:    #{"%.3f" % scores.average(:rank)}\n"
   end
   event << format_header(header) + format_block(stats)
@@ -1643,7 +1644,6 @@ end
 
 def send_userlevel_times(event)
   event << "Userlevel database update times:"
-  times = []
 
   next_level = ($status_update + STATUS_UPDATE_FREQUENCY) - Time.now.to_i
   next_level_minutes = (next_level / 60).to_i
