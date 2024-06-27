@@ -485,6 +485,26 @@ rescue => e
   lex(e, "Failed to execute shell command: #{cmd}")
 end
 
+# Represents a proc that will be queued in a worker thread but executed in the
+# main thread. Once enqueued, this blocks the calling thread until the main
+# one is done processing the command, and the result is filled.
+class QueuedCmd
+  attr_reader :proc, :thread
+  attr_writer :result
+
+  def initialize(proc, thread = Thread.current)
+    @proc   = proc
+    @thread = thread
+    @result = nil
+  end
+
+  def enqueue
+    $main_queue << self
+    sleep
+    @result
+  end
+end
+
 # Return this process's memory usage in MB (Linux only)
 # Spawning ps is slower but has broader support
 def getmem(ps = false)

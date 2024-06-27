@@ -150,6 +150,15 @@ def initialize_vars
   $linux           = RbConfig::CONFIG['host_os'] =~ /linux/i
   $mutex           = { ntrace: Mutex.new }
   $threads         = []
+  $main_queue      = Queue.new
+  $trace_context   = {
+    theme:   "",
+    bg:      nil,
+    coords:  [],
+    demos:   [],
+    markers: [],
+    texts:   []
+  }
 
   # Set environment variables
   ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
@@ -403,4 +412,16 @@ _thread do
   start_discord_threads
 end
 binding.pry if DEBUG
+
+# Since some tasks need to be done in the main thread, we have a master queue
+# we can append to from any thread (see QueuedCmd class in utils.rb)
+while cmd = $main_queue.pop
+  case cmd.proc
+    # Matplotlib depends on PyCall, which is not thread safe
+  when :trace
+    cmd.result = Map::mpl_trace(**$trace_context)
+  end
+  cmd.thread.run
+end
+
 block_threads

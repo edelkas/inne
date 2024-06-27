@@ -1544,7 +1544,7 @@ module Map
   #
   # Note: This function is forked to a new process to immediately free up all
   # the used memory.
-  def mpl_trace(
+  def self.mpl_trace(
       theme:   DEFAULT_PALETTE, # Palette to generate screenshot in
       bg:      nil,             # Background image (screenshot) file object
       animate: false,           # Animate trace instead of still image
@@ -1787,14 +1787,15 @@ module Map
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
       perror('Failed to generate screenshot') if screenshot.nil?
       concurrent_edit(event, tmp_msg, 'Plotting routes...')
-      trace = h.map.mpl_trace(
+      $trace_context = {
         theme:   palette,
         bg:      screenshot,
         coords:  res[0][:coords],
         demos:   demos[0],
         markers: markers,
         texts:   !blank ? texts : []
-      )
+      }
+      trace = QueuedCmd.new(:trace).enqueue
       screenshot.close
       perror('Failed to trace replays') if trace.nil?
     end
