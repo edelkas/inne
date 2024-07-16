@@ -1740,12 +1740,12 @@ class Score < ActiveRecord::Base
 
   def self.holders
     bench(:start) if BENCHMARK
-    sql = %{
+    sql_str = %{
       SELECT `min`, COUNT(`min`) FROM (
         SELECT MIN(`rank`) AS `min` FROM `scores` GROUP BY `player_id`
       ) AS `t` GROUP BY `min`;
     }.gsub(/\s+/, ' ').strip
-    res = ActiveRecord::Base.connection.execute(sql).to_h
+    res = sql(sql_str).rows.to_h
     ranks = { 0 => res[0] }
     (1..19).each{ |r| ranks[r] = ranks[r - 1] + res[r] }
     bench(:step) if BENCHMARK

@@ -796,6 +796,8 @@ def block_threads
 end
 
 def unblock_threads
-  $threads.first.run
+  $threads.first.run if $threads.first.alive?
   log("Shut down")
+rescue
+  nil
 end

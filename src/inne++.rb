@@ -413,8 +413,8 @@ _thread do
 end
 binding.pry if DEBUG
 
-# Since some tasks need to be done in the main thread, we have a master queue
-# we can append to from any thread (see QueuedCmd class in utils.rb)
+# Idle until we need to execute commands on the main thread issued from
+# different threads
 while cmd = $main_queue.pop
   case cmd.proc
     # Matplotlib depends on PyCall, which is not thread safe

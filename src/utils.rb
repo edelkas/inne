@@ -1781,7 +1781,7 @@ end
 
 # Perform arbitrary SQL command
 def sql(command)
-  ActiveRecord::Base.connection.execute(command)
+  ActiveRecord::Base.connection.exec_query(command)
 end
 
 # Weighed average
