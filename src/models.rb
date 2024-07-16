@@ -1769,7 +1769,6 @@ class Score < ActiveRecord::Base
 end
 
 class Player < ActiveRecord::Base
-  alias_attribute :tweaks, :mappack_scores_tweaks
   has_many :scores
   has_many :rank_histories
   has_many :points_histories
@@ -1777,6 +1776,8 @@ class Player < ActiveRecord::Base
   has_many :player_aliases
   has_many :mappack_scores
   has_many :mappack_scores_tweaks
+  alias_method :aliases, :player_aliases
+  alias_method :tweaks,  :mappack_scores_tweaks
 
   def self.histories(type, attrs, column)
     attrs[:highscoreable_type] ||= ['Level', 'Episode'] # Don't include stories

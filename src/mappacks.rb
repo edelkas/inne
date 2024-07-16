@@ -236,19 +236,6 @@ module Map
     object_counts
   end
 
-  def print_scores
-    update_scores if !OFFLINE_STRICT
-    if scores.count == 0
-      board = "This userlevel has no highscores!"
-    else
-      board = scores.map{ |s| { score: s.score / 60.0, player: s.player.name } }
-      pad = board.map{ |s| s[:score] }.max.to_i.to_s.length + 4
-      board.each_with_index.map{ |s, i|
-        "#{Highscoreable.format_rank(i)}: #{format_string(s[:player])} - #{"%#{pad}.3f" % [s[:score]]}"
-      }.join("\n")
-    end
-  end
-
   # Return tiles as a matrix of integer
   def tiles(version: nil)
     Map.decode_tiles(tile_data(version: version))
@@ -1849,16 +1836,16 @@ module Map
 end
 
 class Mappack < ActiveRecord::Base
-  alias_attribute :scores,   :mappack_scores
-  alias_attribute :levels,   :mappack_levels
-  alias_attribute :episodes, :mappack_episodes
-  alias_attribute :stories,  :mappack_stories
-  alias_attribute :channels, :mappack_channels
   has_many :mappack_scores
   has_many :mappack_levels
   has_many :mappack_episodes
   has_many :mappack_stories
   has_many :mappack_channels
+  alias_method :scores,   :mappack_scores
+  alias_method :levels,   :mappack_levels
+  alias_method :episodes, :mappack_episodes
+  alias_method :stories,  :mappack_stories
+  alias_method :channels, :mappack_channels
 
   # Parse all mappacks in the mappack directory into the database
   #   update - Update preexisting mappacks (otherwise, only parses newly added ones)
@@ -2136,13 +2123,13 @@ class Mappack < ActiveRecord::Base
     episode_count = episodes.size
     episodes.find_each.with_index{ |e, i|
       dbg("Setting gold count for #{name_str} episode #{i + 1} / #{episode_count}...", progress: true)
-      e.update(gold: MappackLevel.where(episode: e).sum(:gold))
+      e.update(gold: MappackLevel.where(episode_id: e.id).sum(:gold))
     }
     Log.clear
     story_count = stories.size
     stories.find_each.with_index{ |s, i|
       dbg("Setting gold count for #{name_str} story #{i + 1} / #{story_count}...", progress: true)
-      s.update(gold: MappackEpisode.where(story: s).sum(:gold))
+      s.update(gold: MappackEpisode.where(story_id: s.id).sum(:gold))
     }
     Log.clear
 
@@ -2252,8 +2239,9 @@ class Mappack < ActiveRecord::Base
 end
 
 class MappackData < ActiveRecord::Base
-  alias_attribute :level, :mappack_level
   belongs_to :mappack_level, foreign_key: :highscoreable_id
+  alias_method :level, :mappack_level
+  alias_method :level=, :mappack_level=
 end
 
 module MappackHighscoreable
@@ -2261,6 +2249,10 @@ module MappackHighscoreable
 
   def type
     self.class.to_s
+  end
+
+  def basetype
+    type.remove('Mappack')
   end
 
   def version
@@ -2499,13 +2491,14 @@ class MappackLevel < ActiveRecord::Base
   include Map
   include MappackHighscoreable
   include Levelish
-  alias_attribute :scores,  :mappack_scores
-  alias_attribute :hashes,  :mappack_hashes
-  alias_attribute :episode, :mappack_episode
   has_many :mappack_scores, as: :highscoreable
   has_many :mappack_hashes, as: :highscoreable, dependent: :delete_all
   belongs_to :mappack
   belongs_to :mappack_episode, foreign_key: :episode_id
+  alias_method :scores,   :mappack_scores
+  alias_method :episode,  :mappack_episode
+  alias_method :episode=, :mappack_episode=
+  alias_method :hashes,   :mappack_hashes
   enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   def self.mappack
@@ -2593,17 +2586,18 @@ end
 class MappackEpisode < ActiveRecord::Base
   include MappackHighscoreable
   include Episodish
-  alias_attribute :levels, :mappack_levels
-  alias_attribute :scores, :mappack_scores
-  alias_attribute :hashes, :mappack_hashes
-  alias_attribute :story, :mappack_story
-  alias_attribute :tweaks, :mappack_scores_tweaks
   has_many :mappack_levels, foreign_key: :episode_id
   has_many :mappack_scores, as: :highscoreable
   has_many :mappack_hashes, as: :highscoreable, dependent: :delete_all
   has_many :mappack_scores_tweaks, foreign_key: :episode_id
   belongs_to :mappack
   belongs_to :mappack_story, foreign_key: :story_id
+  alias_method :levels, :mappack_levels
+  alias_method :scores, :mappack_scores
+  alias_method :hashes, :mappack_hashes
+  alias_method :story,  :mappack_story
+  alias_method :story=, :mappack_story=
+  alias_method :tweaks, :mappack_scores_tweaks
   enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   def self.mappack
@@ -2649,13 +2643,13 @@ end
 class MappackStory < ActiveRecord::Base
   include MappackHighscoreable
   include Storyish
-  alias_attribute :episodes, :mappack_episodes
-  alias_attribute :scores, :mappack_scores
-  alias_attribute :hashes, :mappack_hashes
   has_many :mappack_episodes, foreign_key: :story_id
   has_many :mappack_scores, as: :highscoreable
   has_many :mappack_hashes, as: :highscoreable, dependent: :delete_all
   belongs_to :mappack
+  alias_method :scores,   :mappack_scores
+  alias_method :episodes, :mappack_episodes
+  alias_method :hashes,   :mappack_hashes
   enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   def self.mappack
@@ -2705,15 +2699,12 @@ end
 
 class MappackScore < ActiveRecord::Base
   include Scorish
-  alias_attribute :demo,    :mappack_demo
-  alias_attribute :scores,  :mappack_scores
-  alias_attribute :level,   :mappack_level
-  alias_attribute :episode, :mappack_episode
-  alias_attribute :story,   :mappack_story
   has_one :mappack_demo, foreign_key: :id
   belongs_to :player
   belongs_to :highscoreable, polymorphic: true
   belongs_to :mappack
+  alias_method :demo,  :mappack_demo
+  alias_method :demo=, :mappack_demo=
   enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   # TODO: Add integrity checks and warnings in Demo.parse
@@ -3002,7 +2993,7 @@ class MappackScore < ActiveRecord::Base
       return
     end
 
-    if score.highscoreable.type.remove('Mappack') != type[:name]
+    if score.highscoreable.basetype != type[:name]
       return forward(req) if CLE_FORWARD
       warn("Getting replay: Score with ID #{query['replay_id']} is not from a #{type[:name].downcase}")
       return
@@ -3074,8 +3065,7 @@ class MappackScore < ActiveRecord::Base
   # Calculate gold count from hs and sr scores
   # We return a FLOAT, not an integer. See the next function for details.
   def self.gold_count(type, score_hs, score_sr)
-    type = type.remove('Mappack')
-    case type
+    case basetype
     when 'Level'
       tweak = 1
     when 'Episode'
@@ -3167,7 +3157,7 @@ class MappackScore < ActiveRecord::Base
 
   # Dumps replay data (header + compressed demo data) in format used by N++
   def dump_replay
-    type = TYPES[highscoreable.class.to_s.remove('Mappack')]
+    type = TYPES[highscoreable.basetype]
 
     # Build header
     replay = [type[:rt]].pack('L<')               # Replay type (0 lvl/sty, 1 ep)
@@ -3255,8 +3245,9 @@ class MappackScore < ActiveRecord::Base
 end
 
 class MappackDemo < ActiveRecord::Base
-  alias_attribute :score, :mappack_score
   belongs_to :mappack_score, foreign_key: :id
+  alias_method :score,  :mappack_score
+  alias_method :score=, :mappack_score=
 
   # Delete orphaned demos (demos without a corresponding score)
   def self.sanitize
@@ -3281,9 +3272,10 @@ end
 # table temporarily holds the adjustment, which will be updated and applied with
 # each level, until all 5 are done, and then we delete it.
 class MappackScoresTweak < ActiveRecord::Base
-  alias_attribute :episode, :mappack_episode
   belongs_to :player
   belongs_to :mappack_episode, foreign_key: :episode_id
+  alias_method :episode, :mappack_episode
+  alias_method :episode=, :mappack_episode=
 
   # Returns the score if success, nil otherwise
   def self.tweak(score, player, level, header)
@@ -3293,10 +3285,10 @@ class MappackScoresTweak < ActiveRecord::Base
     # Create or fetch tweak
     index = level.inner_id % 5
     if index == 0
-      tw = self.find_or_create_by(player: player, episode: level.episode)
+      tw = self.find_or_create_by(player: player, episode_id: level.episode.id)
       tw.update(tweak: 0, index: 0) # Initialize tweak
     else
-      tw = self.find_by(player: player, episode: level.episode)
+      tw = self.find_by(player: player, episode_id: level.episode.id)
       if tw.nil? # Tweak should exist
         warn("Tweak for #{player.name}'s #{level.episode.name} run should exit")
         return nil

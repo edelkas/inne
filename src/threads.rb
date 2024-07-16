@@ -207,8 +207,8 @@ def send_report
   changes.map{ |h| h[1] }
          .uniq
          .each{ |h|
-                total[h.class.to_s][0] += Archive.scores(h, now).first[1] - Archive.scores(h, time).first[1]
-                total[h.class.to_s][1] += Archive.scores(h, now).last[1] - Archive.scores(h, time).last[1]
+                total[h.class.to_s][0] += Archive.scores(h, now).first[1] - Archive.scores(h, time2).first[1]
+                total[h.class.to_s][1] += Archive.scores(h, now).last[1] - Archive.scores(h, time2).last[1]
               }
 
   total = total.map{ |klass, n|

@@ -1393,9 +1393,8 @@ def send_splits(event)
   lvl_scores = ep.levels.map{ |l| l.leaderboard(board)[rank][scoref] / factor }
 
   # Calculate differences
-  full = (!ntrace || FEATURE_NTRACE) && !file.nil?
-
-  event << "ntrace failed." if file.nil?
+  full = !ntrace || (FEATURE_NTRACE && !file.nil?)
+  event << "ntrace failed." if ntrace && file.nil?
 
   if full
     errors = valid.count(false)

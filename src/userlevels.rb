@@ -65,9 +65,9 @@ class UserlevelCache < ActiveRecord::Base
 end
 
 class UserlevelAuthor < ActiveRecord::Base
-  alias_attribute :akas, :userlevel_akas
   has_many :userlevels, foreign_key: :author_id
   has_many :userlevel_akas, foreign_key: :author_id
+  alias_method :akas, :userlevel_akas
 
   # Parse a userlevel author based on a search term:
   # Integer:
@@ -135,14 +135,16 @@ class UserlevelAuthor < ActiveRecord::Base
 end
 
 class UserlevelAka < ActiveRecord::Base
-  alias_attribute :author, :userlevel_author
   belongs_to :userlevel_author, foreign_key: :author_id
+  alias_method :author, :userlevel_author
+  alias_method :author=, :userlevel_author=
 end
 
 class UserlevelScore < ActiveRecord::Base
-  alias_attribute :player, :userlevel_player
   belongs_to :userlevel
   belongs_to :userlevel_player, foreign_key: :player_id
+  alias_method :player, :userlevel_player
+  alias_method :player=, :userlevel_player=
 
   def self.newest(id = Userlevel.min_id)
     self.where("userlevel_id >= #{id}")
@@ -200,9 +202,9 @@ class UserlevelScore < ActiveRecord::Base
 end
 
 class UserlevelPlayer < ActiveRecord::Base
-  alias_attribute :scores, :userlevel_scores
   has_many :userlevel_scores, foreign_key: :player_id
   has_many :userlevel_histories, foreign_key: :player_id
+  alias_method :scores, :userlevel_scores
 
   def print_name
     name.remove("`")
@@ -271,8 +273,9 @@ class UserlevelPlayer < ActiveRecord::Base
 end
 
 class UserlevelHistory < ActiveRecord::Base
-  alias_attribute :player, :userlevel_player
   belongs_to :userlevel_player, foreign_key: :player_id
+  alias_method :player, :userlevel_player
+  alias_method :player=, :userlevel_player=
 
   def self.compose(rankings, rank, time)
     rankings.select{ |r| r[1] > 0 }.map do |r|
@@ -291,11 +294,12 @@ class Userlevel < ActiveRecord::Base
   include Highscoreable
   include Map
   include Levelish
-  alias_attribute :scores, :userlevel_scores
-  alias_attribute :author, :userlevel_author
   alias_attribute :name, :title
   has_many :userlevel_scores
   belongs_to :userlevel_author, foreign_key: :author_id
+  alias_method :author,  :userlevel_author
+  alias_method :author=, :userlevel_author=
+  alias_method :scores,  :userlevel_scores
   enum mode: [:solo, :coop, :race]
   # Attributes:
   #   id           - ID of the userlevel in Metanet's database (and ours)
@@ -934,7 +938,7 @@ def send_userlevel_browse(
     # Filter userlevels
     if query.nil?
       query = Userlevel::tab(cat, mode)
-      query = query.where(author: author) if !author.nil?
+      query = query.where(author_id: author.id) if !author.nil?
       query = query.where(Userlevel.sanitize("title LIKE ?", "%" + search[0...128] + "%")) if !search.empty?
     else
       query = query[:query]
@@ -1138,13 +1142,14 @@ def send_userlevel_scores(event)
   msg.sub!(/\w*scores\w*/i, '')
   msg.squish!
   send_userlevel_individual(event, msg){ |map|
+    map[:query].update_scores if !OFFLINE_STRICT
     output = "Scores for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
     output += "on #{Time.now.to_s}"
     count = map[:query].completions
     header = format_header(output)
-    boards = format_block(map[:query].print_scores)
+    boards = format_block(map[:query].format_scores)
     footer = count && count > 0 ? "Scores: **#{count}**" : ''
     event << header + boards + footer
   }
