@@ -1993,6 +1993,9 @@ def potato
       $last_potato = Time.now.to_i
     end
   end
+rescue
+  sleep(1)
+  retry
 end
 
 def mishnub(event)
@@ -2002,7 +2005,7 @@ def mishnub(event)
   fellas  = [" fellas", " boys", " guys", " lads", " fellow ninjas", " friends", " ninjafarians"]
   laugh   = [" :joy:", " lmao", " hahah", " lul", " rofl", "  <:moleSmirk:336271943546306561>", " <:Kappa:237591190357278721>", " :laughing:", " rolfmao"]
   if rand < 0.05 && (event.channel.type == 1 || $last_mishu.nil? || !$last_mishu.nil? && Time.now.to_i - $last_mishu >= MISHU_COOLDOWN)
-    send_message(event, content: youmean.sample + mishu.sample + amirite.sample + fellas.sample + laugh.sample, removable: false)
+    event.send_message(youmean.sample + mishu.sample + amirite.sample + fellas.sample + laugh.sample)
     $last_mishu = Time.now.to_i unless event.channel.type == 1
   end
 end
@@ -2011,7 +2014,7 @@ def robot(event)
   start  = ["No! ", "Not at all. ", "Negative. ", "By no means. ", "Most certainly not. ", "Not true. ", "Nuh uh. "]
   middle = ["I can assure you he's not", "Eddy is not a robot", "Master is very much human", "Senpai is a ningen", "Mr. E is definitely human", "Owner is definitely a hooman", "Eddy is a living human being", "Eduardo es una persona"]
   ending = [".", "!", " >:(", " (ಠ益ಠ)", " (╯°□°)╯︵ ┻━┻"]
-  send_message(event, content: start.sample + middle.sample + ending.sample, removable: false)
+  event.send_message(start.sample + middle.sample + ending.sample)
 end
 
 # Clean database (remove cheated archives, duplicates, orphaned demos, etc)
@@ -2817,6 +2820,39 @@ rescue => e
   lex(e, 'Failed to rename author.')
 end
 
+# Fetch and print current relevant MySQL variables and status
+def send_sql_status(event)
+  update_sql_status
+  str  = "Connections: "
+  str << "#{$sql_status['Threads_connected']} open, "
+  str << "#{$sql_status['Max_used_connections']} highest, "
+  str << "#{$sql_vars['max_connections']} max, "
+  str << "#{$sql_status['Connections']} total\n"
+  str << "Threads:     "
+  str << ['connected', 'running', 'cached', 'created'].map{ |t|
+    "#{$sql_status["Threads_#{t}"]} #{t}"
+  }.join(", ")
+  event << "MySQL status #{format_time}:"
+  event << format_block(str)
+end
+
+# Print detailed list of all current open connections to the MySQL server
+def send_sql_list(event)
+  update_sql_status
+  if !$sql_conns.size == 0
+    event << "There are no open MySQL connections."
+    return
+  end
+  msg = remove_command(parse_message(event))
+  flags = parse_flags(msg)
+  last = flags.key?(:full) ? -1 : -3
+  rows = []
+  rows << $sql_conns.first.keys[0..last]
+  rows << :sep
+  $sql_conns.each{ |row| rows << row.values[0..last] }
+  event << format_block(make_table(rows))
+end
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -2870,6 +2906,8 @@ def respond_special(event)
   return send_delete_score(event)        if cmd == 'delete_score'
   return test_ntrace(event)              if cmd == 'test_ntrace'
   return rename_author(event)            if cmd == 'rename_author'
+  return send_sql_status(event)          if cmd == 'sql_status'
+  return send_sql_list(event)            if cmd == 'sql_list'
 
   event << "Unsupported special command."
 end

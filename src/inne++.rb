@@ -151,6 +151,9 @@ def initialize_vars
   $mutex           = { ntrace: Mutex.new }
   $threads         = []
   $main_queue      = Queue.new
+  $sql_vars        = {}
+  $sql_status      = {}
+  $sql_conns       = []
   $trace_context   = {
     theme:   "",
     bg:      nil,
@@ -281,10 +284,12 @@ def handle_command(event, log: true, &func)
   end
 
   # Write up response and send it
+  acquire_connection
   func = special ? -> (e) { respond_special(e) } : -> (e) { respond(e) } if !func
   craft_response(event, func)
   send_message(event)
 ensure
+  # Ensure to disconnect, otherwise connections leak and the pool fills
   release_connection
 end
 
@@ -349,8 +354,6 @@ def setup_bot
     handle_command(event, log: false) { |e| respond_reaction(e) }
   rescue => e
     lex(e, 'Failed to handle Discord reaction')
-  ensure
-    release_connection
   end
 
   log("Configured bot")

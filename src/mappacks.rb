@@ -341,7 +341,7 @@ module Map
   #   v   - Map version to hash
   #   pre - Serve precomputed hash stored in BadHash table
   def _hash(c: false, v: nil, pre: false)
-    stored = l.hashes.where("version <= #{v}").order(:version).last rescue nil
+    stored = l.hashes.where(v ? "`version` <= #{v}" : '').order(:version).last rescue nil
     return stored if pre && stored
     map_data = dump_level(hash: true, version: v)
     return nil if map_data.nil?

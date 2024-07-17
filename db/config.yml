@@ -7,9 +7,9 @@ outte:
   host:              localhost
   username:          root
   password:          root
-  pool:              50
-  timeout:           5000 # Time in milliseconds to obtain a db conn
-  wait_timeout:      60   # Time in seconds to disconnect stale db conns
-  idle_timeout:      60   # Time in seconds to close stale db conns (reaper)
-  reaping_frequency: 60   # Time in seconds to run the db conn reaper
+  pool:              50     # Connection pool size
+  timeout:           5000   # Time in milliseconds to obtain a db conn
+  wait_timeout:      60     # Time in seconds to close connections without activity
+  idle_timeout:      60     # Time in seconds to close connections from dead threads (reaper)
+  reaping_frequency: 60     # Time in seconds to run the db conn reaper
 #  reconnect:         true

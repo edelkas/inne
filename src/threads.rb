@@ -9,11 +9,29 @@ require_relative 'constants.rb'
 require_relative 'utils.rb'
 require_relative 'models.rb'
 
+# Wrapper to start each periodic task.
+# - id:    Symbol to identify task
+# - desc:  Text to log (nil to not log)
+# - db:    Acquire a db connection
+# - block: Whether the execution of this task should prevent restarts
+def start_task(id, desc = nil, db: true, block: true)
+  log("TASK: #{desc}") if desc
+  acquire_connection if db
+  $active_tasks[id] = true if block
+end
+
+# Wrapper to end each periodic task.
+def end_task(id, desc = nil, db: true)
+  release_connection if db
+  $active_tasks[id] = false
+  succ("TASK: #{desc}") if desc
+end
+
 # Periodically (every ~5 mins) perform several useful tasks.
 def update_status
   while(true)
     sleep(WAIT)
-    $active_tasks[:status] = true
+    start_task(:status)
 
     if !OFFLINE_STRICT
       # Download newest userlevels from all 3 modes
@@ -34,47 +52,53 @@ def update_status
     Message.clean
     UserlevelCache.clean
 
+    # Finish
     $status_update = Time.now.to_i
-    $active_tasks[:status] = false
+    end_task(:status)
     sleep(STATUS_UPDATE_FREQUENCY)
   end
 rescue => e
   lex(e, "Updating status")
+  end_task(:status)
   retry
 ensure
-  $active_tasks[:status] = false
+  end_task(:status)
 end
 
 # Check for new Twitch streams, and send notices.
 def update_twitch
+  # Ensure we have a valid Twitch token
   if $twitch_token.nil?
+    sleep(WAIT)
+    acquire_connection
     $twitch_token = Twitch::get_twitch_token
     Twitch::update_twitch_streams
+    release_connection
   end
+
   while(true)
     sleep(WAIT)
-    $active_tasks[:twitch] = true
+    start_task(:twitch)
     Twitch::update_twitch_streams
     Twitch::new_streams.each{ |game, list|
       list.each{ |stream|
         Twitch::post_stream(stream)
       }
     }
-    $active_tasks[:twitch] = false
+    end_task(:twitch)
     sleep(TWITCH_UPDATE_FREQUENCY)
   end
 rescue => e
   lex(e, "Updating twitch")
-  sleep(WAIT)
+  end_task(:twitch)
   retry
 ensure
-  $active_tasks[:twitch] = false
+  end_task(:twitch)
 end
 
 # Update missing demos (e.g., if they failed to download originally)
 def download_demos
-  log("Downloading missing demos...")
-  $active_tasks[:demos] = true
+  start_task(:demos, "Downloading missing demos")
   archives = Archive.where(lost: false)
                     .joins("LEFT JOIN demos ON demos.id = archives.id")
                     .where("demos.demo IS NULL")
@@ -86,14 +110,12 @@ def download_demos
     lex(e, "Updating demo with ID #{ar[0].to_s}")
     ((attempts += 1) < ATTEMPT_LIMIT) ? retry : next
   end
-  $active_tasks[:demos] = false
-  succ("Downloaded missing demos")
   return true
 rescue => e
   lex(e, "Downloading missing demos")
   return false
 ensure
-  $active_tasks[:demos] = false
+  end_task(:demos, "Downloaded missing demos")
 end
 
 # Driver for the function above
@@ -113,8 +135,7 @@ end
 
 # Compute and send the weekly highscoring report and the daily summary
 def send_report
-  log("Sending highscoring report...")
-  $active_tasks[:report] = true
+  start_task(:report, "Sending highscoring report")
   if $channel.nil?
     err("Not connected to a channel, not sending highscoring report")
     return false
@@ -216,11 +237,9 @@ def send_report
   }.join("\n")
   send_message($channel, content: "**Daily highscoring summary**:\n" + total)
 
-  $active_tasks[:report] = false
-  succ("Highscoring report sent")
   return true
 ensure
-  $active_tasks[:report] = false
+  end_task(:report, "Highscoring report sent")
 end
 
 # Driver for the function above
@@ -248,8 +267,7 @@ end
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
 def send_userlevel_report
-  log("Sending userlevel highscoring report...")
-  $active_tasks[:userlevel_report] = true
+  start_task(:userlevel_report, "Sending userlevel highscoring report")
   if $channel.nil?
     err("Not connected to a channel, not sending highscoring report")
     return false
@@ -270,11 +288,9 @@ def send_userlevel_report
   sleep(0.25)
   send_message($mapping_channel, content: "Userlevel point rankings on #{Time.now.to_s}:\n#{format_block(points)}")
 
-  $active_tasks[:userlevel_report] = false
-  succ("Userlevel highscoring report sent")
   return true
 ensure
-  $active_tasks[:userlevel_report] = false
+  end_task(:userlevel_report, "Userlevel highscoring report sent")
 end
 
 # Driver for the function above
@@ -296,11 +312,7 @@ end
 
 # Update database scores for Metanet Solo levels, episodes and stories
 def download_high_scores
-  log("Downloading highscores...")
-  $active_tasks[:scores] = true
-  # We handle exceptions within each instance so that they don't force
-  # a retry of the whole function.
-  # Note: Exception handling inside do blocks requires ruby 2.5 or greater.
+  start_task(:scores, "Downloading highscores")
   [Level, Episode, Story].each do |type|
     type.all.each do |o|
       attempts ||= 0
@@ -310,14 +322,12 @@ def download_high_scores
       ((attempts += 1) <= ATTEMPT_LIMIT) ? retry : next
     end
   end
-  $active_tasks[:scores] = false
-  succ("Downloaded highscores")
   return true
 rescue => e
   lex(e, "Downloading highscores")
   return false
 ensure
-  $active_tasks[:scores] = false
+  end_task(:scores, "Downloaded highscores")
 end
 
 # Driver for the function above
@@ -345,8 +355,8 @@ end
 # So we can rebuild the boards at any given point in time with precision.
 # Therefore, this function is not being used anymore.
 def update_histories
-  log("Updating histories...")
-  $active_tasks[:histories] = true
+  start_task(:histories, "Updating histories")
+
   now = Time.now
   [:SI, :S, :SL, :SS, :SU, :SS2].each do |tab|
     [Level, Episode, Story].each do |type|
@@ -375,14 +385,12 @@ def update_histories
       end
     end
   end
-  $active_tasks[:histories] = false
-  succ("Updated highscore histories")
   return true
 rescue => e
   lex(e, "Updating histories")
   return false
 ensure
-  $active_tasks[:histories] = false
+  end_task(:histories, "Updated highscore histories")
 end
 
 # Driver for the function above, which is not used anymore (see comment there)
@@ -404,10 +412,8 @@ end
 # can check the history later. Since we don't have a differential table here,
 # like for Metanet levels, this function is NOT deprecated.
 def update_userlevel_histories
-  log("Updating userlevel histories...")
-  $active_tasks[:userlevel_histories] = true
+  start_task(:userlevel_histories, "Updating userlevel histories")
   now = Time.now
-
   [-1, 1, 5, 10, 20].each{ |rank|
     rankings = Userlevel.rank(rank == -1 ? :points : :rank, rank == 1 ? true : false, rank - 1, true)
     attrs    = UserlevelHistory.compose(rankings, rank, now)
@@ -415,15 +421,12 @@ def update_userlevel_histories
       UserlevelHistory.create(attrs)
     end
   }
-
-  $active_tasks[:userlevel_histories] = false
-  succ("Updated userlevel histories")
   return true
 rescue => e
   lex(e, "Updating userlevel histories")
   return false
 ensure
-  $active_tasks[:userlevel_histories] = false
+  end_task(:userlevel_histories, "Updated userlevel histories")
 end
 
 # Driver for the function above
@@ -444,8 +447,7 @@ end
 # Download the scores for the scores for the latest 500 userlevels, for use in
 # the daily userlevel highscoring rankings.
 def download_userlevel_scores
-  log("Downloading newest userlevel scores...")
-  $active_tasks[:userlevel_scores] = true
+  start_task(:userlevel_scores, "Downloading newest userlevel scores")
   Userlevel.where(mode: :solo).order(id: :desc).take(USERLEVEL_REPORT_SIZE).each do |u|
     attempts ||= 0
     u.update_scores
@@ -453,14 +455,12 @@ def download_userlevel_scores
     lex(e, "Downloading scores for userlevel #{u.id}")
     ((attempts += 1) <= ATTEMPT_LIMIT) ? retry : next
   end
-  $active_tasks[:userlevel_scores] = false
-  succ("Downloaded newest userlevel scores")
   return true
 rescue => e
   lex(e, "Downloading newest userlevel scores")
   return false
 ensure
-  $active_tasks[:userlevel_scores] = false
+  end_task(:userlevel_scores, "Downloaded newest userlevel scores")
 end
 
 # Driver for the function above
@@ -514,8 +514,7 @@ end
 # Download some userlevel tabs (best, top weekly, featured, hardest), for all
 # 3 modes, to keep those lists up to date in the database
 def update_userlevel_tabs
-  log("Downloading userlevel tabs")
-  $active_tasks[:tabs] = true
+  start_task(:tabs, "Downloading userlevel tabs")
   [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |m|
     USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.each { |qt|
       page = 0
@@ -525,14 +524,12 @@ def update_userlevel_tabs
                   .delete_all unless USERLEVEL_TABS[qt][:size] == -1
     }
   }
-  $active_tasks[:tabs] = false
-  succ("Downloaded userlevel tabs")
   return true
 rescue => e
   lex(e, "Downloading userlevel tabs")
   return false
 ensure
-  $active_tasks[:tabs] = false
+  end_task(:tabs, "Downloaded userlevel tabs")
 end
 
 # Driver for the function above
@@ -630,6 +627,7 @@ end
 def start_level_of_the_day(ctp = false)
   while true
     sleep(WAIT)
+    acquire_connection
     episode_day = false
     story_day = false
 
@@ -666,11 +664,10 @@ def start_level_of_the_day(ctp = false)
     sleep(delay) unless delay < 0
 
     # Start and post whatever is enabled
-    $active_tasks[:lotd] = true
+    start_task(:lotd, "Starting #{ctp ? 'CTP ' : ''}level of the day")
     level_cond   = ((ctp ? UPDATE_CTP_LEVEL   : UPDATE_LEVEL)   || DO_EVERYTHING) && !DO_NOTHING
     episode_cond = ((ctp ? UPDATE_CTP_EPISODE : UPDATE_EPISODE) || DO_EVERYTHING) && !DO_NOTHING
     story_cond   = ((ctp ? UPDATE_CTP_STORY   : UPDATE_STORY)   || DO_EVERYTHING) && !DO_NOTHING
-    log("Starting #{ctp ? 'CTP ' : ''}level of the day...") if level_cond || episode_cond || story_cond
 
     # Post lotd, if enabled
     if level_cond
@@ -705,13 +702,14 @@ def start_level_of_the_day(ctp = false)
       send_channel_story_reminder(ctp)
     end
 
-    $active_tasks[:lotd] = false
+    end_task(:lotd)
   end
 rescue => e
   lex(e, "Updating level of the day")
+  end_task(:lotd)
   retry
 ensure
-  $active_tasks[:lotd] = false
+  end_task(:lotd)
 end
 
 # Prevent running out of memory due to memory leaks and risking the OOM killer

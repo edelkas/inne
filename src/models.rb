@@ -3037,9 +3037,11 @@ module Sock extend self
         [$stdout, "#{name} %s %b bytes %T"]
       ]
     )
-    # Setup callback for requests
+    # Setup callback for requests (ensuring we are connected to SQL)
     @@servers[name].mount_proc '/' do |req, res|
+      acquire_connection
       handle(req, res)
+      release_connection
     end
     # Start server (blocks thread)
     log("Started #{name} server")

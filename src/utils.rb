@@ -1774,14 +1774,27 @@ def unzip(data)
   res
 end
 
+def acquire_connection
+  ActiveRecord::Base.connection.reconnect!
+end
+
 def release_connection
   #ActiveRecord::Base.connection_pool.release_connection
   ActiveRecord::Base.connection.disconnect!
+rescue
+  nil
 end
 
 # Perform arbitrary SQL command
 def sql(command)
   ActiveRecord::Base.connection.exec_query(command)
+end
+
+# Fetch value of certain MySQL variables and statuses
+def update_sql_status
+  $sql_vars   = sql("SHOW SESSION VARIABLES").rows.to_h
+  $sql_status = sql("SHOW GLOBAL STATUS").rows.to_h
+  $sql_conns  = sql("SHOW FULL PROCESSLIST").to_a
 end
 
 # Weighed average
