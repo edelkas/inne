@@ -789,13 +789,11 @@ def start_discord_threads
 end
 
 def block_threads
-  log("Loaded outte")
   $threads.first.join
 end
 
 def unblock_threads
   $threads.first.run if $threads.first.alive?
-  log("Shut down")
 rescue
   nil
 end

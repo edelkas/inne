@@ -365,7 +365,10 @@ end
 # Start running the bot, and set up an interrupt trigger to shut it down
 def run_bot
   $bot.run(true)
-  trap("INT") { shutdown }
+  trap("INT") {
+    shutdown(true)
+    exit
+  }
   leave_unknown_servers
   log("Bot connected to servers: #{$bot.servers.map{ |id, s| s.name }.join(', ')}.")
 rescue => e
@@ -382,18 +385,14 @@ rescue => e
   exit
 end
 
-# Routine to shutdown the program
-# Needs to be executed in a new thread, since this method will be called from within
-# a trap context (see run_bot)
-def shutdown
-  log("Shutting down...")
-  Thread.new {
-    Sock.off
-    stop_bot
-    disconnect_db
-    unblock_threads
-    exit
-  }
+# Routine to shutdown the program (exit should be called afterwards)
+def shutdown(trap = true)
+  log("Shutting down outte...")
+  Sock.off
+  stop_bot
+  disconnect_db unless trap
+  unblock_threads
+  err("Shut down outte")
 rescue => e
   fatal("Failed to shut down bot: #{e}")
   exit
@@ -414,6 +413,7 @@ _thread do
   set_channels
   start_discord_threads
 end
+succ("Loaded outte")
 binding.pry if DEBUG
 
 # Idle until we need to execute commands on the main thread issued from
@@ -426,5 +426,3 @@ while cmd = $main_queue.pop
   end
   cmd.thread.run
 end
-
-block_threads

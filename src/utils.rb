@@ -1696,7 +1696,8 @@ end
 
 # Immediately kill process and restart the bot
 def force_restart(reason = 'Unknown reason')
-  warn("Restarted outte due to: #{reason}.", discord: true)
+  warn("Restarting outte due to: #{reason}.", discord: true)
+  shutdown(false)
   exec('./inne')
 end
 
