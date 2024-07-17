@@ -135,11 +135,11 @@ end
 
 # Compute and send the weekly highscoring report and the daily summary
 def send_report
-  start_task(:report, "Sending highscoring report")
   if $channel.nil?
     err("Not connected to a channel, not sending highscoring report")
     return false
   end
+  start_task(:report, "Sending highscoring report")
 
   base  = Time.new(2020, 9, 3, 0, 0, 0, "+00:00").to_i # when archiving begun
   time  = [Time.now.to_i - REPORT_UPDATE_SIZE,  base].max
@@ -244,34 +244,32 @@ end
 
 # Driver for the function above
 def start_report
-  begin
-    if TEST && TEST_REPORT
-      raise if !send_report
-    else
-      while true
-        sleep(WAIT)
-        next_report_update = correct_time(GlobalProperty.get_next_update('report'), REPORT_UPDATE_FREQUENCY)
-        GlobalProperty.set_next_update('report', next_report_update)
-        delay = next_report_update - Time.now
-        sleep(delay) unless delay < 0
-        next if !send_report
-      end
+  if TEST && TEST_REPORT
+    raise if !send_report
+  else
+    while true
+      sleep(WAIT)
+      next_report_update = correct_time(GlobalProperty.get_next_update('report'), REPORT_UPDATE_FREQUENCY)
+      GlobalProperty.set_next_update('report', next_report_update)
+      delay = next_report_update - Time.now
+      sleep(delay) unless delay < 0
+      next if !send_report
     end
-  rescue => e
-    lex(e, "Sending highscoring report")
-    sleep(WAIT)
-    retry
   end
+rescue => e
+  lex(e, "Sending highscoring report")
+  sleep(WAIT)
+  retry
 end
 
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
 def send_userlevel_report
-  start_task(:userlevel_report, "Sending userlevel highscoring report")
   if $channel.nil?
     err("Not connected to a channel, not sending highscoring report")
     return false
   end
+  start_task(:userlevel_report, "Sending userlevel highscoring report")
 
   zeroes = Userlevel.rank(:rank, true, 0)
                     .each_with_index
@@ -295,19 +293,17 @@ end
 
 # Driver for the function above
 def start_userlevel_report
-  begin
-    while true
-      sleep(WAIT)
-      next_userlevel_report_update = correct_time(GlobalProperty.get_next_update('userlevel_report'), USERLEVEL_REPORT_FREQUENCY)
-      GlobalProperty.set_next_update('userlevel_report', next_userlevel_report_update)
-      delay = next_userlevel_report_update - Time.now
-      sleep(delay) unless delay < 0
-      next if !send_userlevel_report
-    end
-  rescue => e
-    lex(e, "Sending userlevel highscoring report")
-    retry
+  while true
+    sleep(WAIT)
+    next_userlevel_report_update = correct_time(GlobalProperty.get_next_update('userlevel_report'), USERLEVEL_REPORT_FREQUENCY)
+    GlobalProperty.set_next_update('userlevel_report', next_userlevel_report_update)
+    delay = next_userlevel_report_update - Time.now
+    sleep(delay) unless delay < 0
+    next if !send_userlevel_report
   end
+rescue => e
+  lex(e, "Sending userlevel highscoring report")
+  retry
 end
 
 # Update database scores for Metanet Solo levels, episodes and stories
@@ -332,19 +328,17 @@ end
 
 # Driver for the function above
 def start_high_scores
-  begin
-    while true
-      sleep(WAIT)
-      next_score_update = correct_time(GlobalProperty.get_next_update('score'), HIGHSCORE_UPDATE_FREQUENCY)
-      GlobalProperty.set_next_update('score', next_score_update)
-      delay = next_score_update - Time.now
-      sleep(delay) unless delay < 0
-      next if !download_high_scores
-    end
-  rescue => e
-    lex(e, "Updating highscores")
-    retry
+  while true
+    sleep(WAIT)
+    next_score_update = correct_time(GlobalProperty.get_next_update('score'), HIGHSCORE_UPDATE_FREQUENCY)
+    GlobalProperty.set_next_update('score', next_score_update)
+    delay = next_score_update - Time.now
+    sleep(delay) unless delay < 0
+    next if !download_high_scores
   end
+rescue => e
+  lex(e, "Updating highscores")
+  retry
 end
 
 # Compute and store a bunch of different rankings daily, so that we can build
@@ -794,6 +788,4 @@ end
 
 def unblock_threads
   $threads.first.run if $threads.first.alive?
-rescue
-  nil
 end

@@ -237,6 +237,8 @@ module Log
   rescue => e
     puts "Failed to log text: #{e.message}"
     puts e.backtrace.join("\n") if LOG_BACKTRACES
+  ensure
+    exit if mode == :fatal
   end
 
   # Handle exceptions

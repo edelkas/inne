@@ -125,7 +125,6 @@ def monkey_patch
   log("Applied monkey patches")
 rescue => e
   fatal("Failed to apply monkey patches: #{e}")
-  exit
 end
 
 # Initialize the global variables used by the bot
@@ -172,7 +171,6 @@ def initialize_vars
   log("Initialized global variables")
 rescue => e
   fatal("Failed to initialize global variables: #{e}")
-  exit
 end
 
 # Parse the database configuration file, as well as some environment variables
@@ -185,7 +183,6 @@ def load_config
   log("Loaded config")
 rescue => e
   fatal("Failed to load config: #{e}")
-  exit
 end
 
 # Connect to the database
@@ -194,7 +191,6 @@ def connect_db
   log("Connected to database")
 rescue => e
   fatal("Failed to connect to the database: #{e}")
-  exit
 end
 
 # Disconnect from the database
@@ -205,7 +201,6 @@ def disconnect_db
   log("Disconnected from database")
 rescue => e
   fatal("Failed to disconnect from the database: #{e}")
-  exit
 end
 
 # Create and configure the bot
@@ -235,7 +230,6 @@ def create_bot
   log("Created bot")
 rescue => e
   fatal("Failed to create bot: #{e}")
-  exit
 end
 
 # Prepare response to a command (new message / edit message)
@@ -359,7 +353,6 @@ def setup_bot
   log("Configured bot")
 rescue => e
   fatal("Failed to configure bot: #{e}")
-  exit
 end
 
 # Start running the bot, and set up an interrupt trigger to shut it down
@@ -373,7 +366,6 @@ def run_bot
   log("Bot connected to servers: #{$bot.servers.map{ |id, s| s.name }.join(', ')}.")
 rescue => e
   fatal("Failed to execute bot: #{e}")
-  exit
 end
 
 # Stop running the bot
@@ -382,7 +374,6 @@ def stop_bot
   log("Stopped bot")
 rescue => e
   fatal("Failed to stop the bot: #{e}")
-  exit
 end
 
 # Routine to shutdown the program (exit should be called afterwards)
@@ -395,7 +386,6 @@ def shutdown(trap = true)
   err("Shut down outte")
 rescue => e
   fatal("Failed to shut down bot: #{e}")
-  exit
 end
 
 # Bot initialization sequence
