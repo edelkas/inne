@@ -27,6 +27,208 @@ def end_task(id, desc = nil, db: true)
   succ("TASK: #{desc}") if desc
 end
 
+# Light wrapper that represents an abstract task whose execution is controlled.
+# We have graceful exception handling, we know when the task is active, etc.
+# @name  - Identifier, for logging purposes. If nil, the task won't be logged.
+# @db    - Whether a MySQL database connection is required for this task. In that
+#          case, it will be acquired on start and released on stop.
+# @force - If true, this task will prevent restarting the bot when it's running.
+#          A shutdown can still be forced with Ctrl+C.
+# @block - The Proc object containing the code of the task to execute.
+class Task
+  attr_reader :name, :active
+
+  def initialize(name, db: true, force: true, &block)
+    # Parameters
+    @name      = name
+    @db        = db
+    @force     = force
+    @block     = block
+
+    # Other members
+    @active    = false
+    @success   = false
+  end
+
+  def start
+    log("TASK: Starting \"#{@name}\".") if @name
+    @active = true if @force
+    acquire_connection if @db
+  end
+
+  def stop
+    release_connection if @db
+    @active = false
+    return if !@name
+    if @success
+      succ("TASK: Finished \"#{@name}\" successfully.")
+    else
+      err("TASK: Finished \"#{@name}\" with errors.")
+    end
+  end
+
+  def execute
+    @block.call if @block
+    true
+  rescue => e
+    lex(e, "Running task \"#{@name}\".")
+    false
+  end
+
+  def run
+    start
+    @success = execute
+    stop
+    @success
+  end
+end
+
+# A job represents a task that is scheduled to be performed regularly or periodically.
+# @freq  - Frequency of execution in seconds (e.g. daily). 0 means to execute
+#          it constantly, and <0 means to execute it only once. It measures the
+#          time passed between finishing the task and starting again, ignoring
+#          the time execution itself takes.
+# @time  - Task initial start time. If it's a String, it's the key name in the
+#          GlobalProperties table of the db containing the start time.
+# @start - Start running job immediately after creation, following schedule.
+# See Task class below for other parameters.
+class Job
+  attr_reader :count
+
+  def initialize(task, freq: 0, time: Time.now, start: true)
+    @task   = task
+    @freq   = nil
+    @time   = nil
+    @thread = nil
+    @count  = 0
+    reschedule(freq, time)
+    start() if start
+  end
+
+  def scheduled?
+    !!@freq && !!@time
+  end
+
+  def running?
+    !!@thread && @thread.alive?
+  end
+
+  def active?
+    @task.active
+  end
+
+  # Changes scheduling information
+  def reschedule(freq, time)
+    @freq = freq
+    @time = time
+  end
+
+  # Cancels scheduling, doesn't stop job if already running
+  def cancel
+    @freq = nil
+    @time = nil
+  end
+
+  # Starts running job according to the specified schedule
+  def start
+    # Ensure we can start the job
+    if !scheduled?
+      err("Job is not scheduled.")
+      return false
+    end
+    if running?
+      err("Job is already running.")
+      return false
+    end
+
+    # Execute job in a separate thread, inside infinite loop
+    @thread = Thread.new do
+      while true
+        sleep(WAIT)
+        now = Time.now
+
+        # If a start time has been provided, parse it. Otherwise, start now.
+        if @time.is_a?(String)
+          start = correct_time(GlobalProperty.get_next_update(@time), @freq)
+          GlobalProperty.set_next_update(@time, start)
+        elsif @time.is_a?(Time)
+          start = @time
+        else
+          @time = now
+          start = now
+        end
+
+        # Suspend thread until it's time to run the task
+        sleep(start - now) unless start <= now
+        next if !@task.run
+        @count += 1
+
+        # Prepare next iteration
+        break if @freq < 0
+        @time = Time.now + @freq if @time.is_a?(Time)
+      end
+    rescue => e
+      lex(e, "Error scheduling job \"#{@task.name}\".")
+      retry
+    end
+
+    true
+  end
+
+  # Try to stop execution of the job gently (waits till task is completed)
+  def stop
+    return if !running?
+    sleep(1) until !active?
+    kill
+  end
+
+  # Forcefully stops execution of the job, even if task is currently running
+  def kill
+    return if !running?
+    @thread.kill
+    @thread = nil
+  end
+
+  def state
+    active? ? 'running' : running? ? 'sleeping' : scheduled? ? 'scheduled' : 'created'
+  end
+
+end
+
+# Manager class that takes care of scheduling and running jobs
+# A job is a task that needs to be executed periodically or regularly
+module Scheduler extend self
+  @@jobs = []
+
+  def add(name, freq: -1, time: nil, db: true, force: true, &block)
+    task = Task.new(name, db: db, force: force, &block)
+    job = Job.new(task, freq: freq, time: time)
+    @@jobs << job
+  end
+
+  # Getters
+  def list()           @@jobs                                end
+  def list_scheduled() @@jobs.select{ |job| job.scheduled? } end
+  def list_running()   @@jobs.select{ |job| job.running?   } end
+  def list_active ()   @@jobs.select{ |job| job.active?    } end
+
+  # Counters
+  def count()           @@jobs.count                         end
+  def count_scheduled() @@jobs.count{ |job| job.scheduled? } end
+  def count_running()   @@jobs.count{ |job| job.running?   } end
+  def count_active ()   @@jobs.count{ |job| job.active?    } end
+
+  # Gracefully stop all jobs
+  def clear
+    @@jobs.each{ |job| job.stop }
+  end
+
+  # Forcefully kill all jobs
+  def terminate
+    @@jobs.each{ |job| job.kill }
+  end
+end
+
 # Periodically (every ~5 mins) perform several useful tasks.
 def update_status
   while(true)
