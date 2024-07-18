@@ -379,10 +379,10 @@ end
 # Routine to shutdown the program (exit should be called afterwards)
 def shutdown(trap = true)
   log("Shutting down outte...")
-  Sock.off
   stop_bot
-  disconnect_db unless trap
-  unblock_threads
+  Sock.off
+  Scheduler.clear
+  #disconnect_db unless trap
   err("Shut down outte")
 rescue => e
   fatal("Failed to shut down bot: #{e}")

@@ -2853,6 +2853,17 @@ def send_sql_list(event)
   event << format_block(make_table(rows))
 end
 
+# Print information about all the running background tasks
+def send_tasks(event)
+  rows = []
+  rows << ["Name", "State", "Count"]
+  rows << :sep
+  Scheduler.list.each{ |job|
+    rows << ["Test", job.state.capitalize, job.count]
+  }
+  event << format_block(make_table(rows))
+end
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -2908,6 +2919,7 @@ def respond_special(event)
   return rename_author(event)            if cmd == 'rename_author'
   return send_sql_status(event)          if cmd == 'sql_status'
   return send_sql_list(event)            if cmd == 'sql_list'
+  return send_tasks(event)               if cmd == 'tasks'
 
   event << "Unsupported special command."
 end

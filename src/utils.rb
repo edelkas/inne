@@ -1706,10 +1706,10 @@ end
 # Schedule a restart as soon as possible, i.e., as soon as no maintainance tasks
 # are being executed, like publishing lotd or downloading the scores.
 def restart(reason = 'Unknown reason')
-  log("Attempting to restart outte due to: #{reason}.")
-  tasks = $active_tasks.select{ |k, v| v }.to_h
-  log("Waiting for active tasks to finish... (#{tasks.keys.map(&:to_s).join(', ')})") if tasks.size > 0
-  sleep(5) while $active_tasks.values.count(true) > 0
+  if Scheduler.count_active > 0
+    warn("Waiting for background tasks to finish...")
+    Scheduler.listen(:clear)
+  end
   force_restart(reason)
 rescue => e
   lex(e, 'Failed to restart outte', discord: true)

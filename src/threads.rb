@@ -36,18 +36,18 @@ end
 #          A shutdown can still be forced with Ctrl+C.
 # @block - The Proc object containing the code of the task to execute.
 class Task
-  attr_reader :name, :active
+  attr_reader :name, :active, :success
 
   def initialize(name, db: true, force: true, &block)
     # Parameters
-    @name      = name
-    @db        = db
-    @force     = force
-    @block     = block
+    @name  = name
+    @db    = db
+    @force = force
+    @block = block
 
     # Other members
-    @active    = false
-    @success   = false
+    @active  = false
+    @success = false
   end
 
   def start
@@ -95,12 +95,17 @@ end
 class Job
   attr_reader :count
 
-  def initialize(task, freq: 0, time: Time.now, start: true)
+  def initialize(task, freq: 0, time: nil, start: true)
+    # Members
     @task   = task
     @freq   = nil
     @time   = nil
     @thread = nil
     @count  = 0
+    @should_stop = false
+
+    # Schedule and start job
+    time = Time.now if !time
     reschedule(freq, time)
     start() if start
   end
@@ -142,6 +147,7 @@ class Job
     end
 
     # Execute job in a separate thread, inside infinite loop
+    @should_stop = false
     @thread = Thread.new do
       while true
         sleep(WAIT)
@@ -160,10 +166,13 @@ class Job
 
         # Suspend thread until it's time to run the task
         sleep(start - now) unless start <= now
-        next if !@task.run
-        @count += 1
+        @task.run
+        @count += 1 if @task.success
+        Scheduler.trigger(:finish)
+        break if @should_stop
 
         # Prepare next iteration
+        next if !@task.success
         break if @freq < 0
         @time = Time.now + @freq if @time.is_a?(Time)
       end
@@ -178,8 +187,11 @@ class Job
   # Try to stop execution of the job gently (waits till task is completed)
   def stop
     return if !running?
-    sleep(1) until !active?
-    kill
+    if active?
+      @should_stop = true
+    else
+      kill
+    end
   end
 
   # Forcefully stops execution of the job, even if task is currently running
@@ -190,7 +202,7 @@ class Job
   end
 
   def state
-    active? ? 'running' : running? ? 'sleeping' : scheduled? ? 'scheduled' : 'created'
+    active? ? 'running' : running? ? 'scheduled' : scheduled? ? 'ready' : 'created'
   end
 
 end
@@ -199,6 +211,7 @@ end
 # A job is a task that needs to be executed periodically or regularly
 module Scheduler extend self
   @@jobs = []
+  @@listeners = []
 
   def add(name, freq: -1, time: nil, db: true, force: true, &block)
     task = Task.new(name, db: db, force: force, &block)
@@ -226,6 +239,31 @@ module Scheduler extend self
   # Forcefully kill all jobs
   def terminate
     @@jobs.each{ |job| job.kill }
+  end
+
+  # A thread can register to be woken up by a specific event
+  def listen(event, thread = Thread.current)
+    @@listeners << { event: event, thread: thread }
+    sleep
+  end
+
+  # Broadcast an event to all threads listening to it
+  def broadcast(event)
+    @@listeners.each{ |ls|
+      ls[:thread].run if ls[:event] == event
+    }
+  end
+
+  # Handle what happens when an event is raised
+  def trigger(event)
+    # Always broadcast the main event
+    broadcast(event)
+
+    # Test if other events need to be broadcasted
+    case event
+    when :finish
+      broadcast(:clear) if count_active == 0
+    end
   end
 end
 
