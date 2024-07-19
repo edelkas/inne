@@ -1,31 +1,19 @@
-# This file contains all the functions that get executed in the background,
-# usually in separate threads, because they perform periodic tasks like
-# updating the database scores, publishing the lotd, etc.
+# This file sets up the background jobs that are running concurrently in separate
+# threads, regularly performing periodic tasks such as updating Metanet scores or
+# userlevels, posting the level of the day, checking new Twitch streams, etc.
 #
-# See the TASK VARIABLES in src/constants.rb for configuration. See the end
-# of the file for the thread list and joining thread.
+# Each of these operations is encapsulated as a Task object, which is a light
+# wrapper than handles them gracefully. A task, together with all the necessary
+# scheduling functionality, is a Job. Finally, a custom Scheduler module manages
+# all the jobs, and includes an event handler to signal other threads for things
+# such as task completions.
+#
+# See also the TASK VARIABLES in src/constants.rb for configuration. See the end
+# of the file for the list of tasks.
 
 require_relative 'constants.rb'
 require_relative 'utils.rb'
 require_relative 'models.rb'
-
-# Wrapper to start each periodic task.
-# - id:    Symbol to identify task
-# - desc:  Text to log (nil to not log)
-# - db:    Acquire a db connection
-# - block: Whether the execution of this task should prevent restarts
-def start_task(id, desc = nil, db: true, block: true)
-  log("TASK: #{desc}") if desc
-  acquire_connection if db
-  $active_tasks[id] = true if block
-end
-
-# Wrapper to end each periodic task.
-def end_task(id, desc = nil, db: true)
-  release_connection if db
-  $active_tasks[id] = false
-  succ("TASK: #{desc}") if desc
-end
 
 # Light wrapper that represents an abstract task whose execution is controlled.
 # We have graceful exception handling, we know when the task is active, etc.
@@ -34,15 +22,17 @@ end
 #          case, it will be acquired on start and released on stop.
 # @force - If true, this task will prevent restarting the bot when it's running.
 #          A shutdown can still be forced with Ctrl+C.
+# @log   - Whether to log the task start/end to the terminal.
 # @block - The Proc object containing the code of the task to execute.
 class Task
   attr_reader :name, :active, :success
 
-  def initialize(name, db: true, force: true, &block)
+  def initialize(name, db: true, force: true, log: true, &block)
     # Parameters
     @name  = name
     @db    = db
     @force = force
+    @log   = log
     @block = block
 
     # Other members
@@ -51,7 +41,7 @@ class Task
   end
 
   def start
-    log("TASK: Starting \"#{@name}\".") if @name
+    log("TASK: Starting \"#{@name}\".") if @log && @name
     @active = true if @force
     acquire_connection if @db
   end
@@ -59,7 +49,7 @@ class Task
   def stop
     release_connection if @db
     @active = false
-    return if !@name
+    return if !@log || !@name
     if @success
       succ("TASK: Finished \"#{@name}\" successfully.")
     else
@@ -187,11 +177,7 @@ class Job
   # Try to stop execution of the job gently (waits till task is completed)
   def stop
     return if !running?
-    if active?
-      @should_stop = true
-    else
-      kill
-    end
+    active? ? (@should_stop = true) : kill
   end
 
   # Forcefully stops execution of the job, even if task is currently running
@@ -213,8 +199,8 @@ module Scheduler extend self
   @@jobs = []
   @@listeners = []
 
-  def add(name, freq: -1, time: nil, db: true, force: true, &block)
-    task = Task.new(name, db: db, force: force, &block)
+  def add(name, freq: 0, time: nil, db: true, force: true, log: true, &block)
+    task = Task.new(name, db: db, force: force, log: log, &block)
     job = Job.new(task, freq: freq, time: time)
     @@jobs << job
   end
@@ -242,8 +228,8 @@ module Scheduler extend self
   end
 
   # A thread can register to be woken up by a specific event
-  def listen(event, thread = Thread.current)
-    @@listeners << { event: event, thread: thread }
+  def listen(event)
+    @@listeners << { event: event, thread: Thread.current }
     sleep
   end
 
@@ -269,76 +255,41 @@ end
 
 # Periodically (every ~5 mins) perform several useful tasks.
 def update_status
-  while(true)
-    sleep(WAIT)
-    start_task(:status)
-
-    if !OFFLINE_STRICT
-      # Download newest userlevels from all 3 modes
-      [MODE_SOLO, MODE_COOP, MODE_RACE].each do |mode|
-        Userlevel.browse(mode: mode, update: true) rescue next
-      end
-
-      # Update scores for lotd, eotw and cotm
-      GlobalProperty.get_current(Level).update_scores
-      GlobalProperty.get_current(Episode).update_scores
-      GlobalProperty.get_current(Story).update_scores
+  if !OFFLINE_STRICT
+    # Download newest userlevels from all 3 modes
+    [MODE_SOLO, MODE_COOP, MODE_RACE].each do |mode|
+      Userlevel.browse(mode: mode, update: true) rescue next
     end
 
-    # Update bot's status and activity (it only lasts so much)
-    update_bot_status
-
-    # Clear old message logs and userlevel query cache
-    Message.clean
-    UserlevelCache.clean
-
-    # Finish
-    $status_update = Time.now.to_i
-    end_task(:status)
-    sleep(STATUS_UPDATE_FREQUENCY)
+    # Update scores for lotd, eotw and cotm
+    GlobalProperty.get_current(Level).update_scores
+    GlobalProperty.get_current(Episode).update_scores
+    GlobalProperty.get_current(Story).update_scores
   end
-rescue => e
-  lex(e, "Updating status")
-  end_task(:status)
-  retry
-ensure
-  end_task(:status)
+
+  # Update bot's status and activity (it only lasts so much)
+  update_bot_status
+
+  # Clear old message logs and userlevel query cache
+  Message.clean
+  UserlevelCache.clean
+
+  # Finish
+  $status_update = Time.now.to_i
 end
 
 # Check for new Twitch streams, and send notices.
 def update_twitch
-  # Ensure we have a valid Twitch token
-  if $twitch_token.nil?
-    sleep(WAIT)
-    acquire_connection
-    $twitch_token = Twitch::get_twitch_token
-    Twitch::update_twitch_streams
-    release_connection
-  end
-
-  while(true)
-    sleep(WAIT)
-    start_task(:twitch)
-    Twitch::update_twitch_streams
-    Twitch::new_streams.each{ |game, list|
-      list.each{ |stream|
-        Twitch::post_stream(stream)
-      }
+  Twitch::update_twitch_streams
+  Twitch::new_streams.each{ |game, list|
+    list.each{ |stream|
+      Twitch::post_stream(stream)
     }
-    end_task(:twitch)
-    sleep(TWITCH_UPDATE_FREQUENCY)
-  end
-rescue => e
-  lex(e, "Updating twitch")
-  end_task(:twitch)
-  retry
-ensure
-  end_task(:twitch)
+  }
 end
 
 # Update missing demos (e.g., if they failed to download originally)
 def download_demos
-  start_task(:demos, "Downloading missing demos")
   archives = Archive.where(lost: false)
                     .joins("LEFT JOIN demos ON demos.id = archives.id")
                     .where("demos.demo IS NULL")
@@ -350,27 +301,6 @@ def download_demos
     lex(e, "Updating demo with ID #{ar[0].to_s}")
     ((attempts += 1) < ATTEMPT_LIMIT) ? retry : next
   end
-  return true
-rescue => e
-  lex(e, "Downloading missing demos")
-  return false
-ensure
-  end_task(:demos, "Downloaded missing demos")
-end
-
-# Driver for the function above
-def start_demos
-  while true
-    sleep(WAIT) # prevent crazy loops
-    next_demo_update = correct_time(GlobalProperty.get_next_update('demo'), DEMO_UPDATE_FREQUENCY)
-    GlobalProperty.set_next_update('demo', next_demo_update)
-    delay = next_demo_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !download_demos
-  end
-rescue => e
-  lex(e, "Updating missing demos")
-  retry
 end
 
 # Compute and send the weekly highscoring report and the daily summary
@@ -379,7 +309,6 @@ def send_report
     err("Not connected to a channel, not sending highscoring report")
     return false
   end
-  start_task(:report, "Sending highscoring report")
 
   base  = Time.new(2020, 9, 3, 0, 0, 0, "+00:00").to_i # when archiving begun
   time  = [Time.now.to_i - REPORT_UPDATE_SIZE,  base].max
@@ -476,40 +405,15 @@ def send_report
     "• There were **#{n[2]}** new scores by **#{n[3]}** players in **#{n[4]}** #{klass.downcase.pluralize}, making the boards **#{"%.3f" % [n[1].to_f / 60.0]}** seconds harder and increasing the total 0th score by **#{"%.3f" % [n[0].to_f / 60.0]}** seconds."
   }.join("\n")
   send_message($channel, content: "**Daily highscoring summary**:\n" + total)
-
-  return true
-ensure
-  end_task(:report, "Highscoring report sent")
-end
-
-# Driver for the function above
-def start_report
-  if TEST && TEST_REPORT
-    raise if !send_report
-  else
-    while true
-      sleep(WAIT)
-      next_report_update = correct_time(GlobalProperty.get_next_update('report'), REPORT_UPDATE_FREQUENCY)
-      GlobalProperty.set_next_update('report', next_report_update)
-      delay = next_report_update - Time.now
-      sleep(delay) unless delay < 0
-      next if !send_report
-    end
-  end
-rescue => e
-  lex(e, "Sending highscoring report")
-  sleep(WAIT)
-  retry
 end
 
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
 def send_userlevel_report
   if $channel.nil?
-    err("Not connected to a channel, not sending highscoring report")
+    err("Not connected to a channel, not sending userlevel report")
     return false
   end
-  start_task(:userlevel_report, "Sending userlevel highscoring report")
 
   zeroes = Userlevel.rank(:rank, true, 0)
                     .each_with_index
@@ -525,30 +429,10 @@ def send_userlevel_report
   send_message($mapping_channel, content: "Userlevel 0th rankings with ties on #{Time.now.to_s}:\n#{format_block(zeroes)}")
   sleep(0.25)
   send_message($mapping_channel, content: "Userlevel point rankings on #{Time.now.to_s}:\n#{format_block(points)}")
-
-  return true
-ensure
-  end_task(:userlevel_report, "Userlevel highscoring report sent")
-end
-
-# Driver for the function above
-def start_userlevel_report
-  while true
-    sleep(WAIT)
-    next_userlevel_report_update = correct_time(GlobalProperty.get_next_update('userlevel_report'), USERLEVEL_REPORT_FREQUENCY)
-    GlobalProperty.set_next_update('userlevel_report', next_userlevel_report_update)
-    delay = next_userlevel_report_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !send_userlevel_report
-  end
-rescue => e
-  lex(e, "Sending userlevel highscoring report")
-  retry
 end
 
 # Update database scores for Metanet Solo levels, episodes and stories
 def download_high_scores
-  start_task(:scores, "Downloading highscores")
   [Level, Episode, Story].each do |type|
     type.all.each do |o|
       attempts ||= 0
@@ -558,95 +442,11 @@ def download_high_scores
       ((attempts += 1) <= ATTEMPT_LIMIT) ? retry : next
     end
   end
-  return true
-rescue => e
-  lex(e, "Downloading highscores")
-  return false
-ensure
-  end_task(:scores, "Downloaded highscores")
-end
-
-# Driver for the function above
-def start_high_scores
-  while true
-    sleep(WAIT)
-    next_score_update = correct_time(GlobalProperty.get_next_update('score'), HIGHSCORE_UPDATE_FREQUENCY)
-    GlobalProperty.set_next_update('score', next_score_update)
-    delay = next_score_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !download_high_scores
-  end
-rescue => e
-  lex(e, "Updating highscores")
-  retry
-end
-
-# Compute and store a bunch of different rankings daily, so that we can build
-# histories later.
-#
-# NOTE: Histories this way, stored in bulk in the database, are deprecated.
-# We now using a differential table with all new scores, called 'archives'.
-# So we can rebuild the boards at any given point in time with precision.
-# Therefore, this function is not being used anymore.
-def update_histories
-  start_task(:histories, "Updating histories")
-
-  now = Time.now
-  [:SI, :S, :SL, :SS, :SU, :SS2].each do |tab|
-    [Level, Episode, Story].each do |type|
-      next if (type == Episode || type == Story) && [:SS, :SS2].include?(tab)
-
-      [1, 5, 10, 20].each do |rank|
-        [true, false].each do |ties|
-          rankings = Score.rank(:rank, type, tab, ties, rank - 1, true)
-          attrs    = RankHistory.compose(rankings, type, tab, rank, ties, now)
-          ActiveRecord::Base.transaction do
-            RankHistory.create(attrs)
-          end
-        end
-      end
-
-      rankings = Score.rank(:points, type, tab, false, nil, true)
-      attrs    = PointsHistory.compose(rankings, type, tab, now)
-      ActiveRecord::Base.transaction do
-        PointsHistory.create(attrs)
-      end
-
-      rankings = Score.rank(:score, type, tab, false, nil, true)
-      attrs    = TotalScoreHistory.compose(rankings, type, tab, now)
-      ActiveRecord::Base.transaction do
-        TotalScoreHistory.create(attrs)
-      end
-    end
-  end
-  return true
-rescue => e
-  lex(e, "Updating histories")
-  return false
-ensure
-  end_task(:histories, "Updated highscore histories")
-end
-
-# Driver for the function above, which is not used anymore (see comment there)
-def start_histories
-  while true
-    sleep(WAIT)
-    next_history_update = correct_time(GlobalProperty.get_next_update('history'), HISTORY_UPDATE_FREQUENCY)
-    GlobalProperty.set_next_update('history', next_history_update)
-    delay = next_history_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !update_histories
-  end
-rescue => e
-  lex(e, "Updating histories")
-  retry
 end
 
 # Precompute and store several useful userlevel rankings daily, so that we
-# can check the history later. Since we don't have a differential table here,
-# like for Metanet levels, this function is NOT deprecated.
+# can check the history later, since we don't have a differential table here.
 def update_userlevel_histories
-  start_task(:userlevel_histories, "Updating userlevel histories")
   now = Time.now
   [-1, 1, 5, 10, 20].each{ |rank|
     rankings = Userlevel.rank(rank == -1 ? :points : :rank, rank == 1 ? true : false, rank - 1, true)
@@ -655,33 +455,11 @@ def update_userlevel_histories
       UserlevelHistory.create(attrs)
     end
   }
-  return true
-rescue => e
-  lex(e, "Updating userlevel histories")
-  return false
-ensure
-  end_task(:userlevel_histories, "Updated userlevel histories")
-end
-
-# Driver for the function above
-def start_userlevel_histories
-  while true
-    sleep(WAIT)
-    next_userlevel_history_update = correct_time(GlobalProperty.get_next_update('userlevel_history'), USERLEVEL_HISTORY_FREQUENCY)
-    GlobalProperty.set_next_update('userlevel_history', next_userlevel_history_update)
-    delay = next_userlevel_history_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !update_userlevel_histories
-  end
-rescue => e
-  lex(e, "Updating userlevel histories")
-  retry
 end
 
 # Download the scores for the scores for the latest 500 userlevels, for use in
 # the daily userlevel highscoring rankings.
 def download_userlevel_scores
-  start_task(:userlevel_scores, "Downloading newest userlevel scores")
   Userlevel.where(mode: :solo).order(id: :desc).take(USERLEVEL_REPORT_SIZE).each do |u|
     attempts ||= 0
     u.update_scores
@@ -689,27 +467,6 @@ def download_userlevel_scores
     lex(e, "Downloading scores for userlevel #{u.id}")
     ((attempts += 1) <= ATTEMPT_LIMIT) ? retry : next
   end
-  return true
-rescue => e
-  lex(e, "Downloading newest userlevel scores")
-  return false
-ensure
-  end_task(:userlevel_scores, "Downloaded newest userlevel scores")
-end
-
-# Driver for the function above
-def start_userlevel_scores
-  while true
-    sleep(WAIT)
-    next_userlevel_score_update = correct_time(GlobalProperty.get_next_update('userlevel_score'), USERLEVEL_SCORE_FREQUENCY)
-    GlobalProperty.set_next_update('userlevel_score', next_userlevel_score_update)
-    delay = next_userlevel_score_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !download_userlevel_scores
-  end
-rescue => e
-  lex(e, "Updating newest userlevel scores")
-  retry
 end
 
 # Continuously, but more slowly, download the scores for ALL userlevels, to keep
@@ -727,28 +484,11 @@ def update_all_userlevels_chunk
     ((attempts += 1) <= ATTEMPT_LIMIT) ? retry : next
   end
   dbg("Downloaded userlevel chunk scores")
-  return true
-rescue => e
-  lex(e, "Downloading userlevel chunk scores")
-  return false
-end
-
-# Driver for the function above
-def update_all_userlevels
-  log("Updating all userlevel scores...")
-  while true
-    sleep(WAIT)
-    update_all_userlevels_chunk
-  end
-rescue => e
-  lex(e, "Updating all userlevel scores")
-  retry
 end
 
 # Download some userlevel tabs (best, top weekly, featured, hardest), for all
 # 3 modes, to keep those lists up to date in the database
 def update_userlevel_tabs
-  start_task(:tabs, "Downloading userlevel tabs")
   [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |m|
     USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.each { |qt|
       page = 0
@@ -758,27 +498,6 @@ def update_userlevel_tabs
                   .delete_all unless USERLEVEL_TABS[qt][:size] == -1
     }
   }
-  return true
-rescue => e
-  lex(e, "Downloading userlevel tabs")
-  return false
-ensure
-  end_task(:tabs, "Downloaded userlevel tabs")
-end
-
-# Driver for the function above
-def start_userlevel_tabs
-  while true
-    sleep(WAIT)
-    next_userlevel_tab_update = correct_time(GlobalProperty.get_next_update('userlevel_tab'), USERLEVEL_TAB_FREQUENCY)
-    GlobalProperty.set_next_update('userlevel_tab', next_userlevel_tab_update)
-    delay = next_userlevel_tab_update - Time.now
-    sleep(delay) unless delay < 0
-    next if !update_userlevel_tabs
-  end
-rescue => e
-  lex(e, "Updating userlevel tabs")
-  retry
 end
 
 ############ LOTD FUNCTIONS ############
@@ -950,39 +669,43 @@ end
 # from obliterating outte by preemptively restarting it when no active tasks
 # (e.g. lotd or score update) are being executed.
 def monitor_memory
-  loop do
-    # Gather memory info
-    mem = getmem
-    total = meminfo['MemTotal']
-    available = meminfo['MemAvailable']
-    used = total - available
+  # Gather memory info
+  mem = getmem
+  total = meminfo['MemTotal']
+  available = meminfo['MemAvailable']
+  used = total - available
 
-    # If below 25% of available memory, take action
-    available_ratio = available.to_f / total
-    used_ratio = mem.to_f / used
-    if available_ratio < MEMORY_LIMIT.clamp(0, 1)
-      str = "#{"%.2f%%" % [100 - 100 * available_ratio]} used, #{"%.2f%%" % [100 * used_ratio]} by outte"
-      if used_ratio > MEMORY_USAGE.clamp(0, 1)
-        restart("Lack of memory (#{str})")
-      elsif !$memory_warned
-        warn("Something's taking up excessive memory, and it's not outte! (#{str})", discord: true)
-        $memory_warned = true
-      end
+  # If below 25% of available memory, take action
+  available_ratio = available.to_f / total
+  used_ratio = mem.to_f / used
+  if available_ratio < MEMORY_LIMIT.clamp(0, 1)
+    str = "#{"%.2f%%" % [100 - 100 * available_ratio]} used, #{"%.2f%%" % [100 * used_ratio]} by outte"
+    if used_ratio > MEMORY_USAGE.clamp(0, 1)
+      restart("Lack of memory (#{str})")
+    elsif !$memory_warned
+      warn("Something's taking up excessive memory, and it's not outte! (#{str})", discord: true)
+      $memory_warned = true
     end
-
-    # If below 5%, send another warning to Discord, regardless of outte usage
-    if available_ratio < MEMORY_CRITICAL.clamp(0, 1) && !$memory_warned_c
-      warn("Memory usage is critical! (#{"%.2f%%" % [100 - 100 * available_ratio]})", discord: true)
-      $memory_warned_c = true
-    end
-
-    sleep(MEMORY_DELAY)
   end
-rescue => e
-  lex(e, 'Failed to monitor memory')
-  sleep(1)
-  retry
+
+  # If below 5%, send another warning to Discord, regardless of outte usage
+  if available_ratio < MEMORY_CRITICAL.clamp(0, 1) && !$memory_warned_c
+    warn("Memory usage is critical! (#{"%.2f%%" % [100 - 100 * available_ratio]})", discord: true)
+    $memory_warned_c = true
+  end
 end
+
+Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY) { update_status }
+Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY) { update_twitch }
+Scheduler.add("Download demos", freq: DEMO_UPDATE_FREQUENCY, time: 'demo') { download_demos }
+Scheduler.add("Highscoring report", freq: TEST && TEST_REPORT ? -1 : REPORT_UPDATE_FREQUENCY, time: TEST && TEST_REPORT ? nil : 'report') { send_report }
+Scheduler.add("Userlevel report", freq: USERLEVEL_REPORT_FREQUENCY, time: 'userlevel_report') { send_userlevel_report }
+Scheduler.add("Download scores", freq: HIGHSCORE_UPDATE_FREQUENCY, time: 'score') { download_high_scores }
+Scheduler.add("Userlevel histories", freq: USERLEVEL_HISTORY_FREQUENCY, time: 'userlevel_history') { update_userlevel_histories }
+Scheduler.add("Userlevel scores", freq: USERLEVEL_SCORE_FREQUENCY, time: 'userlevel_score') { download_userlevel_scores }
+Scheduler.add("Userlevel chunk", force: false, log: false) { update_all_userlevels_chunk }
+Scheduler.add("Userlevel tabs", freq: USERLEVEL_TAB_FREQUENCY, time: 'userlevel_tab') { update_userlevel_tabs }
+Scheduler.add("Monitor memory", freq: MEMORY_DELAY, db: false, force: false, log: false) { monitor_memory }
 
 # Start all the tasks in this file in independent threads.
 # We separate them in 3 categories:
@@ -998,7 +721,6 @@ end
 #   only on the condition that the connection has been established.
 
 def start_main_threads
-  $threads << Thread.new { sleep                         } # KEEP FIRST
   $threads << Thread.new { monitor_memory                } if $linux
   $threads << Thread.new { Server::on                    } if SOCKET && !DO_NOTHING
 end
@@ -1020,12 +742,4 @@ def start_discord_threads
   $threads << Thread.new { start_report                  } if (REPORT_METANET    || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
   $threads << Thread.new { start_userlevel_report        } if (REPORT_USERLEVELS || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
   $threads << Thread.new { potato                        } if POTATO && !DO_NOTHING
-end
-
-def block_threads
-  $threads.first.join
-end
-
-def unblock_threads
-  $threads.first.run if $threads.first.alive?
 end

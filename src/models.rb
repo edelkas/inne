@@ -1770,51 +1770,11 @@ end
 
 class Player < ActiveRecord::Base
   has_many :scores
-  has_many :rank_histories
-  has_many :points_histories
-  has_many :total_score_histories
   has_many :player_aliases
   has_many :mappack_scores
   has_many :mappack_scores_tweaks
   alias_method :aliases, :player_aliases
   alias_method :tweaks,  :mappack_scores_tweaks
-
-  def self.histories(type, attrs, column)
-    attrs[:highscoreable_type] ||= ['Level', 'Episode'] # Don't include stories
-    hist = type.where(attrs).includes(:player)
-
-    ret = Hash.new { |h, k| h[k] = Hash.new { |h, k| h[k] = 0 } }
-
-    hist.each do |h|
-      ret[h.player.name][h.timestamp] += h.send(column)
-    end
-
-    ret
-  end
-
-  def self.rank_histories(rank, type, tabs, ties)
-    attrs = {rank: rank, ties: ties}
-    attrs[:highscoreable_type] = type.to_s if type
-    attrs[:tab] = tabs if !tabs.empty?
-
-    self.histories(RankHistory, attrs, :count)
-  end
-
-  def self.score_histories(type, tabs)
-    attrs = {}
-    attrs[:highscoreable_type] = type.to_s if type
-    attrs[:tab] = tabs if !tabs.empty?
-
-    self.histories(TotalScoreHistory, attrs, :score)
-  end
-
-  def self.points_histories(type, tabs)
-    attrs = {}
-    attrs[:highscoreable_type] = type.to_s if type
-    attrs[:tab] = tabs if !tabs.empty?
-
-    self.histories(PointsHistory, attrs, :points)
-  end
 
   # Only works for 1 type at a time
   def self.comparison_(type, tabs, p1, p2)
@@ -2387,62 +2347,6 @@ class GlobalProperty < ActiveRecord::Base
   end
 end
 
-class RankHistory < ActiveRecord::Base
-  belongs_to :player
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
-
-  def self.compose(rankings, type, tab, rank, ties, time)
-    rankings.select { |r| r[1] > 0 }.map do |r|
-      {
-        highscoreable_type: type.to_s,
-        rank:               rank,
-        ties:               ties,
-        tab:                tab,
-        player:             r[0],
-        count:              r[1],
-        metanet_id:         r[0].metanet_id,
-        timestamp:          time
-      }
-    end
-  end
-end
-
-class PointsHistory < ActiveRecord::Base
-  belongs_to :player
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
-
-  def self.compose(rankings, type, tab, time)
-    rankings.select { |r| r[1] > 0 }.map do |r|
-      {
-        timestamp:          time,
-        tab:                tab,
-        highscoreable_type: type.to_s,
-        player:             r[0],
-        metanet_id:         r[0].metanet_id,
-        points:             r[1]
-      }
-    end
-  end
-end
-
-class TotalScoreHistory < ActiveRecord::Base
-  belongs_to :player
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
-
-  def self.compose(rankings, type, tab, time)
-    rankings.select { |r| r[1] > 0 }.map do |r|
-      {
-        timestamp:          time,
-        tab:                tab,
-        highscoreable_type: type.to_s,
-        player:             r[0],
-        metanet_id:         r[0].metanet_id,
-        score:              r[1]
-      }
-    end
-  end
-end
-
 class Video < ActiveRecord::Base
   belongs_to :highscoreable, polymorphic: true
 
@@ -2830,7 +2734,9 @@ module Twitch extend self
   }
 
   def get_twitch_token
-    GlobalProperty.find_by(key: 'twitch_token').value
+    $twitch_token = GlobalProperty.find_by(key: 'twitch_token').value
+    update_twitch_token if !$twitch_token
+    $twitch_token
   end
 
   def set_twitch_token(token)
@@ -2878,7 +2784,7 @@ module Twitch extend self
 
   # TODO: Add attempts to the loop, raise if fail
   def get_twitch_game_id(name)
-    update_twitch_token if $twitch_token.nil?
+    get_twitch_token if !$twitch_token
     uri = URI("https://api.twitch.tv/helix/games?name=#{name}")
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true
@@ -2913,10 +2819,7 @@ module Twitch extend self
       err("TWITCH: Supplied game not known.")
       return
     end
-    while $twitch_token.nil?
-      update_twitch_token
-      sleep(5)
-    end
+    get_twitch_token if !$twitch_token
     uri = URI("https://api.twitch.tv/helix/streams?first=100&game_id=#{GAME_IDS[name]}")
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true
@@ -2936,10 +2839,9 @@ module Twitch extend self
         err("TWITCH: Stream list request for #{name} failed (code #{res.code.to_i}).")
         sleep(5)
       else
-        break
+        return JSON.parse(res.body)['data']
       end
     end
-    JSON.parse(res.body)['data']
   rescue => e
     lex(e, "TWITCH: Stream list request method for #{name} failed.")
     sleep(5)
