@@ -48,7 +48,7 @@ INVALID_RESP   = '-1337' # N++'s server response when Steam ID is inactive
 FAST_MANUAL = true # Only use active Steam IDs for manual queries, for speed
 FAST_PERIOD = 7    # Days old until a Steam ID is marked as inactive
 
-UPDATE_SCORES_ON_LOTD = true # Update scores right before lotd (may delay post)
+UPDATE_SCORES_ON_LOTD = false # Update scores right before lotd (may delay post)
 
 # <---------------------------------------------------------------------------->
 # <------                      DISCORD VARIABLES                         ------>
@@ -370,12 +370,12 @@ UPDATE_STATUS      = false # Thread to regularly update the bot's status
 UPDATE_TWITCH      = false # Thread to regularly look up N related Twitch streams
 UPDATE_SCORES      = false # Thread to regularly download Metanet's scores
 UPDATE_DEMOS       = false # Thread to regularly download missing Metanet demos
-UPDATE_LEVEL       = false # Thread to regularly publish level of the day
-UPDATE_EPISODE     = false # Thread to regularly publish episode of the week
-UPDATE_STORY       = false # Thread to regularly publish column of the month
-UPDATE_CTP_LEVEL   = false # Thread to regularly publish CTP level of the day
-UPDATE_CTP_EPISODE = false # Thread to regularly publish CTP episode of the week
-UPDATE_CTP_STORY   = false # Thread to regularly publish CTP column of the month
+POST_LOTD       = false # Thread to regularly publish level of the day
+POST_EOTW     = false # Thread to regularly publish episode of the week
+POST_COTM       = false # Thread to regularly publish column of the month
+POST_CTP_LOTD   = false # Thread to regularly publish CTP level of the day
+POST_CTP_EOTW = false # Thread to regularly publish CTP episode of the week
+POST_CTP_COTM   = false # Thread to regularly publish CTP column of the month
 UPDATE_USERLEVELS  = false # Thread to regularly download newest userlevel scores
 UPDATE_USER_GLOB   = false # Thread to continuously (but slowly) download all userlevel scores
 UPDATE_USER_HIST   = false # Thread to regularly update userlevel highscoring histories

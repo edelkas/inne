@@ -253,6 +253,10 @@ module Scheduler extend self
   end
 end
 
+# <---------------------------------------------------------------------------->
+# <------                      TASK DEFINITIONS                          ------>
+# <---------------------------------------------------------------------------->
+
 # Periodically (every ~5 mins) perform several useful tasks.
 def update_status
   if !OFFLINE_STRICT
@@ -303,17 +307,11 @@ def download_demos
   end
 end
 
-# Compute and send the weekly highscoring report and the daily summary
+# Compute and send the weekly highscoring report
 def send_report
-  if $channel.nil?
-    err("Not connected to a channel, not sending highscoring report")
-    return false
-  end
-
   base  = Time.new(2020, 9, 3, 0, 0, 0, "+00:00").to_i # when archiving begun
-  time  = [Time.now.to_i - REPORT_UPDATE_SIZE,  base].max
-  time2 = [Time.now.to_i - SUMMARY_UPDATE_SIZE, base].max
   now   = Time.now.to_i
+  time  = [now - REPORT_UPDATE_SIZE,  base].max
   pad   = [2, DEFAULT_PADDING, 6, 6, 6, 5, 4]
   log   = [] if LOG_REPORT
 
@@ -366,6 +364,7 @@ def send_report
   sep = "-" * (pad.sum + pad.size + 5)
 
   send_message($channel, content: "**Weekly highscoring report**:#{format_block([header, sep, changes].join("\n"))}")
+
   if LOG_REPORT
     log_text = log.sort_by{ |name, scores| name }.map{ |name, scores|
       scores.map{ |s|
@@ -374,16 +373,21 @@ def send_report
     }.join("\n")
     File.write(PATH_LOG_REPORT, log_text)
   end
+end
 
-  sleep(1)
-  # Compute, for levels, episodes and stories, the following quantities:
-  # Seconds of total score gained.
-  # Seconds of total score in 19th gained.
-  # Total number of changes.
-  # Total number of involved players.
-  # Total number of involved highscoreables.
+# Compute and send the daily highscoring summary:
+# 1) Seconds of total score gained.
+# 2) Seconds of total score in 19th gained.
+# 3) Total number of changes.
+# 4) Total number of involved players.
+# 5) Total number of involved highscoreables.
+def send_summary
+  base  = Time.new(2020, 9, 3, 0, 0, 0, "+00:00").to_i # when archiving begun
+  now   = Time.now.to_i
+  time  = [now - SUMMARY_UPDATE_SIZE, base].max
   total = { "Level" => [0, 0, 0, 0, 0], "Episode" => [0, 0, 0, 0, 0], "Story" => [0, 0, 0, 0, 0] }
-  changes = Archive.where("unix_timestamp(date) > #{time2}")
+
+  changes = Archive.where("unix_timestamp(date) > #{time}")
                    .order('date desc')
                    .map{ |ar|
                      total[ar.highscoreable.class.to_s][2] += 1
@@ -397,12 +401,15 @@ def send_report
   changes.map{ |h| h[1] }
          .uniq
          .each{ |h|
-                total[h.class.to_s][0] += Archive.scores(h, now).first[1] - Archive.scores(h, time2).first[1]
-                total[h.class.to_s][1] += Archive.scores(h, now).last[1] - Archive.scores(h, time2).last[1]
+                total[h.class.to_s][0] += Archive.scores(h, now).first[1] - Archive.scores(h, time).first[1]
+                total[h.class.to_s][1] += Archive.scores(h, now).last[1] - Archive.scores(h, time).last[1]
               }
 
   total = total.map{ |klass, n|
-    "• There were **#{n[2]}** new scores by **#{n[3]}** players in **#{n[4]}** #{klass.downcase.pluralize}, making the boards **#{"%.3f" % [n[1].to_f / 60.0]}** seconds harder and increasing the total 0th score by **#{"%.3f" % [n[0].to_f / 60.0]}** seconds."
+    "• There were **#{n[2]}** new scores by **#{n[3]}** players " +
+    "in **#{n[4]}** #{klass.downcase.pluralize}, " +
+    "making the boards **#{"%.3f" % [n[1].to_f / 60.0]}** seconds harder " +
+    "and increasing the total 0th score by **#{"%.3f" % [n[0].to_f / 60.0]}** seconds."
   }.join("\n")
   send_message($channel, content: "**Daily highscoring summary**:\n" + total)
 end
@@ -503,7 +510,7 @@ end
 ############ LOTD FUNCTIONS ############
 
 # Daily reminders for eotw and cotm
-def send_channel_episode_reminder(ctp = false)
+def send_eotw_reminder(ctp = false)
   channel = ctp ? $ctp_channel : $channel
   eotw = GlobalProperty.get_current(Episode, ctp)
   return if eotw.nil?
@@ -512,7 +519,7 @@ rescue => e
   lex(e, 'Failed to send eotw reminder')
 end
 
-def send_channel_story_reminder(ctp = false)
+def send_cotm_reminder(ctp = false)
   channel = ctp ? $ctp_channel : $channel
   cotm = GlobalProperty.get_current(Story, ctp)
   return if cotm.nil?
@@ -524,14 +531,6 @@ end
 # Publish the lotd/eotw/cotm
 # This function also updates the scores of said board, and of the new one
 def send_channel_next(type, ctp = false)
-  # Check if the channel is available
-  channel = ctp ? $ctp_channel : $channel
-  while channel.nil?
-    err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
-    sleep(WAIT)
-    channel = ctp ? $ctp_channel : $channel
-  end
-
   # Get old and new levels/episodes/stories
   last = GlobalProperty.get_current(type, ctp)
   current = GlobalProperty.get_next(type, ctp)
@@ -556,6 +555,7 @@ def send_channel_next(type, ctp = false)
   caption << " The #{type_n} for #{time} is #{current.format_name}."
 
   # Send screenshot and scores
+  channel = ctp ? $ctp_channel : $channel
   screenshot = Map.screenshot(file: true, h: current.map) rescue nil
   caption += "\nThere was a problem generating the screenshot!" if screenshot.nil?
   channel.send(caption, false, nil, screenshot.nil? ? [] : [screenshot])
@@ -578,91 +578,39 @@ end
 
 # Driver for the function above (takes care of timing, db update, etc)
 def start_level_of_the_day(ctp = false)
-  while true
+  # Ensure channel is available
+  while (ctp ? $ctp_channel : $channel).nil?
+    err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
     sleep(WAIT)
-    acquire_connection
-    episode_day = false
-    story_day = false
-
-    # Test lotd/eotw/cotm immediately
-    if TEST
-      if (ctp ? TEST_CTP_LOTD : TEST_LOTD)
-        send_channel_next(Level, ctp)
-        send_channel_next(Episode, ctp)
-        send_channel_next(Story, ctp)
-        send_channel_episode_reminder(ctp)
-        send_channel_story_reminder(ctp)
-      end
-      return
-    end
-
-    # Update lotd update time (every day)
-    next_level_update = correct_time(GlobalProperty.get_next_update(Level, ctp), LEVEL_UPDATE_FREQUENCY)
-    GlobalProperty.set_next_update(Level, next_level_update, ctp)
-
-    # Update eotw update time (every week)
-    next_episode_update = correct_time(GlobalProperty.get_next_update(Episode, ctp), EPISODE_UPDATE_FREQUENCY)
-    GlobalProperty.set_next_update(Episode, next_episode_update, ctp)
-
-    # Update cotm update time (1st of each month)
-    # TODO: Compare against current month
-    next_story_update = GlobalProperty.get_next_update(Story, ctp)
-    next_story_update_new = next_story_update
-    month = next_story_update_new.month
-    next_story_update_new += LEVEL_UPDATE_FREQUENCY while next_story_update_new.month == month
-    GlobalProperty.set_next_update(Story, next_story_update_new, ctp)
-
-    # Wait until post time
-    delay = next_level_update - Time.now
-    sleep(delay) unless delay < 0
-
-    # Start and post whatever is enabled
-    start_task(:lotd, "Starting #{ctp ? 'CTP ' : ''}level of the day")
-    level_cond   = ((ctp ? UPDATE_CTP_LEVEL   : UPDATE_LEVEL)   || DO_EVERYTHING) && !DO_NOTHING
-    episode_cond = ((ctp ? UPDATE_CTP_EPISODE : UPDATE_EPISODE) || DO_EVERYTHING) && !DO_NOTHING
-    story_cond   = ((ctp ? UPDATE_CTP_STORY   : UPDATE_STORY)   || DO_EVERYTHING) && !DO_NOTHING
-
-    # Post lotd, if enabled
-    if level_cond
-      send_channel_next(Level, ctp)
-      succ("Sent #{ctp ? 'CTP ' : ''}level of the day")
-    end
-
-    # Post eotw, if enabled
-    if episode_cond && next_episode_update < Time.now
-      sleep(0.25)
-      send_channel_next(Episode, ctp)
-      succ("Sent #{ctp ? 'CTP ' : ''}episode of the week")
-      episode_day = true
-    end
-
-    # Post cotm, if enabled
-    if story_cond && next_story_update < Time.now
-      sleep(0.25)
-      send_channel_next(Story, ctp)
-      succ("Sent #{ctp ? 'CTP ' : ''}story of the month")
-      story_day = true
-    end
-
-    # Post reminders
-    if !episode_day && level_cond
-      sleep(0.25)
-      send_channel_episode_reminder(ctp)
-    end
-
-    if !story_day && level_cond
-      sleep(0.25)
-      send_channel_story_reminder(ctp)
-    end
-
-    end_task(:lotd)
   end
-rescue => e
-  lex(e, "Updating level of the day")
-  end_task(:lotd)
-  retry
-ensure
-  end_task(:lotd)
+
+  # Flags
+  eotw_day  = Time.now.sunday?
+  cotm_day  = Time.now.day == 1
+  post_lotd = (ctp ? POST_CTP_LOTD : POST_LOTD) || DO_EVERYTHING
+  post_eotw = (ctp ? POST_CTP_EOTW : POST_EOTW) || DO_EVERYTHING
+  post_cotm = (ctp ? POST_CTP_COTM : POST_COTM) || DO_EVERYTHING
+
+  # Post each highscoreable, if enabled
+  send_channel_next(Level,   ctp) if post_lotd
+  sleep(0.25)
+  send_channel_next(Episode, ctp) if post_eotw && eotw_day
+  sleep(0.25)
+  send_channel_next(Story,   ctp) if post_cotm && cotm_day
+  sleep(0.25)
+
+  # Post reminders
+  send_eotw_reminder(ctp) if post_lotd && !eotw_day
+  sleep(0.25)
+  send_cotm_reminder(ctp) if post_lotd && !cotm_day
+  sleep(0.25)
+
+  # Post report and summary
+  if REPORT_METANET
+    send_report
+    sleep(0.25)
+    send_summary
+  end
 end
 
 # Prevent running out of memory due to memory leaks and risking the OOM killer
@@ -695,51 +643,85 @@ def monitor_memory
   end
 end
 
-Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY) { update_status }
-Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY) { update_twitch }
-Scheduler.add("Download demos", freq: DEMO_UPDATE_FREQUENCY, time: 'demo') { download_demos }
-Scheduler.add("Highscoring report", freq: TEST && TEST_REPORT ? -1 : REPORT_UPDATE_FREQUENCY, time: TEST && TEST_REPORT ? nil : 'report') { send_report }
-Scheduler.add("Userlevel report", freq: USERLEVEL_REPORT_FREQUENCY, time: 'userlevel_report') { send_userlevel_report }
-Scheduler.add("Download scores", freq: HIGHSCORE_UPDATE_FREQUENCY, time: 'score') { download_high_scores }
-Scheduler.add("Userlevel histories", freq: USERLEVEL_HISTORY_FREQUENCY, time: 'userlevel_history') { update_userlevel_histories }
-Scheduler.add("Userlevel scores", freq: USERLEVEL_SCORE_FREQUENCY, time: 'userlevel_score') { download_userlevel_scores }
-Scheduler.add("Userlevel chunk", force: false, log: false) { update_all_userlevels_chunk }
-Scheduler.add("Userlevel tabs", freq: USERLEVEL_TAB_FREQUENCY, time: 'userlevel_tab') { update_userlevel_tabs }
-Scheduler.add("Monitor memory", freq: MEMORY_DELAY, db: false, force: false, log: false) { monitor_memory }
-
-# Start all the tasks in this file in independent threads.
-# We separate them in 3 categories:
-# - Main threads: These are completely autonomous threads that don't depend
-#   on any other service being up, such as starting the CLE server or monitoring
-#   memory. They're the first ones to be started.
-# - Metanet threads: These are the ones that perform periodic operations querying
-#   Metanet's database (e.g. to fetch scores or new userlevels). They depend on
-#   their server being up, but we always start them up.
-# - Discord threads: These are the ones that perform Discord-related tasks,
-#   such as posting lotd or the highscoring report. They require a connection
-#   to Discord, which means that they otherwise fail. We start these last, and
-#   only on the condition that the connection has been established.
-
-def start_main_threads
-  $threads << Thread.new { monitor_memory                } if $linux
-  $threads << Thread.new { Server::on                    } if SOCKET && !DO_NOTHING
+def potato
+  return false if !$nv2_channel || !$last_potato
+  return false if Time.now.to_i - $last_potato.to_i < POTATO_FREQ
+  $nv2_channel.send_message(FOOD[$potato])
+  log(FOOD[$potato].gsub(/:/, '').capitalize + 'ed nv2')
+  $potato = ($potato + 1) % FOOD.size
+  $last_potato = Time.now.to_i
 end
 
-def start_metanet_threads
-  $threads << Thread.new { start_high_scores             } if (UPDATE_SCORES     || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { start_demos                   } if (UPDATE_DEMOS      || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { start_userlevel_scores        } if (UPDATE_USERLEVELS || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { update_all_userlevels         } if (UPDATE_USER_GLOB  || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { start_userlevel_histories     } if (UPDATE_USER_HIST  || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { start_userlevel_tabs          } if (UPDATE_USER_TABS  || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
+# <---------------------------------------------------------------------------->
+# <------                        SCHEDULE TASKS                          ------>
+# <---------------------------------------------------------------------------->
+
+# These tasks are completely autonomous and don't depend on any other service
+# being up, such as Metanet's server or Discord's connection.
+# They're the first ones to be started.
+def start_general_tasks
+  # Monitor machine's RAM regularly, restart outte when needed (Linux only).
+  Scheduler.add("Monitor memory", freq: MEMORY_DELAY, db: false, force: false, log: false) { monitor_memory } if $linux
+
+  # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
+  $threads << Thread.new { Server::on } if SOCKET && !DO_NOTHING
 end
 
-def start_discord_threads
-  $threads << Thread.new { update_status                 } if (UPDATE_STATUS     || DO_EVERYTHING) && !DO_NOTHING
-  $threads << Thread.new { update_twitch                 } if (UPDATE_TWITCH     || DO_EVERYTHING) && !DO_NOTHING
-  $threads << Thread.new { start_level_of_the_day(true)  } # No checks here because they're done individually there
-  $threads << Thread.new { start_level_of_the_day(false) } # No checks here because they're done individually there
-  $threads << Thread.new { start_report                  } if (REPORT_METANET    || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { start_userlevel_report        } if (REPORT_USERLEVELS || DO_EVERYTHING) && !DO_NOTHING && !OFFLINE_MODE
-  $threads << Thread.new { potato                        } if POTATO && !DO_NOTHING
+# These tasks perform periodic operations querying Metanet's database (e.g. to
+# fetch scores or new userlevels), and thus, they rely on their server being up.
+# We always start them up, but they will fail if it's not up.
+def start_metanet_tasks
+  return if DO_NOTHING || OFFLINE_MODE
+
+  # Update all Metanet top20 highscores daily
+  Scheduler.add("Download scores",     freq: HIGHSCORE_UPDATE_FREQUENCY,  time: 'score'            ) { download_high_scores       } if DO_EVERYTHING || UPDATE_SCORES
+
+  # Download demos for scores missing it daily
+  Scheduler.add("Download demos",      freq: DEMO_UPDATE_FREQUENCY,       time: 'demo'             ) { download_demos             } if DO_EVERYTHING || UPDATE_DEMOS
+
+  # Download scores for newest userlevels daily
+  Scheduler.add("Userlevel scores",    freq: USERLEVEL_SCORE_FREQUENCY,   time: 'userlevel_score'  ) { download_userlevel_scores  } if DO_EVERYTHING || UPDATE_USERLEVELS
+
+  # Archive a few userlevel rankings for history daily
+  Scheduler.add("Userlevel histories", freq: USERLEVEL_HISTORY_FREQUENCY, time: 'userlevel_history') { update_userlevel_histories } if DO_EVERYTHING || UPDATE_USER_HIST
+
+  # Update userlevels present in each tab (hardest, featured...) daily
+  Scheduler.add("Userlevel tabs",      freq: USERLEVEL_TAB_FREQUENCY,     time: 'userlevel_tab'    ) { update_userlevel_tabs      } if DO_EVERYTHING || UPDATE_USER_TABS
+
+  # Gradually update all userlevel scores (every 5 secs)
+  Scheduler.add("Userlevel chunk", force: false, log: false) { update_all_userlevels_chunk } if DO_EVERYTHING || UPDATE_USER_GLOB
 end
+
+# These tasks perform operations relying on a Discord connection to the N++
+# server, such as posting lotd or the highscoring report. We start these last,
+# and only on the condition that the connection has been established.
+def start_discord_tasks
+  return if DO_NOTHING
+
+  # Update the bot's status, update lotd scores, etc, every 5 mins
+  Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
+
+  # Check for new N++-related streams of Twitch every minute
+  Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
+
+  # Post lotd daily, eotw weekly and cotm monthly
+  freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
+  time = TEST && TEST_LOTD ? nil : 'level'
+  Scheduler.add("Level of the day", freq: freq, time: time) { start_level_of_the_day(false) }
+
+  # Post CTP lotd daily, eotw weekly and cotm monthly
+  freq = TEST && TEST_CTP_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
+  time = TEST && TEST_CTP_LOTD ? nil : 'level'
+  Scheduler.add("CTP level of the day", freq: freq, time: time) { start_level_of_the_day(true) }
+
+  # Post highscoring report for newest userlevels
+  Scheduler.add("Userlevel report", freq: USERLEVEL_REPORT_FREQUENCY, time: 'userlevel_report') { send_userlevel_report } if DO_EVERYTHING  || REPORT_USERLEVELS
+
+  # Regularly stun nv2 users with a fruit emoji
+  Scheduler.add("Potato", log: false) { potato } if POTATO
+end
+
+# TODO:
+# 1. Test Scheduler with String time instead of Time
+# 2. Test !tasks command (do all tasks show up properly?)
+# 3. Test everything thoroughly (all tasks)

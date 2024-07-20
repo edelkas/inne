@@ -1887,23 +1887,6 @@ rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)
 end
 
-def potato
-  return if !RESPOND
-  while true
-    sleep(POTATO_RATE)
-    next if $nv2_channel.nil? || $last_potato.nil?
-    if Time.now.to_i - $last_potato.to_i >= POTATO_FREQ
-      send_message($nv2_channel, content: FOOD[$potato], removable: false)
-      log(FOOD[$potato].gsub(/:/, '').capitalize + 'ed nv2')
-      $potato = ($potato + 1) % FOOD.size
-      $last_potato = Time.now.to_i
-    end
-  end
-rescue
-  sleep(1)
-  retry
-end
-
 def mishnub(event)
   youmean = ["More like ", "You mean ", "Mish... oh, ", "Better known as ", "A.K.A. ", "Also known as "]
   mishu   = ["MishNUB,", "MishWho?,"]

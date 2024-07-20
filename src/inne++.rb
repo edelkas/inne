@@ -396,12 +396,12 @@ load_config
 connect_db
 create_bot
 setup_bot
-start_main_threads
-start_metanet_threads
+start_general_tasks
+start_metanet_tasks
 _thread do
   run_bot
   set_channels
-  start_discord_threads
+  start_discord_tasks
 end
 succ("Loaded outte")
 binding.pry if DEBUG
