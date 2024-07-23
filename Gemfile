@@ -20,12 +20,18 @@ source 'https://rubygems.org' do
     gem 'svg-graph'
   end
 
-  group :debug, :test do
+  group :development do
+#    gem 'sorbet'
+#    gem 'sorbet-runtime'
+#    gem 'tapioca'
+  end
+
+  group :development, :debug do
     gem 'pry-byebug'
     gem 'memory_profiler'
   end
 
-  group :test do
+  group :development, :test do
     gem 'test-unit'
     gem 'mocha'
     gem 'database_cleaner'

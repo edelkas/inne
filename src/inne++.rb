@@ -359,7 +359,7 @@ end
 def run_bot
   $bot.run(true)
   trap("INT") {
-    shutdown(true)
+    shutdown(trap: true)
     exit
   }
   leave_unknown_servers
@@ -377,11 +377,19 @@ rescue => e
 end
 
 # Routine to shutdown the program (exit should be called afterwards)
-def shutdown(trap = true)
+def shutdown(trap: true, force: false)
   log("Shutting down outte...")
+
+  # Stop all background tasks gracefully
+  Scheduler.clear
+  if !force && Scheduler.count_active > 0
+    warn("Waiting for background tasks to finish...")
+    Scheduler.listen(:clear)
+  end
+
+  # Stop bot and CLE server, disconnect from DB
   stop_bot
   Sock.off
-  Scheduler.clear
   #disconnect_db unless trap
   err("Shut down outte")
 rescue => e

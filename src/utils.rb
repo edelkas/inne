@@ -517,8 +517,8 @@ def getmem(ps = false)
   end
   return 0 if !line
   _, value, unit = line.downcase.split
-  conversion = 1024 ** ['b', 'kb', 'mb', 'gb', 'tb'].index(unit)
-  value.to_f * conversion / 1024 ** 2
+  converted = 1024 ** ['b', 'kb', 'mb', 'gb', 'tb'].index(unit)
+  value.to_f * converted / 1024 ** 2
 rescue
   0
 end
@@ -1696,21 +1696,13 @@ def update_bot_status
   $bot.update_status(BOT_STATUS, BOT_ACTIVITY, nil, 0, false, 0)
 end
 
-# Immediately kill process and restart the bot
-def force_restart(reason = 'Unknown reason')
-  warn("Restarting outte due to: #{reason}.", discord: true)
-  shutdown(false)
-  exec('./inne')
-end
-
 # Schedule a restart as soon as possible, i.e., as soon as no maintainance tasks
 # are being executed, like publishing lotd or downloading the scores.
-def restart(reason = 'Unknown reason')
-  if Scheduler.count_active > 0
-    warn("Waiting for background tasks to finish...")
-    Scheduler.listen(:clear)
-  end
-  force_restart(reason)
+# If force is true, the threads will be killed immediately.
+def restart(reason = 'Unknown reason', force: false)
+  warn("Restarting outte due to: #{reason}.", discord: true)
+  shutdown(trap: false, force: force)
+  exec('./inne')
 rescue => e
   lex(e, 'Failed to restart outte', discord: true)
   sleep(5)

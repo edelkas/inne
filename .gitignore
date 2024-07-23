@@ -5,5 +5,7 @@
 Gemfile.lock
 /**/__pycache__
 /logs
+/sorbet
+/bin
 /util/hash_*
 /.bundle

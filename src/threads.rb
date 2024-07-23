@@ -586,7 +586,7 @@ def send_channel_next(type, ctp = false)
   return true
 end
 
-# Driver for the function above (takes care of timing, db update, etc)
+# General driver for the function above
 def start_level_of_the_day(ctp = false)
   # Ensure channel is available
   while (ctp ? $ctp_channel : $channel).nil?
@@ -597,9 +597,9 @@ def start_level_of_the_day(ctp = false)
   # Flags
   eotw_day  = Time.now.sunday?
   cotm_day  = Time.now.day == 1
-  post_lotd = (ctp ? POST_CTP_LOTD : POST_LOTD) || DO_EVERYTHING
-  post_eotw = (ctp ? POST_CTP_EOTW : POST_EOTW) || DO_EVERYTHING
-  post_cotm = (ctp ? POST_CTP_COTM : POST_COTM) || DO_EVERYTHING
+  post_lotd = (ctp ? POST_CTP_LOTD : POST_LOTD) || (ctp ? TEST_CTP_LOTD : TEST_LOTD) || DO_EVERYTHING
+  post_eotw = (ctp ? POST_CTP_EOTW : POST_EOTW) || (ctp ? TEST_CTP_LOTD : TEST_LOTD) || DO_EVERYTHING
+  post_cotm = (ctp ? POST_CTP_COTM : POST_COTM) || (ctp ? TEST_CTP_LOTD : TEST_LOTD) || DO_EVERYTHING
 
   # Post each highscoreable, if enabled
   send_channel_next(Level,   ctp) if post_lotd
@@ -616,7 +616,7 @@ def start_level_of_the_day(ctp = false)
   sleep(0.25)
 
   # Post report and summary
-  if REPORT_METANET
+  if !ctp && (REPORT_METANET || TEST_LOTD || DO_EVERYTHING)
     send_report
     sleep(0.25)
     send_summary
