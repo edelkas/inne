@@ -366,22 +366,22 @@ FOOD           = [                  # Emojis for the potato joke
 # <---------------------------------------------------------------------------->
 
 # Individual flags for each thread / task
-UPDATE_STATUS      = false # Thread to regularly update the bot's status
-UPDATE_TWITCH      = false # Thread to regularly look up N related Twitch streams
-UPDATE_SCORES      = false # Thread to regularly download Metanet's scores
-UPDATE_DEMOS       = false # Thread to regularly download missing Metanet demos
-POST_LOTD       = false # Thread to regularly publish level of the day
-POST_EOTW     = false # Thread to regularly publish episode of the week
-POST_COTM       = false # Thread to regularly publish column of the month
-POST_CTP_LOTD   = false # Thread to regularly publish CTP level of the day
-POST_CTP_EOTW = false # Thread to regularly publish CTP episode of the week
-POST_CTP_COTM   = false # Thread to regularly publish CTP column of the month
-UPDATE_USERLEVELS  = false # Thread to regularly download newest userlevel scores
-UPDATE_USER_GLOB   = false # Thread to continuously (but slowly) download all userlevel scores
-UPDATE_USER_HIST   = false # Thread to regularly update userlevel highscoring histories
-UPDATE_USER_TABS   = false # Thread to regularly update userlevel tabs (best, featured, top, hardest)
-REPORT_METANET     = false # Thread to regularly post Metanet's highscoring report
-REPORT_USERLEVELS  = false # Thread to regularly post userlevels' highscoring report
+UPDATE_STATUS     = false # Thread to regularly update the bot's status
+UPDATE_TWITCH     = false # Thread to regularly look up N related Twitch streams
+UPDATE_SCORES     = false # Thread to regularly download Metanet's scores
+UPDATE_DEMOS      = false # Thread to regularly download missing Metanet demos
+POST_LOTD         = false # Thread to regularly publish level of the day
+POST_EOTW         = false # Thread to regularly publish episode of the week
+POST_COTM         = false # Thread to regularly publish column of the month
+POST_CTP_LOTD     = false # Thread to regularly publish CTP level of the day
+POST_CTP_EOTW     = false # Thread to regularly publish CTP episode of the week
+POST_CTP_COTM     = false # Thread to regularly publish CTP column of the month
+UPDATE_USERLEVELS = false # Thread to regularly download newest userlevel scores
+UPDATE_USER_GLOB  = false # Thread to continuously (but slowly) download all userlevel scores
+UPDATE_USER_HIST  = false # Thread to regularly update userlevel highscoring histories
+UPDATE_USER_TABS  = false # Thread to regularly update userlevel tabs (best, featured, top, hardest)
+REPORT_METANET    = false # Thread to regularly post Metanet's highscoring report
+REPORT_USERLEVELS = false # Thread to regularly post userlevels' highscoring report
 
 # Update frequencies for each task, in seconds
 STATUS_UPDATE_FREQUENCY     =             5 * 60
@@ -389,12 +389,12 @@ TWITCH_UPDATE_FREQUENCY     =                 60
 HIGHSCORE_UPDATE_FREQUENCY  =       24 * 60 * 60
 DEMO_UPDATE_FREQUENCY       =       24 * 60 * 60
 LEVEL_UPDATE_FREQUENCY      =       24 * 60 * 60
-EPISODE_UPDATE_FREQUENCY    =   7 * 24 * 60 * 60
+EPISODE_UPDATE_FREQUENCY    =   7 * 24 * 60 * 60 # Not used (published every Sunday)
 STORY_UPDATE_FREQUENCY      =  30 * 24 * 60 * 60 # Not used (published 1st of each month)
 CTP_LEVEL_FREQUENCY         =       24 * 60 * 60
-CTP_EPISODE_FREQUENCY       =   7 * 24 * 60 * 60
+CTP_EPISODE_FREQUENCY       =   7 * 24 * 60 * 60 # Not used (published every Sunday)
 CTP_STORY_FREQUENCY         =  30 * 24 * 60 * 60 # Not used (published 1st of each month)
-REPORT_UPDATE_FREQUENCY     =       24 * 60 * 60
+REPORT_UPDATE_FREQUENCY     =       24 * 60 * 60 # Not used (published after lotd)
 REPORT_UPDATE_SIZE          =   7 * 24 * 60 * 60
 SUMMARY_UPDATE_SIZE         =   1 * 24 * 60 * 60
 USERLEVEL_SCORE_FREQUENCY   =       24 * 60 * 60

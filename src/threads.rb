@@ -83,7 +83,7 @@ end
 # @start - Start running job immediately after creation, following schedule.
 # See Task class below for other parameters.
 class Job
-  attr_reader :count
+  attr_reader :task, :count, :last, :next
 
   def initialize(task, freq: 0, time: nil, start: true)
     # Members
@@ -92,6 +92,8 @@ class Job
     @time   = nil
     @thread = nil
     @count  = 0
+    @last   = nil
+    @next   = nil
     @should_stop = false
 
     # Schedule and start job
@@ -155,13 +157,19 @@ class Job
         end
 
         # Suspend thread until it's time to run the task
+        @next = start
         sleep(start - now) unless start <= now
         @task.run
-        @count += 1 if @task.success
-        Scheduler.trigger(:finish)
-        break if @should_stop
 
-        # Prepare next iteration
+        # Update state based on task success
+        if @task.success
+          @count += 1
+          @last = Time.now
+        end
+        Scheduler.trigger(:finish)
+
+        # Prepare next iteration, if necessary
+        break if @should_stop
         next if !@task.success
         break if @freq < 0
         @time = Time.now + @freq if @time.is_a?(Time)
@@ -169,6 +177,8 @@ class Job
     rescue => e
       lex(e, "Error scheduling job \"#{@task.name}\".")
       retry
+    ensure
+      @next = nil
     end
 
     true
@@ -723,5 +733,6 @@ end
 
 # TODO:
 # 1. Test Scheduler with String time instead of Time
-# 2. Test !tasks command (do all tasks show up properly?)
-# 3. Test everything thoroughly (all tasks)
+# 2. Test lotd/eotw/cotm, normal and CTP, and report
+# 3. Test !tasks command (do all tasks show up properly?)
+# 4. In general, test everything thoroughly (all tasks)

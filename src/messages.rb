@@ -2743,15 +2743,22 @@ def send_sql_list(event)
 end
 
 # Print information about all the running background tasks
-# TODO: Add dates (created, last run, next run) and others, fix name (add job field?)
 def send_tasks(event)
   rows = []
-  rows << ["Name", "State", "Count"]
+  rows << ["Name", "State", "Runs", "Last run", "Next run"]
   rows << :sep
-  Scheduler.list.each{ |job|
-    rows << ["Test", job.state.capitalize, job.count]
+  totals = {}
+  Scheduler.list.sort_by{ |job| -job.count }.each{ |job|
+    rows << [
+      job.task.name,
+      job.state.capitalize,
+      job.count,
+      (job.last.strftime('%b %d %R') rescue ''),
+      (job.next.strftime('%b %d %R') rescue '')
+    ]
+    totals.key?(job.state) ? totals[job.state] += 1 : totals[job.state] = 1
   }
-  event << format_block(make_table(rows))
+  event << format_block(make_table(rows)) + "Total: #{totals.map{ |k, v| "#{v} #{k}" }.join(', ')}"
 end
 
 # Special commands can only be executed by the botmaster, and are intended to

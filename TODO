@@ -102,8 +102,9 @@ Memory tables (for userlevels, read-only):
 - https://dev.mysql.com/doc/refman/8.0/en/memory-storage-engine.html
 - https://stackoverflow.com/questions/10692398/how-do-i-make-a-mysql-database-run-completely-in-memory
 
-\\ ------------------------ mappacker -----------------------
+\\ ------------------------ mappacks -----------------------
 
+- Add outte command to choose what to put in the 2nd/3rd leaderboard (toggle between hs, sr, g--, etc, with different rank ranges too)
 
 \\ ------------------------ ntrace ------------------------
 
