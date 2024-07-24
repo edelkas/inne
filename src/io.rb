@@ -997,12 +997,16 @@ end
 # Parse arguments and flags CLI-style:
 # Arg names must start with a dash and be alphanumeric (underscores allowed)
 # Arg values can be anything but dashes
-def parse_flags(msg)
-  msg.scan(/(?:\s+|^)-(\w+)(?:\s+([^-].*?))?(?=\s+-|$)/)
-     .uniq{ |e| e[0] }
-     .map{ |k, v| [k, v.nil? ? nil : v.squish] }
-     .to_h
-     .symbolize_keys
+def parse_flags(input)
+  is_event = input.is_a?(Discordrb::Events::Event)
+  is_string = input.is_a?(String)
+  return {} if !is_event && !is_string
+  return parse_flags(remove_command(parse_message(input))) if is_event
+  input.scan(/(?:\s+|^)-(\w+)(?:\s+([^-].*?))?(?=\s+-|$)/)
+       .uniq{ |e| e[0] }
+       .map{ |k, v| [k, v.nil? ? nil : v.squish] }
+       .to_h
+       .symbolize_keys
 rescue
   {}
 end

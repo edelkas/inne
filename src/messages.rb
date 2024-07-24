@@ -1926,24 +1926,21 @@ def send_test(event)
 end
 
 def send_reaction(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   react(flags[:c], flags[:m], flags[:r])
 rescue => e
   lex(e, "Error sending reaction.", event: event)
 end
 
 def send_unreaction(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   unreact(flags[:c], flags[:m], flags[:r])
 rescue => e
   lex(e, "Error removing reaction.", event: event)
 end
 
 def send_mappack_seed(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   update = flags.key?(:update)
   hard = flags.key?(:hard)
   all = flags.key?(:all)
@@ -1954,8 +1951,7 @@ rescue => e
 end
 
 def send_mappack_update(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found.") if mappack.nil?
   version = flags.key?(:version) ? flags[:version].to_i : mappack.version
@@ -1969,8 +1965,7 @@ rescue => e
 end
 
 def send_mappack_patch(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   if flags.key?(:all)
     wrong = MappackScore.gold_check(mappack: flags.key?(:m))
     count = wrong.count
@@ -1991,8 +1986,7 @@ rescue => e
 end
 
 def send_mappack_ranks(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   h = parse_highscoreable(event, mappack: true)
   board = parse_board(flags[:b])
   perror("Only the hs/sr ranks can be updated") if !['hs', 'sr', nil].include?(board)
@@ -2005,8 +1999,7 @@ rescue => e
 end
 
 def send_mappack_info(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("You need to provide a mappack.") if !mappack
   channels = flags[:channels].split.map(&:strip) if flags.key?(:channels)
@@ -2032,8 +2025,7 @@ rescue => e
 end
 
 def send_mappack_completions(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   MappackScore.update_completions(mappack: mappack)
   event << "Updated #{mappack ? mappack.code.upcase + ' ' : ''}mappack completions."
@@ -2042,8 +2034,7 @@ rescue => e
 end
 
 def send_highscore_plot(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
 
   counts = MappackScore.where('id > ?', MIN_REPLAY_ID)
@@ -2155,8 +2146,7 @@ def send_ul_plot_month(event)
 end
 
 def send_ul_plot(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   case flags[:period]
   when 'month'
     send_ul_plot_month(event)
@@ -2168,8 +2158,7 @@ rescue => e
 end
 
 def send_gold_check(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   id = [flags[:id].to_i, MIN_REPLAY_ID].max
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   strict = flags.key?(:strict)
@@ -2208,8 +2197,7 @@ rescue => e
 end
 
 def send_log_config(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   event << "Enabled logging modes: #{Log.modes.join(', ')}." if flags.empty?
   flags.each{ |f, v|
     str = ''
@@ -2258,8 +2246,7 @@ end
 
 # Compare Ruby and C SHA1 hashes for a specific level or score
 def send_hash(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
 
   # Parse highscoreable
   h = parse_highscoreable(event, mappack: true)
@@ -2314,8 +2301,7 @@ rescue => e
 end
 
 def send_nprofile_gen(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   perror("You need to provide a player.") if !flags.key?(:p)
   perror("You need to provide a mappack.") if !flags.key?(:m)
   player = parse_player(event, false, true, flag: :p)
@@ -2409,8 +2395,7 @@ end
 
 # Update all SHA1 hashes for every mappack highscoreable (all versions too)
 def seed_hashes(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   types = parse_type(flags[:type].to_s, multiple: true)
   types = [Level, Episode, Story] if types.empty?
@@ -2423,8 +2408,7 @@ end
 
 # Manually update the Discord ID of a user by name
 def set_user_id(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   perror("You must provide a username.") if !flags[:name]
   name = flags[:name].split('#').first
   user = User.where(name: name)
@@ -2464,8 +2448,7 @@ rescue => e
 end
 
 def submit_score(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
 
   if !flags.key?(:all)
     # Submit a score to an individual highscoreable
@@ -2510,8 +2493,7 @@ end
 
 # Update how many completions a Metanet highscoreable / userlevel (or all) has
 def update_completions(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   global = flags.key?(:global)
   mine = flags.key?(:mine)
   global = global ? true : mine ? false : nil
@@ -2565,8 +2547,7 @@ rescue => e
 end
 
 def userlevel_completions(event)
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   UserlevelScore.seed_completions(flags.key?(:full))
   succ("Seeded userlevel completions.", event: event)
 rescue => e
@@ -2628,8 +2609,7 @@ end
 # Tests ntrace on many runs (e.g. all Metanet 0ths)
 def test_ntrace(event)
   # Parse params
-  msg   = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   tabs  = parse_tabs(flags[:tabs].to_s)
   if flags.key?(:mappack)
     if flags[:mappack]
@@ -2687,8 +2667,7 @@ end
 
 # Update a userlevel author's name and add a new A.K.A.
 def rename_author(event)
-  msg   = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   id = flags[:id]
   name = flags[:name]
   perror("Usage: !rename_author -id ID -name NAME") unless !!id && !!name
@@ -2727,6 +2706,8 @@ def send_sql_status(event)
   # Send
   event << "Database status #{format_time}:"
   event << format_block(str)
+rescue => e
+  lex(e, 'Failed to send database status.', event: event)
 end
 
 # Print detailed list of all current open connections to the MySQL server
@@ -2736,14 +2717,15 @@ def send_sql_list(event)
     event << "There are no open MySQL connections."
     return
   end
-  msg = remove_command(parse_message(event))
-  flags = parse_flags(msg)
+  flags = parse_flags(event)
   last = flags.key?(:full) ? -1 : -3
   rows = []
   rows << $sql_conns.first.keys[0..last]
   rows << :sep
   $sql_conns.each{ |row| rows << row.values[0..last] }
   event << format_block(make_table(rows)) + "Total: #{$sql_conns.size}"
+rescue => e
+  lex(e, 'Failed to send database thread list.', event: event)
 end
 
 # Print information about all the running background tasks
@@ -2773,11 +2755,15 @@ def send_tasks(event)
     totals.key?(job.state) ? totals[job.state] += 1 : totals[job.state] = 1
   }
   event << format_block(make_table(rows)) + "Total: #{totals.map{ |k, v| "#{v} #{k}" }.join(', ')}"
+rescue => e
+  lex(e, 'Failed to send background task list.', event: event)
 end
 
 def send_debug(event)
-  flags = parse_flags(remove_command(parse_message(event)))
+  flags = parse_flags(event)
   if flags.key?(:byebug) then byebug else binding.pry end
+rescue => e
+  lex(e, 'Failed to start debugger.', event: event)
 end
 
 # Special commands can only be executed by the botmaster, and are intended to
