@@ -2249,7 +2249,9 @@ rescue => e
 end
 
 def send_restart(event)
-  restart('Manual')
+  flags = parse_flags(remove_command(parse_message(event)))
+  force = flags.key?(:force)
+  restart("Manual#{force ? ' (forced)' : ''}", force: force)
 rescue => e
   lex(e, "Error restarting outte.", event: event)
 end
@@ -2701,16 +2703,29 @@ end
 # Fetch and print current relevant MySQL variables and status
 def send_sql_status(event)
   update_sql_status
+
+  # Connections established to MySQL database
   str  = "Connections: "
   str << "#{$sql_status['Threads_connected']} open, "
   str << "#{$sql_status['Max_used_connections']} highest, "
   str << "#{$sql_vars['max_connections']} max, "
   str << "#{$sql_status['Connections']} total\n"
+
+  # MySQL threads alive
   str << "Threads:     "
   str << ['connected', 'running', 'cached', 'created'].map{ |t|
     "#{$sql_status["Threads_#{t}"]} #{t}"
-  }.join(", ")
-  event << "MySQL status #{format_time}:"
+  }.join(", ") + "\n"
+
+  # Rails connection pool info
+  str << "Rails pool:  "
+  str << ActiveRecord::Base.connection_pool.stat.map{ |p|
+    next nil if p[1].is_a?(Float)
+    p.map(&:to_s).join(' ')
+  }.compact.join(', ')
+
+  # Send
+  event << "Database status #{format_time}:"
   event << format_block(str)
 end
 
@@ -2728,7 +2743,7 @@ def send_sql_list(event)
   rows << $sql_conns.first.keys[0..last]
   rows << :sep
   $sql_conns.each{ |row| rows << row.values[0..last] }
-  event << format_block(make_table(rows))
+  event << format_block(make_table(rows)) + "Total: #{$sql_conns.size}"
 end
 
 # Print information about all the running background tasks
@@ -2760,6 +2775,11 @@ def send_tasks(event)
   event << format_block(make_table(rows)) + "Total: #{totals.map{ |k, v| "#{v} #{k}" }.join(', ')}"
 end
 
+def send_debug(event)
+  flags = parse_flags(remove_command(parse_message(event)))
+  if flags.key?(:byebug) then byebug else binding.pry end
+end
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -2779,6 +2799,7 @@ def respond_special(event)
   return if cmd.nil?
   cmd.downcase!
 
+  return send_debug(event)               if cmd == 'debug'
   return send_reaction(event)            if cmd == 'react'
   return send_unreaction(event)          if cmd == 'unreact'
   return send_mappack_seed(event)        if cmd == 'mappack_seed'

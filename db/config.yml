@@ -8,8 +8,9 @@ outte:
   username:          root
   password:          root
   pool:              100    # Connection pool size
-  timeout:           5000   # Time in milliseconds to obtain a db conn
-  wait_timeout:      60     # Time in seconds to close connections without activity
-  idle_timeout:      60     # Time in seconds to close connections from dead threads (reaper)
+  timeout:           5000   # Time in milliseconds to obtain a db conn (deprecated?)
+  checkout_timeout:  60     # Time in seconds to obtain a db connection
+  wait_timeout:      60     # Time in seconds to close idle connections (MySQL)
+  idle_timeout:      60     # Time in seconds to close idle connections (Rails pool)
   reaping_frequency: 60     # Time in seconds to run the db conn reaper
 #  reconnect:         true

@@ -14,7 +14,7 @@
 TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = false # Execute all threads
+DO_EVERYTHING  = true  # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -27,12 +27,24 @@ BENCH_IMAGES   = false # Benchmark image manipulation steps
 WAIT            = 1       # Seconds between iterations of infinite loops
 DATABASE        = 'outte' # Database environment
 
+# <---------------------------------------------------------------------------->
+# <------                     RESOURCE MONITORING                        ------>
+# <---------------------------------------------------------------------------->
+
 # Memory
+MEMORY_MONITOR  = true    # Regularly monitor memory usage
 MEMORY_LIMIT    = 0.25    # Available memory (ratio) before restarting
 MEMORY_USAGE    = 0.5     # Memory usage by outte (ratio) before restarting
 MEMORY_CRITICAL = 0.05    # Critical memory available ratio
 MEMORY_DELAY    = 5       # Seconds between memory checks during monitoring
 
+# SQL threads
+SQL_MONITOR = true # Regularly monitor available MySQL threads
+SQL_DELAY   = 60   # Seconds between checks
+SQL_LIMIT   = 0.75 # Max ratio between open connections and max connections
+
+# Rails pool
+POOL_LIMIT = 0.9 # Ratio of used up connections before warning
 
 # <---------------------------------------------------------------------------->
 # <------                      NETWORK VARIABLES                         ------>

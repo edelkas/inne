@@ -359,7 +359,7 @@ end
 def run_bot
   $bot.run(true)
   trap("INT") {
-    shutdown(trap: true)
+    shutdown(trap: true, force: true)
     exit
   }
   leave_unknown_servers

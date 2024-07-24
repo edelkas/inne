@@ -701,6 +701,24 @@ def monitor_memory
   end
 end
 
+# Prevent running out of available database connections
+def monitor_db
+  update_sql_status
+
+  # MySQL threads
+  cur = $sql_status['Threads_connected'].to_i
+  max = $sql_vars['max_connections'].to_i
+  ratio = cur / max
+  restart("Lack of MySQL threads (#{cur} / #{max})") if ratio >= SQL_LIMIT
+
+  # Rails pool
+  stats = ActiveRecord::Base.connection_pool.stat
+  cur = stats[:connections]
+  max = stats[:size]
+  ratio = cur / max
+  warn("Lack of Rails pool connections (#{cur} / #{max})", discord: true) if ratio >= POOL_LIMIT
+end
+
 def potato
   return false if !$nv2_channel || !$last_potato
   return false if Time.now.to_i - $last_potato.to_i < POTATO_FREQ
@@ -719,7 +737,10 @@ end
 # They're the first ones to be started.
 def start_general_tasks
   # Monitor machine's RAM regularly, restart outte when needed (Linux only).
-  Scheduler.add("Monitor memory", freq: MEMORY_DELAY, db: false, force: false, log: false) { monitor_memory } if $linux
+  Scheduler.add("Monitor memory", freq: MEMORY_DELAY, db: false, force: false, log: false) { monitor_memory } if MEMORY_MONITOR && $linux
+
+  # Monitor available MySQL threads regularly
+  Scheduler.add("Monitor MySQL", freq: SQL_DELAY, force: false, log: false) { monitor_db } if SQL_MONITOR
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
   $threads << Thread.new { Server::on } if SOCKET && !DO_NOTHING
