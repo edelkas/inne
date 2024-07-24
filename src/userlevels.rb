@@ -1633,7 +1633,7 @@ end
 
 def send_userlevel_trace(event)
   perror("Sorry, tracing is disabled.") if !FEATURE_NTRACE
-  wait_msg = send_message(event, content: 'Waiting for another trace to finish...', removable: false) if $mutex[:ntrace].locked?
+  wait_msg = send_message(event, content: 'Waiting for another trace to finish...', db: false) if $mutex[:ntrace].locked?
   $mutex[:ntrace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
     parse_message(event).sub!(/user\s*level/i, '')
@@ -1670,6 +1670,7 @@ end
 
 def respond_userlevels(event)
   msg = parse_message(event)
+  $status[:commands] += 1
 
   # Exclusively global methods
   if !msg[NAME_PATTERN, 2]
@@ -1697,5 +1698,6 @@ def respond_userlevels(event)
   return send_userlevel_summary(event)       if msg =~ /summary/i
   return send_userlevel_times(event)         if msg =~ /\bwhen\b/i
 
+  $status[:commands] -= 1
   event << "Sorry, I didn't understand your userlevel command."
 end

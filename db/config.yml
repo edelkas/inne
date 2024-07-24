@@ -14,3 +14,7 @@ outte:
   idle_timeout:      60     # Time in seconds to close idle connections (Rails pool)
   reaping_frequency: 60     # Time in seconds to run the db conn reaper
 #  reconnect:         true
+
+# Note: The reaper will:
+# * Recover dead connections (those open but without owning thread)
+# * Close idle connections (those idling over idle_timeout seconds)

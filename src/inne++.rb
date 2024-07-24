@@ -153,6 +153,19 @@ def initialize_vars
   $sql_vars        = {}
   $sql_status      = {}
   $sql_conns       = []
+  $status          = {
+    commands:         0,
+    special_commands: 0,
+    messages:         0,
+    edits:            0,
+    pings:            0,
+    dms:              0,
+    interactions:     0,
+    logs:             0,
+    errors:           0,
+    warnings:         0,
+    exceptions:       0
+  }
   $trace_context   = {
     theme:   "",
     bg:      nil,
@@ -294,6 +307,7 @@ end
 def setup_bot
   # Respond to DMs
   $bot.private_message do |event|
+    $status[:dms] += 1
     handle_command(event)
   rescue => e
     lex(e, 'Failed to handle Discord DM')
@@ -301,6 +315,7 @@ def setup_bot
 
   # Respond to pings
   $bot.mention do |event|
+    $status[:pings] += 1
     handle_command(event) unless event.channel.type == 1
   rescue => e
     lex(e, 'Failed to handle Discord ping')
@@ -324,6 +339,7 @@ def setup_bot
 
   # Respond to button interactions
   $bot.button do |event|
+    $status[:interactions] += 1
     handle_command(event, log: false) { |e| respond_interaction_button(e) }
   rescue => e
     lex(e, 'Failed to handle Discord button interaction')
@@ -331,6 +347,7 @@ def setup_bot
 
   # Respond to select menu interactions
   $bot.select_menu do |event|
+    $status[:interactions] += 1
     handle_command(event, log: false) { |e| respond_interaction_menu(e) }
   rescue => e
     lex(e, 'Failed to handle Discord select menu interaction')
@@ -338,6 +355,7 @@ def setup_bot
 
   # Respond to text input interactions
   $bot.modal_submit do |event|
+    $status[:interactions] += 1
     handle_command(event, log: false) { |e| respond_interaction_modal(e) }
   rescue => e
     lex(e, 'Failed to handle Discord text input interaction')
@@ -377,7 +395,7 @@ rescue => e
 end
 
 # Routine to shutdown the program (exit should be called afterwards)
-def shutdown(trap: true, force: false)
+def shutdown(trap: false, force: false)
   log("Shutting down outte...")
 
   # Stop all background tasks gracefully

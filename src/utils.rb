@@ -232,6 +232,11 @@ module Log
     discord(text) if log_to_discord
     send_message(event, content: text, edit: false) if event
 
+    # Account for log
+    $status[:logs] += 1
+    $status[:errors] += 1 if [:error, :fatal].include?(mode)
+    $status[:warnings] += 1 if mode == :warn
+
     # Return original text
     text
   rescue => e
@@ -246,6 +251,7 @@ module Log
     write(msg, :error, **kwargs)
     write(e.message, :error)
     write(e.backtrace.join("\n"), :debug) if LOG_BACKTRACES
+    $status[:exceptions] += 1
     msg
   end
 

@@ -722,7 +722,7 @@ end
 def potato
   return false if !$nv2_channel || !$last_potato
   return false if Time.now.to_i - $last_potato.to_i < POTATO_FREQ
-  $nv2_channel.send_message(FOOD[$potato])
+  send_message($nv2_channel, content: FOOD[$potato], db: false)
   log(FOOD[$potato].gsub(/:/, '').capitalize + 'ed nv2')
   $potato = ($potato + 1) % FOOD.size
   $last_potato = Time.now.to_i

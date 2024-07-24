@@ -1315,7 +1315,7 @@ end
 # the demo data: still image.
 def send_trace(event)
   perror("Sorry, tracing is disabled.") if !FEATURE_NTRACE
-  wait_msg = send_message(event, content: "Queued...", removable: false) if $mutex[:ntrace].locked?
+  wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
   $mutex[:ntrace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
     Map.trace(event, anim: !!parse_message(event)[/anim/i])
@@ -1354,7 +1354,7 @@ def send_splits(event)
     ep_scores = []
 
     # Execute ntrace in mutex
-    wait_msg = send_message(event, content: "Queued...", removable: false) if $mutex[:ntrace].locked?
+    wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
     $mutex[:ntrace].synchronize do
       wait_msg.delete if !wait_msg.nil? rescue nil
 
@@ -1869,7 +1869,7 @@ def send_dmmc(event)
   zip_buffer = Zip::OutputStream.write_buffer{ |zip|
     levels.each_with_index{ |u, i|
       if i == 0
-        response = send_message(event, content: "Creating screenshot 1 of #{count}...", removable: false)
+        response = send_message(event, content: "Creating screenshot 1 of #{count}...", db: false)
       elsif i % 3 == 0
         response.edit("Creating screenshot #{i + 1} of #{count}...")
       end
@@ -1894,7 +1894,7 @@ def mishnub(event)
   fellas  = [" fellas", " boys", " guys", " lads", " fellow ninjas", " friends", " ninjafarians"]
   laugh   = [" :joy:", " lmao", " hahah", " lul", " rofl", "  <:moleSmirk:336271943546306561>", " <:Kappa:237591190357278721>", " :laughing:", " rolfmao"]
   if rand < 0.05 && (event.channel.type == 1 || $last_mishu.nil? || !$last_mishu.nil? && Time.now.to_i - $last_mishu >= MISHU_COOLDOWN)
-    event.send_message(youmean.sample + mishu.sample + amirite.sample + fellas.sample + laugh.sample)
+    send_message(event, db: false, content: youmean.sample + mishu.sample + amirite.sample + fellas.sample + laugh.sample)
     $last_mishu = Time.now.to_i unless event.channel.type == 1
   end
 end
@@ -1903,7 +1903,7 @@ def robot(event)
   start  = ["No! ", "Not at all. ", "Negative. ", "By no means. ", "Most certainly not. ", "Not true. ", "Nuh uh. "]
   middle = ["I can assure you he's not", "Eddy is not a robot", "Master is very much human", "Senpai is a ningen", "Mr. E is definitely human", "Owner is definitely a hooman", "Eddy is a living human being", "Eduardo es una persona"]
   ending = [".", "!", " >:(", " (ಠ益ಠ)", " (╯°□°)╯︵ ┻━┻"]
-  event.send_message(start.sample + middle.sample + ending.sample)
+  send_message(event, db: false, content: start.sample + middle.sample + ending.sample)
 end
 
 # Clean database (remove cheated archives, duplicates, orphaned demos, etc)
@@ -2236,12 +2236,24 @@ rescue => e
   lex(e, "Error getting memory info.", event: event)
 end
 
+# Restart outte's process
 def send_restart(event)
   flags = parse_flags(remove_command(parse_message(event)))
   force = flags.key?(:force)
   restart("Manual#{force ? ' (forced)' : ''}", force: force)
 rescue => e
   lex(e, "Error restarting outte.", event: event)
+end
+
+# Shut down outte's process
+def send_shutdown(event, force = false)
+  flags = parse_flags(remove_command(parse_message(event)))
+  force ||= flags.key?(:force)
+  warn("#{force ? 'Killing' : 'Shutting down'} outte.", discord: true)
+  shutdown(trap: false, force: force)
+  exit
+rescue => e
+  lex(e, "Error shutting down outte.", event: event)
 end
 
 # Compare Ruby and C SHA1 hashes for a specific level or score
@@ -2784,6 +2796,7 @@ def respond_special(event)
   cmd = msg[/^!(\w+)/i, 1]
   return if cmd.nil?
   cmd.downcase!
+  $status[:special_commands] += 1
 
   return send_debug(event)               if cmd == 'debug'
   return send_reaction(event)            if cmd == 'react'
@@ -2801,6 +2814,8 @@ def respond_special(event)
   return send_log_config(event)          if cmd == 'log'
   return send_meminfo(event)             if cmd == 'meminfo'
   return send_restart(event)             if cmd == 'restart'
+  return send_shutdown(event)            if cmd == 'shutdown'
+  return send_shutdown(event, true)      if cmd == 'kill'
   return send_test(event)                if cmd == 'test'
   return send_gold_check(event)          if cmd == 'gold_check'
   return fill_gold_counts(event)         if cmd == 'fill_gold'
@@ -2824,6 +2839,7 @@ def respond_special(event)
   return send_sql_list(event)            if cmd == 'sql_list'
   return send_tasks(event)               if cmd == 'tasks'
 
+  $status[:special_commands] -= 1
   event << "Unsupported special command."
 end
 
@@ -2844,6 +2860,8 @@ def respond(event)
 
   # Divert flow to userlevel specific functions
   return respond_userlevels(event) if !!msg[/userlevel/i]
+
+  $status[:commands] += 1
 
   # Exclusively global methods
   if !msg[NAME_PATTERN, 2]
@@ -2917,5 +2935,6 @@ def respond(event)
   return thanks(event)               if msg =~ /\bthank you\b/i || msg =~ /\bthanks\b/i
 
   # If we get to this point, no command was executed
+  $status[:commands] -= 1
   event << "Sorry, I didn't understand your command."
 end
