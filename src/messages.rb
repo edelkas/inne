@@ -1922,18 +1922,7 @@ rescue => e
 end
 
 def send_test(event)
-  palettes = []
-  Level.all.each_with_index{ |l, i|
-    dbg(i.to_s.rjust(4), progress: true)
-    palette = Map::THEMES.sample
-    palettes << "#{l.name} (#{l.longname}) -> #{palette}"
-    Dir.mkdir("screenies") unless Dir.exist?("screenies")
-    File.binwrite(
-      "screenies/#{l.name.gsub('?', 'SS').gsub('!', 'SS2')}.png",
-      l.map.screenshot(palette)
-    )
-  }
-  File.write("palettes.txt", palettes.join("\n"))
+  Scheduler.list.find{ |job| !!job.task.name[/test/i] }.stop
 end
 
 def send_reaction(event)
@@ -2748,13 +2737,23 @@ def send_tasks(event)
   rows << ["Name", "State", "Runs", "Last run", "Next run"]
   rows << :sep
   totals = {}
-  Scheduler.list.sort_by{ |job| -job.count }.each{ |job|
+  Scheduler.list.sort_by{ |job|
+    [
+      Job.states[job.state][:order],
+      job.eta ? 0 : 1,
+      job.eta,
+      job.time ? 0 : 1,
+      job.time,
+      -job.count,
+      job.task.name
+    ]
+  }.each{ |job|
     rows << [
       job.task.name,
-      job.state.capitalize,
+      Job.states[job.state][:desc].capitalize,
       job.count,
-      (job.last.strftime('%b %d %R') rescue ''),
-      (job.next.strftime('%b %d %R') rescue '')
+      (job.time.strftime('%b %d %R') rescue ''),
+      format_timespan(job.eta)
     ]
     totals.key?(job.state) ? totals[job.state] += 1 : totals[job.state] = 1
   }

@@ -1162,6 +1162,25 @@ def format_author(author)
   "on maps by #{verbatim(author.name)}"
 end
 
+def format_timespan(time)
+  return '' unless time.is_a?(Numeric)
+  levels = [
+    ['d', 86400],
+    ['h',  3600],
+    ['m',    60],
+    ['s',     1]
+  ]
+  terms = []
+  levels.each{ |name, seconds|
+    if time >= seconds
+      terms << "#{(time / seconds).to_i}#{name}"
+      time %= seconds
+    end
+  }
+  terms << 'now' if terms.empty?
+  terms.join(' ')
+end
+
 def format_sentence(e)
   return e[0].to_s if e.size == 1
   e[-2] = e[-2].to_s + " and #{e[-1].to_s}"

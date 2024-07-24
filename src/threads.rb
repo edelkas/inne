@@ -25,7 +25,7 @@ require_relative 'models.rb'
 # @log   - Whether to log the task start/end to the terminal.
 # @block - The Proc object containing the code of the task to execute.
 class Task
-  attr_reader :name, :active, :success
+  attr_reader :name, :success, :active, :force
 
   def initialize(name, db: true, force: true, log: true, &block)
     # Parameters
@@ -42,7 +42,7 @@ class Task
 
   def start
     log("TASK: Starting \"#{@name}\".") if @log && @name
-    @active = true if @force
+    @active = true
     acquire_connection if @db
   end
 
@@ -83,7 +83,15 @@ end
 # @start - Start running job immediately after creation, following schedule.
 # See Task class below for other parameters.
 class Job
-  attr_reader :task, :count, :last, :next
+  cattr_reader :states
+  attr_reader :task, :count
+
+  @@states = {
+    :init     => { order: 3, desc: 'init'     },
+    :ready    => { order: 2, desc: 'ready'    },
+    :sleeping => { order: 1, desc: 'sleeping' },
+    :running  => { order: 0, desc: 'running'  },
+  }
 
   def initialize(task, freq: 0, time: nil, start: true)
     # Members
@@ -92,9 +100,11 @@ class Job
     @time   = nil
     @thread = nil
     @count  = 0
-    @last   = nil
-    @next   = nil
-    @should_stop = false
+    @date_created = Time.now
+    @date_started = nil
+    @date_last    = nil
+    @date_next    = nil
+    @should_stop  = false
 
     # Schedule and start job
     time = Time.now if !time
@@ -112,6 +122,10 @@ class Job
 
   def active?
     @task.active
+  end
+
+  def free?
+    !@task.active || !@task.force
   end
 
   # Changes scheduling information
@@ -140,6 +154,7 @@ class Job
 
     # Execute job in a separate thread, inside infinite loop
     @should_stop = false
+    @date_started = Time.now
     @thread = Thread.new do
       while true
         sleep(WAIT)
@@ -157,14 +172,14 @@ class Job
         end
 
         # Suspend thread until it's time to run the task
-        @next = start
+        @date_next = start
         sleep(start - now) unless start <= now
         @task.run
 
         # Update state based on task success
         if @task.success
           @count += 1
-          @last = Time.now
+          @date_last = Time.now
         end
         Scheduler.trigger(:finish)
 
@@ -178,27 +193,55 @@ class Job
       lex(e, "Error scheduling job \"#{@task.name}\".")
       retry
     ensure
-      @next = nil
+      reset
     end
 
     true
   end
 
+  # Reset some state variables between thread restarts
+  def reset
+    @date_next    = nil
+    @date_started = nil
+  end
+
   # Try to stop execution of the job gently (waits till task is completed)
   def stop
     return if !running?
-    active? ? (@should_stop = true) : kill
+    free? ? kill : @should_stop = true
   end
 
   # Forcefully stops execution of the job, even if task is currently running
   def kill
     return if !running?
+    reset
     @thread.kill
     @thread = nil
   end
 
+  # Descriptive status of the job
   def state
-    active? ? 'running' : running? ? 'scheduled' : scheduled? ? 'ready' : 'created'
+    return :running  if active?
+    return :sleeping if running?
+    return :ready    if scheduled?
+    :init
+  end
+
+  # When was the last last executed
+  def time
+    @date_last
+  end
+
+  # How long since we started the job
+  def runtime
+    return nil if !@date_started
+    [Time.now - @date_started, 0.0].max
+  end
+
+  # How long till the task is executed again
+  def eta
+    return nil if !@date_next
+    [@date_next - Time.now, 0.0].max
   end
 
 end
@@ -226,6 +269,11 @@ module Scheduler extend self
   def count_scheduled() @@jobs.count{ |job| job.scheduled? } end
   def count_running()   @@jobs.count{ |job| job.running?   } end
   def count_active ()   @@jobs.count{ |job| job.active?    } end
+
+  # Whether no forced background tasks are active
+  def free?
+    @@jobs.count{ |job| !job.free? } == 0
+  end
 
   # Gracefully stop all jobs
   def clear
@@ -258,7 +306,7 @@ module Scheduler extend self
     # Test if other events need to be broadcasted
     case event
     when :finish
-      broadcast(:clear) if count_active == 0
+      broadcast(:clear) if free?
     end
   end
 end
@@ -591,7 +639,7 @@ def start_level_of_the_day(ctp = false)
   # Ensure channel is available
   while (ctp ? $ctp_channel : $channel).nil?
     err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
-    sleep(WAIT)
+    sleep(5)
   end
 
   # Flags
@@ -709,10 +757,10 @@ def start_discord_tasks
   return if DO_NOTHING
 
   # Update the bot's status, update lotd scores, etc, every 5 mins
-  Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
+  Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY, log: false) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
 
   # Check for new N++-related streams of Twitch every minute
-  Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
+  Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY, log: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
@@ -720,8 +768,8 @@ def start_discord_tasks
   Scheduler.add("Level of the day", freq: freq, time: time) { start_level_of_the_day(false) }
 
   # Post CTP lotd daily, eotw weekly and cotm monthly
-  freq = TEST && TEST_CTP_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
-  time = TEST && TEST_CTP_LOTD ? nil : 'level'
+  freq = TEST && TEST_CTP_LOTD ? -1 : CTP_LEVEL_FREQUENCY
+  time = TEST && TEST_CTP_LOTD ? nil : 'ctp_level'
   Scheduler.add("CTP level of the day", freq: freq, time: time) { start_level_of_the_day(true) }
 
   # Post highscoring report for newest userlevels
@@ -730,9 +778,3 @@ def start_discord_tasks
   # Regularly stun nv2 users with a fruit emoji
   Scheduler.add("Potato", log: false) { potato } if POTATO
 end
-
-# TODO:
-# 1. Test Scheduler with String time instead of Time
-# 2. Test lotd/eotw/cotm, normal and CTP, and report
-# 3. Test !tasks command (do all tasks show up properly?)
-# 4. In general, test everything thoroughly (all tasks)

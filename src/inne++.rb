@@ -382,7 +382,7 @@ def shutdown(trap: true, force: false)
 
   # Stop all background tasks gracefully
   Scheduler.clear
-  if !force && Scheduler.count_active > 0
+  if !force && !Scheduler.free?
     warn("Waiting for background tasks to finish...")
     Scheduler.listen(:clear)
   end
