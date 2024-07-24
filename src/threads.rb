@@ -760,7 +760,7 @@ def start_discord_tasks
   Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY, log: false) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
 
   # Check for new N++-related streams of Twitch every minute
-  Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY, log: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
+  Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY, log: false, db: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
@@ -776,5 +776,5 @@ def start_discord_tasks
   Scheduler.add("Userlevel report", freq: USERLEVEL_REPORT_FREQUENCY, time: 'userlevel_report') { send_userlevel_report } if DO_EVERYTHING  || REPORT_USERLEVELS
 
   # Regularly stun nv2 users with a fruit emoji
-  Scheduler.add("Potato", log: false) { potato } if POTATO
+  Scheduler.add("Potato", db: false, log: false) { potato } if POTATO
 end

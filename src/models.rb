@@ -2734,13 +2734,17 @@ module Twitch extend self
   }
 
   def get_twitch_token
+    acquire_connection
     $twitch_token = GlobalProperty.find_by(key: 'twitch_token').value
+    release_connection
     update_twitch_token if !$twitch_token
     $twitch_token
   end
 
   def set_twitch_token(token)
+    acquire_connection
     GlobalProperty.find_by(key: 'twitch_token').update(value: token)
+    release_connection
   end
 
   def length(s)
