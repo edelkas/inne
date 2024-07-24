@@ -142,7 +142,7 @@ def initialize_vars
   $status_update   = Time.now.to_i
   $twitch_token    = nil
   $twitch_streams  = {}
-  $boot_time       = Time.now.to_i
+  $boot_time       = Time.now
   $active_tasks    = {}
   $memory_warned   = false
   $memory_warned_c = false
@@ -155,6 +155,7 @@ def initialize_vars
   $sql_conns       = []
   $status          = {
     commands:         0,
+    main_commands:    0,
     special_commands: 0,
     messages:         0,
     edits:            0,
@@ -416,8 +417,8 @@ end
 
 # Bot initialization sequence
 log("Loading outte...")
-monkey_patch
 initialize_vars
+monkey_patch
 load_config
 connect_db
 create_bot
@@ -435,10 +436,13 @@ binding.pry if DEBUG
 # Idle until we need to execute commands on the main thread issued from
 # different threads
 while cmd = $main_queue.pop
+  $status[:main_commands] += 1
   case cmd.proc
     # Matplotlib depends on PyCall, which is not thread safe
   when :trace
     cmd.result = Map::mpl_trace(**$trace_context)
+  else
+    $status[:main_commands] -= 1
   end
   cmd.thread.run
 end

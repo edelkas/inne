@@ -475,7 +475,7 @@ end
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
 def send_userlevel_report
-  if $channel.nil?
+  if $mapping_channel.nil?
     err("Not connected to a channel, not sending userlevel report")
     return false
   end
@@ -740,7 +740,7 @@ def start_general_tasks
   Scheduler.add("Monitor memory", freq: MEMORY_DELAY, db: false, force: false, log: false) { monitor_memory } if MEMORY_MONITOR && $linux
 
   # Monitor available MySQL threads regularly
-  Scheduler.add("Monitor MySQL", freq: SQL_DELAY, force: false, log: false) { monitor_db } if SQL_MONITOR
+  Scheduler.add("Monitor database", freq: SQL_DELAY, force: false, log: false) { monitor_db } if SQL_MONITOR
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
   $threads << Thread.new { Server::on } if SOCKET && !DO_NOTHING

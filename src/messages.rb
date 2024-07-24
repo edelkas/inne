@@ -2778,6 +2778,18 @@ rescue => e
   lex(e, 'Failed to start debugger.', event: event)
 end
 
+def send_status(event)
+  str  = "Uptime:   #{format_timespan(Time.now - $boot_time)} (boot #{$boot_time.strftime('%F %T')})\n"
+  str << "Commands: #{$status[:commands]} normal, #{$status[:special_commands]} special, #{$status[:main_commands]} on main thread\n"
+  str << "Received: #{$status[:pings]} mentions, #{$status[:dms]} DMs, #{$status[:interactions]} interactions\n"
+  str << "Sent:     #{$status[:messages]} messages, #{$status[:edits]} edits\n"
+  str << "Logged:   #{$status[:logs]} lines, #{$status[:errors]} errors, #{$status[:warnings]} warnings, #{$status[:exceptions]} exceptions"
+  event << "Outte status #{format_time}:"
+  event << format_block(str)
+rescue => e
+  lex(e, 'Failed to send outte status.', event: event)
+end
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -2799,6 +2811,7 @@ def respond_special(event)
   $status[:special_commands] += 1
 
   return send_debug(event)               if cmd == 'debug'
+  return send_status(event)              if cmd == 'status'
   return send_reaction(event)            if cmd == 'react'
   return send_unreaction(event)          if cmd == 'unreact'
   return send_mappack_seed(event)        if cmd == 'mappack_seed'

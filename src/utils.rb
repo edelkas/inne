@@ -233,9 +233,11 @@ module Log
     send_message(event, content: text, edit: false) if event
 
     # Account for log
-    $status[:logs] += 1
-    $status[:errors] += 1 if [:error, :fatal].include?(mode)
-    $status[:warnings] += 1 if mode == :warn
+    if $status
+      $status[:logs] += 1
+      $status[:errors] += 1 if [:error, :fatal].include?(mode)
+      $status[:warnings] += 1 if mode == :warn
+    end
 
     # Return original text
     text

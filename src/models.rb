@@ -2897,7 +2897,7 @@ module Twitch extend self
 
   def new_streams
     active_streams.map{ |game, list|
-      [game, list.select{ |s| !s['posted'] && Time.parse(s['started_at']).to_i > $boot_time }]
+      [game, list.select{ |s| !s['posted'] && Time.parse(s['started_at']).to_i > $boot_time.to_i }]
     }.to_h
   end
 
