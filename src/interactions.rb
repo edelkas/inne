@@ -16,7 +16,7 @@ require_relative 'userlevels.rb'
 #   mode: Name of mode that is currently selected
 #   all:  Whether to allow an "All" option
 def interaction_add_select_menu_mode(view = nil, mode = nil, all = true)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:mode', placeholder: 'Mode', max_values: 1){ |m|
       MODES.reject{ |k, v| all ? false : v == 'all' }.each{ |k, v|
@@ -30,7 +30,7 @@ end
 
 # ActionRow builder with a Select Menu for the tab
 def interaction_add_select_menu_tab(view = nil, tab = nil)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:tab', placeholder: 'Tab', max_values: 1){ |m|
       USERLEVEL_TABS.each{ |t, v|
@@ -46,7 +46,7 @@ end
 #   order:   The name of the current ordering
 #   default: Whether to plug "Default" option at the top
 def interaction_add_select_menu_order(view = nil, order = nil, default = true)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:order', placeholder: 'Order', max_values: 1){ |m|
       ["default", "title", "date", "favs"][(default ? 0 : 1) .. -1].each{ |b|
@@ -62,7 +62,7 @@ end
 # (All, Level, Episode, Story)
 def interaction_add_select_menu_type(view = nil, type = nil)
   type = 'overall' if type.nil? || type.empty?
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:type', placeholder: 'Type', max_values: 1){ |m|
       ['overall', 'level', 'episode', 'story'].each{ |b|
@@ -78,7 +78,7 @@ end
 # ActionRow builder with a Select menu for the highscorable tabs
 # (All, SI, S, SU, SL, SS, SS2)
 def interaction_add_select_menu_metanet_tab(view = nil, tab = nil)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:tab', placeholder: 'Tab', max_values: 1){ |m|
       ['all', 'si', 's', 'su', 'sl', 'ss', 'ss2'].each{ |t|
@@ -99,7 +99,7 @@ end
 # 0th (w/ ties), Tied 0ths, Singular 0ths, Plural 0ths, Average 0th lead
 # Maxed, Maxable, Score, Points, Average points)
 def interaction_add_select_menu_rtype(view = nil, rtype = nil)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:rtype', placeholder: 'Ranking type', max_values: 1){ |m|
       RTYPES.each{ |t|
@@ -117,7 +117,7 @@ end
 
 # ActionRow builder with a Select Menu for the alias type
 def interaction_add_select_menu_alias_type(view = nil, type = nil)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: 'menu:alias', placeholder: 'Alias type', max_values: 1){ |m|
       ['level', 'player'].each{ |b|
@@ -138,7 +138,7 @@ def interaction_add_navigation(
     styles:   [:primary, :primary, :secondary, :primary, :primary],
     emojis:   [nil, nil, nil, nil, nil]
   )
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.button(label: labels[0], style: styles[0], disabled: disabled[0], custom_id: ids[0], emoji: emojis[0])
     r.button(label: labels[1], style: styles[1], disabled: disabled[1], custom_id: ids[1], emoji: emojis[1])
@@ -221,7 +221,7 @@ end
 # ActionRow builder with Buttons to specify type (Level, Episode, Story)
 # in Rankings, also button to include ties.
 def interaction_add_type_buttons(view = nil, types = [], ties = nil)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     TYPES.each{ |t, h|
       r.button(
@@ -238,10 +238,19 @@ end
 
 # ActionRow builder with Yes/No buttons to confirm an action
 def interaction_add_confirmation_buttons(view = nil)
-  view = Discordrb::Webhooks::View.new if view.nil?
+  view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.button(label: 'Yes', style: :success, custom_id: 'button:confirm:yes')
     r.button(label: 'No',  style: :danger,  custom_id: 'button:confirm:no')
+  }
+ensure
+  return view
+end
+
+def interaction_button(text = "Text", id = 'test', view = nil, style: :primary)
+  view = Discordrb::Webhooks::View.new if !view
+  view.row{ |r|
+    r.button(label: text, style: style, custom_id: "button:#{id}")
   }
 ensure
   return view
@@ -418,6 +427,11 @@ def respond_interaction_button(event)
     case keys[1]
     when 'nav'
       send_query(event, page: keys[2])
+    end
+  when 'status'
+    case keys[1]
+    when 'refresh'
+      send_status(event)
     end
   end
 end

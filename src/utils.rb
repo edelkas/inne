@@ -1778,12 +1778,27 @@ def unzip(data)
 end
 
 def acquire_connection
-  ActiveRecord::Base.connection.reconnect!
+  sql("SELECT 1")
+  #ActiveRecord::Base.connection.reconnect!
+rescue
+  false
+else
+  true
 end
 
 def release_connection
-  #ActiveRecord::Base.connection_pool.release_connection
-  ActiveRecord::Base.connection.disconnect!
+  ActiveRecord::Base.connection_pool.release_connection
+  #ActiveRecord::Base.connection.disconnect!
+rescue
+  nil
+end
+
+def with_connection(&block)
+  return if !block_given?
+  acquire_connection
+  res = yield
+  release_connection
+  res
 rescue
   nil
 end

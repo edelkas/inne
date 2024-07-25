@@ -969,7 +969,7 @@ def send_userlevel_browse(
   # parse commands. I know, genius implementation.
   if exec
     output = "Browsing #{USERLEVEL_TABS[cat][:name]}#{mode == -1 ? '' : ' ' + MODES[mode]} maps"
-    output += " by #{verbatim(author.name[0...64])}" if !author.nil?
+    output += " by #{verbatim(author.name[0...64])} (author id #{verbatim(author.id)})" if !author.nil?
     output += " for #{verbatim(search[0...64])}" if !search.empty?
     output += " sorted by #{invert ? "-" : ""}#{!order_str.empty? ? order : (is_tab ? "default" : "date")}."
     output += format_userlevels(maps, pag[:page])

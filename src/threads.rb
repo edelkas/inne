@@ -162,8 +162,11 @@ class Job
 
         # If a start time has been provided, parse it. Otherwise, start now.
         if @time.is_a?(String)
-          start = correct_time(GlobalProperty.get_next_update(@time), @freq)
-          GlobalProperty.set_next_update(@time, start)
+          start = with_connection do
+            start = correct_time(GlobalProperty.get_next_update(@time), @freq)
+            GlobalProperty.set_next_update(@time, start)
+            start
+          end
         elsif @time.is_a?(Time)
           start = @time
         else

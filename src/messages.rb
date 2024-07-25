@@ -2784,8 +2784,9 @@ def send_status(event)
   str << "Received: #{$status[:pings]} mentions, #{$status[:dms]} DMs, #{$status[:interactions]} interactions\n"
   str << "Sent:     #{$status[:messages]} messages, #{$status[:edits]} edits\n"
   str << "Logged:   #{$status[:logs]} lines, #{$status[:errors]} errors, #{$status[:warnings]} warnings, #{$status[:exceptions]} exceptions"
-  event << "Outte status #{format_time}:"
-  event << format_block(str)
+  msg = "Status #{format_time}:"
+  msg << format_block(str)
+  send_message(event, content: msg, components: interaction_button("Refresh", 'refresh'))
 rescue => e
   lex(e, 'Failed to send outte status.', event: event)
 end
