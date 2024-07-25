@@ -2716,8 +2716,11 @@ def send_sql_status(event)
   }.compact.join(', ')
 
   # Send
-  event << "Database status #{format_time}:"
-  event << format_block(str)
+  send_message(
+    event,
+    content: "Database status #{format_time}:\n" + format_block(str),
+    components: refresh_button('send_sql_status')
+  )
 rescue => e
   lex(e, 'Failed to send database status.', event: event)
 end
@@ -2735,7 +2738,11 @@ def send_sql_list(event)
   rows << $sql_conns.first.keys[0..last]
   rows << :sep
   $sql_conns.each{ |row| rows << row.values[0..last] }
-  event << format_block(make_table(rows)) + "Total: #{$sql_conns.size}"
+  send_message(
+    event,
+    content: format_block(make_table(rows)) + "Total: #{$sql_conns.size}",
+    components: refresh_button('send_sql_list')
+  )
 rescue => e
   lex(e, 'Failed to send database thread list.', event: event)
 end
@@ -2766,7 +2773,11 @@ def send_tasks(event)
     ]
     totals.key?(job.state) ? totals[job.state] += 1 : totals[job.state] = 1
   }
-  event << format_block(make_table(rows)) + "Total: #{totals.map{ |k, v| "#{v} #{k}" }.join(', ')}"
+  send_message(
+    event,
+    content: "Tasks scheduled:\n" + format_block(make_table(rows)) + "Total: #{totals.map{ |k, v| "#{v} #{k}" }.join(', ')}",
+    components: refresh_button('send_tasks')
+  )
 rescue => e
   lex(e, 'Failed to send background task list.', event: event)
 end
@@ -2784,9 +2795,11 @@ def send_status(event)
   str << "Received: #{$status[:pings]} mentions, #{$status[:dms]} DMs, #{$status[:interactions]} interactions\n"
   str << "Sent:     #{$status[:messages]} messages, #{$status[:edits]} edits\n"
   str << "Logged:   #{$status[:logs]} lines, #{$status[:errors]} errors, #{$status[:warnings]} warnings, #{$status[:exceptions]} exceptions"
-  msg = "Status #{format_time}:"
-  msg << format_block(str)
-  send_message(event, content: msg, components: interaction_button("Refresh", 'refresh'))
+  send_message(
+    event,
+    content: "Status #{format_time}:\n" + format_block(str),
+    components: refresh_button('send_status')
+  )
 rescue => e
   lex(e, 'Failed to send outte status.', event: event)
 end

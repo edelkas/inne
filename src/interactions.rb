@@ -256,6 +256,10 @@ ensure
   return view
 end
 
+def refresh_button(id = 'test')
+  interaction_button("⟳", "refresh:#{id}")
+end
+
 def modal(
     event,
     title:      'Modal',
@@ -384,6 +388,10 @@ def respond_interaction_button(event)
   type = parse_message(event)[/\w+/i].downcase # Source message type
   return if keys[0] != 'button'                # Only listen to buttons
 
+  # If it's a refresh button, we simply resend the exact same command, editing the old one
+  return send(keys[2], event) if keys[1] == 'refresh' && !!keys[2]
+
+  # Otherwise, distinguish depending on the source message
   case type
   when 'aliases'
     case keys[1]
@@ -427,11 +435,6 @@ def respond_interaction_button(event)
     case keys[1]
     when 'nav'
       send_query(event, page: keys[2])
-    end
-  when 'status'
-    case keys[1]
-    when 'refresh'
-      send_status(event)
     end
   end
 end
