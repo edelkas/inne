@@ -711,14 +711,14 @@ def monitor_db
   # MySQL threads
   cur = $sql_status['Threads_connected'].to_i
   max = $sql_vars['max_connections'].to_i
-  ratio = cur / max
+  ratio = cur.to_f / max
   restart("Lack of MySQL threads (#{cur} / #{max})") if ratio >= SQL_LIMIT
 
   # Rails pool
   stats = ActiveRecord::Base.connection_pool.stat
   cur = stats[:connections]
   max = stats[:size]
-  ratio = cur / max
+  ratio = cur.to_f / max
   warn("Lack of Rails pool connections (#{cur} / #{max})", discord: true) if ratio >= POOL_LIMIT
 end
 
