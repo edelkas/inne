@@ -62,16 +62,14 @@ module MonkeyPatches
     end
 
     # Allow raw SQL queries for pluck, order, etc
-    ::ActiveRecord::Sanitization::ClassMethods.class_eval do
-      def disallow_raw_sql!(args, permit: nil)
-      end
-    end
-    ::ActiveRecord::AttributeMethods::ClassMethods.class_eval do
-      def disallow_raw_sql!(args, permit: nil)
-      end
-    end
-    ::ActiveRecord::InsertAll.class_eval do
-      def disallow_raw_sql!(value)
+    [
+      (::ActiveRecord::Sanitization::ClassMethods rescue nil),
+      (::ActiveRecord::AttributeMethods::ClassMethods rescue nil),
+      (::ActiveRecord::InsertAll rescue nil)
+    ].compact.each do |klass|
+      klass.class_eval do
+        def disallow_raw_sql!(args, permit: nil)
+        end
       end
     end
   end
@@ -2660,9 +2658,7 @@ class Demo < ActiveRecord::Base
   end
 
   def qt
-    TYPES[archive.highscoreable_type][:qt]
-  rescue
-    -1
+    TYPES[archive.highscoreable_type][:qt] rescue -1
   end
 
   def uri(steam_id)

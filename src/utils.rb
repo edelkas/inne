@@ -1805,7 +1805,7 @@ end
 
 # Perform arbitrary SQL command
 def sql(command)
-  ActiveRecord::Base.connection.exec_query(command)
+  ActiveRecord::Base.connection.exec_query(command) rescue nil
 end
 
 # Fetch value of certain MySQL variables and statuses
