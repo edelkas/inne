@@ -1693,7 +1693,7 @@ class Score < ActiveRecord::Base
          .to_h if [:avg_points, :avg_rank, :avg_lead].include?(ranking)
     p.sort_by{ |id, c| ranking == :avg_rank ? c : -c }
      .reject{ |id, c| c == 0 unless [:avg_rank, :avg_lead].include?(ranking) }
-     .map{ |id, c| [Player.find(id), c] }
+     .map{ |id, c| [Player.find(id).name, c] }
   end
 
   def self.total_scores(type, tabs, rank, secrets)

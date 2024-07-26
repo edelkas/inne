@@ -932,15 +932,11 @@ rescue => e
 end
 
 def parse_global(msg)
-  !!msg[/global/i]
+  DEFAULT_GLOBAL ? !msg[/\bnewest\b/i] : !!msg[/\bglobal\b/i]
 end
 
 def parse_full(msg)
   !!msg[/full/i]
-end
-
-def parse_newest(msg)
-  !!msg[/newest/i]
 end
 
 def parse_ties(msg, rtype = nil)

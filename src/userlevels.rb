@@ -1491,7 +1491,7 @@ def send_random_userlevel(event)
   author_id = !author.nil? ? author.id : nil
   amount    = [(msg[/\d+/] || 1).to_i, PAGE_SIZE].min
   mode      = parse_mode(msg, true)
-  full      = !parse_newest(msg)
+  full      = parse_global(msg)
   maps      = full ? Userlevel.global : Userlevel.newest
 
   maps = maps.where(mode: mode.to_sym)
@@ -1559,7 +1559,7 @@ def send_userlevel_highscoring_summary(event)
   full      = parse_global(msg)
   mode      = parse_mode(msg, false, true)
 
-  perror("The global userlevel highscoring summary is disabled for now until it's optimized, you can still do the regular summary, or the global summary for a specific player or author.") if full && !player && !author
+  perror("The global userlevel highscoring summary is disabled for now until it's optimized, you can still do:\n* The newest highscoring summary.\n* The global highscoring summary _for a specific player_.") if full && !player && !author
 
   # Fetch userlevels
   maps = full ? Userlevel.global : Userlevel.newest

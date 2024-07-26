@@ -14,7 +14,7 @@
 TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = true  # Execute all threads
+DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -286,11 +286,12 @@ DATE_FORMAT_LOG   = "%Y/%m/%d %H:%M:%S.%L" # Date format used for terminal logs
 # <------                    USERLEVEL VARIABLES                         ------>
 # <---------------------------------------------------------------------------->
 
-MIN_U_SCORES = 20    # Minimum number of userlevel highscores to appear in average rankings
-MIN_G_SCORES = 500   # Minimum number of userlevel highscores to appear in global average rankings
-PAGE_SIZE    = 10    # Number of userlevels to show when browsing
-PART_SIZE    = 500   # Number of userlevels per file returned by the server when querying levels
-MIN_ID       = 22715 # ID of the very first userlevel, to exclude Metanet levels
+MIN_U_SCORES   = 20    # Minimum number of userlevel highscores to appear in average rankings
+MIN_G_SCORES   = 500   # Minimum number of userlevel highscores to appear in global average rankings
+PAGE_SIZE      = 10    # Number of userlevels to show when browsing
+PART_SIZE      = 500   # Number of userlevels per file returned by the server when querying levels
+MIN_ID         = 22715 # ID of the very first userlevel, to exclude Metanet levels
+DEFAULT_GLOBAL = true  # Default to all userlevels in highscoring functions
 
 # Userlevel query types
 QT_SI                                  =  0 # (Metanet only)
