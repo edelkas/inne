@@ -216,16 +216,11 @@ class UserlevelPlayer < ActiveRecord::Base
 
   def retrieve_scores(full = false, mode = nil, author_id = nil)
     query = full ? scores : newest
-    if !mode.nil? || !author_id.nil?
-      query = query.joins("INNER JOIN userlevels ON userlevels.id = userlevel_scores.userlevel_id")
-      if !mode.nil?
-        query = query.where("userlevels.mode = #{mode.to_i}")
-      end
-      if !author_id.nil?
-        query = query.where("userlevels.author_id = #{author_id.to_i}")
-      end
-    end
-    query
+    return query.order(:rank) if !mode && !author_id
+    query = query.joins("INNER JOIN `userlevels` ON `userlevels`.`id` = `userlevel_scores`.`userlevel_id`")
+    query = query.where("`userlevels`.`mode` = #{mode.to_i}") if !!mode
+    query = query.where("`userlevels`.`author_id` = #{author_id.to_i}") if !!author_id
+    query.order(:rank)
   end
 
   def range_s(rank1, rank2, ties, full = false, mode = nil, author_id = nil)
@@ -1380,14 +1375,11 @@ def send_userlevel_list(event)
     rank = 1
     bott = 0
   end
-  all = player.range_h(bott, rank - 1, ties, full, nil, author_id)
-
-  res = all.map{ |rank, scores|
-    rank.to_s.rjust(2, '0') + ":\n" + scores.map{ |s|
-      "  #{Highscoreable.format_rank(s.rank)}: [#{s.userlevel.id.to_s.rjust(6)}] #{s.userlevel.title} (#{"%.3f" % [s.score.to_f / 60.0]})"
-    }.join("\n")
-  }.join("\n")
-  send_file(event, res, "#{full ? "global-" : ""}userlevel-scores-#{player.name}.txt")
+  res = player.range_s(bott, rank - 1, ties, full, nil, author_id)
+              .joins("INNER JOIN `userlevels` ON `userlevels`.`id` = `userlevel_scores`.`userlevel_id`")
+              .pluck("CONCAT(LPAD(`rank`, 2, '0'), ': [', LPAD(`userlevel_id`, 6, ' '), '] ', `title`, ' (', ROUND(`score` / 60.0, 3), ')')")
+  event << "Total: #{res.count}"
+  send_file(event, res.join("\n"), "#{full ? "global-" : ""}userlevel-scores-#{player.name}.txt")
 rescue => e
   lex(e, 'Error getting userlevel highscore list.', event: event)
 end

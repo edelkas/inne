@@ -2838,7 +2838,7 @@ def respond_special(event)
   return send_highscore_plot(event)      if cmd == 'highscores_plot'
   return send_ul_csv(event)              if cmd == 'userlevel_csv'
   return send_ul_plot(event)             if cmd == 'userlevel_plot'
-  return send_log_config(event)          if cmd == 'log'
+  return send_log_config(event)          if cmd == 'logconf'
   return send_meminfo(event)             if cmd == 'meminfo'
   return send_restart(event)             if cmd == 'restart'
   return send_shutdown(event)            if cmd == 'shutdown'

@@ -1245,7 +1245,7 @@ end
 
 def send_file(event, data, name = 'result.txt', binary = false)
   return nil if data.nil?
-  event.attach_file(tmp_file(data, name, binary: binary))
+  event.attach_file(tmp_file(data, sanitize_filename(name), binary: binary))
 end
 
 # Send a message to a destination (typically a respondable event or a Discord channel)

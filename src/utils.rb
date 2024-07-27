@@ -195,6 +195,7 @@ module Log
     }
 
     # Format text
+    text = text.to_s
     header = {
       fancy: "[#{date}] #{type[:fancy]}#{app[:fancy]} ",
       plain: "[#{date}] #{type[:plain]}#{app[:plain]} ",
