@@ -16,7 +16,7 @@ Ongoing:
   * Remove metanet_id field from both tables
 
 - Migrate highscoreable_type to integers from 0 to 2.
-- Add Network information to status command (amount of requests received, valid ones, forwarded ones, leaderboard ones, ..., MBs sent and received, ...)
+- Persist status (bot, sql, etc) into db.
 - Optimize list function to run a single query that fetches all the necessary information (level name and score, ...), and perhaps even formats it appropriately already, like we did for userlevel list.
 - Add !log command to send last lines of log file in a text block, with a pager to navigate it in full.
 - Add a special command to run arbitrary Ruby code, sent from Discord, and print the return inside a text block. Ensure to execute inside guards for exceptions. Perhaps even code a simple Debugger that can be started in a separate Thread, which waits for commands (e.g. using a Queue).

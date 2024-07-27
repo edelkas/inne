@@ -538,6 +538,7 @@ class Userlevel < ActiveRecord::Base
     return (CLE_FORWARD ? forward(req) : nil) if mode != m
 
     # Return saved userlevel query
+    $status[:http_levels] += 1
     res
   rescue => e
     lex(e, 'Failed to socket userlevel query.')
@@ -1391,7 +1392,8 @@ def send_userlevel_stats(event)
   author_id = !author.nil? ? author.id : nil
   ties      = parse_ties(msg)
   full      = parse_global(msg)
-  counts    = player.range_h(0, 19, ties, full, nil, author_id).map{ |rank, scores| [rank, scores.length] }
+  counts    = player.range_h(0, 19, ties, full, nil, author_id)
+                    .map{ |rank, scores| [rank, scores.length] }
 
   histogram = AsciiCharts::Cartesian.new(
     counts,
@@ -1401,7 +1403,9 @@ def send_userlevel_stats(event)
     title: 'Histogram'
   ).draw
 
-  totals  = counts.map{ |rank, count| "#{Highscoreable.format_rank(rank)}: #{"   %5d" % count}" }.join("\n\t")
+  totals  = counts.map{ |rank, count|
+    "#{Highscoreable.format_rank(rank)}: #{"   %5d" % count}"
+  }.join("\n\t")
   overall = "Totals:    %5d" % counts.reduce(0){ |sum, c| sum += c[1] }
 
   full = format_global(full)

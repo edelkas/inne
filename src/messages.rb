@@ -2794,7 +2794,9 @@ def send_status(event)
   str << "Commands: #{$status[:commands]} normal, #{$status[:special_commands]} special, #{$status[:main_commands]} on main thread\n"
   str << "Received: #{$status[:pings]} mentions, #{$status[:dms]} DMs, #{$status[:interactions]} interactions\n"
   str << "Sent:     #{$status[:messages]} messages, #{$status[:edits]} edits\n"
-  str << "Logged:   #{$status[:logs]} lines, #{$status[:errors]} errors, #{$status[:warnings]} warnings, #{$status[:exceptions]} exceptions"
+  str << "Logged:   #{$status[:logs]} lines, #{$status[:errors]} errors, #{$status[:warnings]} warnings, #{$status[:exceptions]} exceptions\n"
+  str << "Network:  #{$status[:http_requests]} requests, #{$status[:http_errors]} errors, #{$status[:http_forwards]} forwards\n"
+  str << "CLE:      #{$status[:http_scores]} leaderboards, #{$status[:http_replay]} replays, #{$status[:http_submit]} submissions, #{$status[:http_login]} logins, #{$status[:http_levels]} userlevel queries"
   send_message(
     event,
     content: "Status #{format_time}:\n" + format_block(str),

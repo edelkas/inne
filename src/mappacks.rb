@@ -2774,6 +2774,7 @@ class MappackScore < ActiveRecord::Base
       end if !res.nil?
       return res
     end
+    $status[:http_submit] += 1
 
     # Parse demos and compute new scores
     demos = Demo.parse(query['replay_data'], type[:name])
@@ -2947,6 +2948,7 @@ class MappackScore < ActiveRecord::Base
     name = h.name
 
     # Get scores
+    $status[:http_scores] += 1
     return h.get_scores(query['qt'].to_i, query['user_id'].to_i)
   rescue => e
     lex(e, "Failed to get scores for #{name} in mappack '#{code}'")
@@ -3008,6 +3010,7 @@ class MappackScore < ActiveRecord::Base
 
     # Return replay
     dbg("#{name} requested replay #{query['replay_id']}")
+    $status[:http_replay] += 1
     score.dump_replay
   rescue => e
     lex(e, "Failed to get replay with ID #{query['replay_id']} from mappack '#{code}'")

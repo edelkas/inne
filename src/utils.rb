@@ -350,6 +350,7 @@ end
 # Forward an arbitrary request to Metanet, return response's body if 200, nil else
 def forward(req)
   return nil if req.nil?
+  $status[:http_forwards] += 1
 
   # Parse request elements
   host = 'dojo.nplusplus.ninja'

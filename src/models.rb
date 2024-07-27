@@ -1848,6 +1848,7 @@ class Player < ActiveRecord::Base
   # Proxy a login request and register player
   def self.login(mappack, req)
     # Forward request to Metanet
+    $status[:http_login] += 1
     res = forward(req)
     invalid = res.nil? || res == INVALID_RESP
     raise 'Invalid response' if invalid && !LOCAL_LOGIN
@@ -2941,6 +2942,7 @@ module Sock extend self
     )
     # Setup callback for requests (ensuring we are connected to SQL)
     @@servers[name].mount_proc '/' do |req, res|
+      $status[:http_requests] += 1
       acquire_connection
       handle(req, res)
       release_connection
@@ -3016,6 +3018,7 @@ module Server extend self
 
     fwd(req, res)
   rescue => e
+    $status[:http_errors] += 1
     lex(e, "CLE socket failed to parse request for: #{req.path}")
     nil
   end

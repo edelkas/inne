@@ -154,18 +154,11 @@ def initialize_vars
   $sql_status      = {}
   $sql_conns       = []
   $status          = {
-    commands:         0,
-    main_commands:    0,
-    special_commands: 0,
-    messages:         0,
-    edits:            0,
-    pings:            0,
-    dms:              0,
-    interactions:     0,
-    logs:             0,
-    errors:           0,
-    warnings:         0,
-    exceptions:       0
+    commands:      0, main_commands: 0, special_commands: 0, messages:     0,
+    edits:         0, pings:         0, dms:              0, interactions: 0,
+    logs:          0, errors:        0, warnings:         0, exceptions:   0,
+    http_requests: 0, http_errors:   0, http_forwards:    0, http_scores:  0,
+    http_replay:   0, http_submit:   0, http_login:       0, http_levels:  0
   }
   $trace_context   = {
     theme:   "",
