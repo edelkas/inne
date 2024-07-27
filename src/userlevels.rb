@@ -102,7 +102,7 @@ class UserlevelAuthor < ActiveRecord::Base
         return p.first
       else
         perror("Too many author matches! (#{p.count}). Please refine author name.") if !event
-        pager(event, page, header: multiple, list: p, pluck: [:id, :name]){ |s|
+        pager(event, page, header: multiple, list: p, rails: true, pluck: [:id, :name]){ |s|
           "#{"%6d" % s[0]} - #{s[1]}"
         }
       end
@@ -110,7 +110,7 @@ class UserlevelAuthor < ActiveRecord::Base
       return p.first
     else
       perror("Too many author matches! (#{p.count}). Please refine author name.") if !event
-      pager(event, page, header: multiple, list: p, pluck: [:id, :name]){ |s|
+      pager(event, page, header: multiple, list: p, rails: true, pluck: [:id, :name]){ |s|
         "#{"%6d" % s[0]} - #{s[1]}"
       }
     end

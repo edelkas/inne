@@ -2806,6 +2806,14 @@ rescue => e
   lex(e, 'Failed to send outte status.', event: event)
 end
 
+def send_logs(event, page: nil)
+  pager(
+    event, page, header: "Logs", func: 'send_logs',
+    list: File.readlines(PATH_LOG_FILE).reverse.map(&:chomp)
+  )
+end
+
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -2867,6 +2875,7 @@ def respond_special(event)
   return send_sql_status(event)          if cmd == 'sql_status'
   return send_sql_list(event)            if cmd == 'sql_list'
   return send_tasks(event)               if cmd == 'tasks'
+  return send_logs(event)                if cmd == 'log'
 
   $status[:special_commands] -= 1
   event << "Unsupported special command."

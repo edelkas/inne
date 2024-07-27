@@ -66,7 +66,7 @@ end
 # Given a list, page through it by sending messages to Discord with only
 # a page of it (of given offset and length), together with buttons to
 # navigate the pages interactively.
-def pager(event, page, header: "Results", list: [], size: PAGE_SIZE, rails: true, pluck: [])
+def pager(event, page, header: "Results", list: [], size: PAGE_SIZE, rails: false, pluck: [], func: nil)
   # Format header
   page = parse_page(parse_message(event), page, false, event.message.components)
   pag = compute_pages(list.count, page)
@@ -81,7 +81,7 @@ def pager(event, page, header: "Results", list: [], size: PAGE_SIZE, rails: true
 
   # Send message with buttons
   view = Discordrb::Webhooks::View.new
-  interaction_add_button_navigation(view, pag[:page], pag[:pages]) unless pag[:pages] == 1
+  interaction_add_button_navigation(view, pag[:page], pag[:pages], func: func) unless pag[:pages] == 1
   send_message(event, content: header, components: view)
   perror
 end

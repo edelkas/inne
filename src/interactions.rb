@@ -151,17 +151,17 @@ ensure
 end
 
 # ActionRow builder with Buttons for standard page navigation
-def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000)
+def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000, func: nil)
   interaction_add_navigation(
     view,
     labels:   ["❙❮", "❮", "#{page} / #{pages}", "❯", "❯❙"],
     disabled: [page == 1, page == 1, true, page == pages, page == pages],
     ids:      [
-      "button:nav:#{-offset}",
-      "button:nav:-1",
+      "button:nav:#{-offset}#{func ? ':' + func : ''}",
+      "button:nav:-1#{func ? ':' + func : ''}",
       "button:nav:page",
-      "button:nav:1",
-      "button:nav:#{offset}"
+      "button:nav:1#{func ? ':' + func : ''}",
+      "button:nav:#{offset}#{func ? ':' + func : ''}"
     ]
   )
 end
@@ -388,8 +388,10 @@ def respond_interaction_button(event)
   type = parse_message(event)[/\w+/i].downcase # Source message type
   return if keys[0] != 'button'                # Only listen to buttons
 
-  # If it's a refresh button, we simply resend the exact same command, editing the old one
-  return send(keys[2], event) if keys[1] == 'refresh' && !!keys[2]
+  # If it's a refresh button or a pager, we simply resend the exact same command,
+  # editing the old one
+  return send(keys[2], event)                if keys[1] == 'refresh' && !!keys[2]
+  return send(keys[3], event, page: keys[2]) if keys[1] == 'nav'     && !!keys[3]
 
   # Otherwise, distinguish depending on the source message
   case type
