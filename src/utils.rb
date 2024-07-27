@@ -676,6 +676,61 @@ def remove_command(msg)
   msg.sub(/^!\w+\s*/i, '').strip
 end
 
+module ANSI
+  # Format
+  NONE      = 0
+  BOLD      = 1
+  UNDERLINE = 4
+
+  # Text colors
+  BLACK   = 30
+  RED     = 31
+  GREEN   = 32
+  YELLOW  = 33
+  BLUE    = 34
+  MAGENTA = 35
+  CYAN    = 36
+  WHITE   = 37
+
+  # Background colors
+  BLACK_BG   = 40
+  RED_BG     = 41
+  GREEN_BG   = 42
+  YELLOW_BG  = 43
+  BLUE_BG    = 44
+  MAGENTA_BG = 45
+  CYAN_BG    = 46
+  WHITE_BG   = 47
+
+  def self.esc(num)
+    "\x1B[#{num}m"
+  end
+
+  def self.format(str, bold: false, underlined: false, fg: nil, bg: nil)
+    return str if !bold && !underlined && !fg && !bg
+    str.prepend(esc(BOLD))      if bold
+    str.prepend(esc(UNDERLINE)) if underlined
+    str.prepend(esc(fg))        if fg
+    str.prepend(esc(bg))        if bg
+    str << esc(NONE)
+    str
+  end
+
+end
+
+# Format Markdown text
+def mdt(str, header: 0, url: nil)
+  # Header stuff
+  str.prepend(' ') unless header == 0
+  str.prepend('#' * header.abs)
+  str.prepend('-') if header < 0
+
+  # URL stuff
+  str = "[#{str}](#{url})" if url
+
+  str
+end
+
 # Function to pad (and possibly truncate) a string according to different
 # padding methods, determined by the constants defined at the start.
 # It's a general function, but with a boolean we specify if we're formatting
@@ -1030,7 +1085,7 @@ end
 def format_block(str)
   str = str.to_s.gsub('```', '')
   str = ' ' if str.empty?
-  "```\n#{str}```"
+  "```ansi\n#{str}```"
 end
 
 # Format a string as a spoiler, by enclosing it within double vertical bars.

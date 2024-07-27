@@ -102,7 +102,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   ties  = !ties.nil? ? ties : parse_ties(msg, rtype)
   play  = parse_many_players(msg)
   nav   = parse_nav(msg) || !initial
-  full  = parse_global(msg) || parse_full(msg) || nav
+  full  = parse_full(msg) || nav
   cool  = !rtype.nil? && parse_cool(rtype) || rtype.nil? && parse_cool(msg)
   star  = !rtype.nil? && parse_star(rtype, false, true) || rtype.nil? && parse_star(msg)
   maxed = !rtype.nil? && parse_maxed(rtype) || rtype.nil? && parse_maxed(msg)
@@ -209,7 +209,11 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   pag  = compute_pages(rank.size, page, pagesize)
 
   # FORMAT message
-  min = "Minimum number of scores required: #{min_scores(type, tabs, !initial, range[0], range[1], star, mappack)}" if ['average_rank', 'average_point'].include?(rtype)
+  if ['average_rank', 'average_point'].include?(rtype)
+    min_scores = min_scores(type, tabs, !initial, range[0], range[1], star, mappack)
+    subtext = "Minimum number of scores required: #{min_scores}"
+    min = mdt(subtext, header: -1)
+  end
   # --- Header
   no_range = [ # Don't print range for these rankings
     'tied_top1',
@@ -264,7 +268,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     rank = format_block(rank)
   end
   # --- Footer
-  rank.concat(min) if !min.nil? && (!full || nav)
+  rank.concat("\n" + min) if !min.nil? && (!full || nav)
 
   # SEND message
   if nav
@@ -1922,7 +1926,25 @@ rescue => e
 end
 
 def send_test(event)
-  Scheduler.list.find{ |job| !!job.task.name[/test/i] }.stop
+end
+
+def send_color_test(event)
+  fg_colors = [
+    nil,
+    ANSI::BLACK, ANSI::RED,     ANSI::GREEN, ANSI::YELLOW,
+    ANSI::BLUE,  ANSI::MAGENTA, ANSI::CYAN,  ANSI::WHITE
+  ]
+  bg_colors = [
+    nil,
+    ANSI::BLACK_BG, ANSI::RED_BG,     ANSI::GREEN_BG, ANSI::YELLOW_BG,
+    ANSI::BLUE_BG,  ANSI::MAGENTA_BG, ANSI::CYAN_BG,  ANSI::WHITE_BG
+  ]
+  res = fg_colors.map{ |fg|
+    bg_colors.map{ |bg|
+      ANSI.format("TEST", bold: true, fg: fg, bg: bg)
+    }.join(' ')
+  }.join("\n")
+  event << format_block(res)
 end
 
 def send_reaction(event)
@@ -2806,11 +2828,18 @@ rescue => e
   lex(e, 'Failed to send outte status.', event: event)
 end
 
+# TODO: only add formatting to necessary lines. we can do this by extracting the
+# part that filters the lines out of the pager to a different function, and using
+# it here
 def send_logs(event, page: nil)
-  pager(
-    event, page, header: "Logs", func: 'send_logs',
-    list: File.readlines(PATH_LOG_FILE).reverse.map(&:chomp)
-  )
+  lines = File.readlines(PATH_LOG_FILE).reverse.map{ |l|
+    next nil if l.length <= 34
+    l.insert(33, ANSI.esc(ANSI::NONE))
+     .insert(25, ANSI.esc(ANSI::MAGENTA))
+     .prepend(ANSI.esc(ANSI::YELLOW))
+     .chomp
+  }.compact
+  pager(event, page, header: "Logs", func: 'send_logs', list: lines)
 end
 
 
@@ -2854,6 +2883,7 @@ def respond_special(event)
   return send_shutdown(event)            if cmd == 'shutdown'
   return send_shutdown(event, true)      if cmd == 'kill'
   return send_test(event)                if cmd == 'test'
+  return send_color_test(event)          if cmd == 'test_color'
   return send_gold_check(event)          if cmd == 'gold_check'
   return fill_gold_counts(event)         if cmd == 'fill_gold'
   return send_hash(event)                if cmd == 'hash'
