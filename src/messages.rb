@@ -102,7 +102,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   ties  = !ties.nil? ? ties : parse_ties(msg, rtype)
   play  = parse_many_players(msg)
   nav   = parse_nav(msg) || !initial
-  full  = parse_full(msg) || nav
+  full  = !!msg[/global/i] || parse_full(msg) || nav
   cool  = !rtype.nil? && parse_cool(rtype) || rtype.nil? && parse_cool(msg)
   star  = !rtype.nil? && parse_star(rtype, false, true) || rtype.nil? && parse_star(msg)
   maxed = !rtype.nil? && parse_maxed(rtype) || rtype.nil? && parse_maxed(msg)
@@ -209,10 +209,10 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   pag  = compute_pages(rank.size, page, pagesize)
 
   # FORMAT message
+  min = ''
   if ['average_rank', 'average_point'].include?(rtype)
     min_scores = min_scores(type, tabs, !initial, range[0], range[1], star, mappack)
-    subtext = "Minimum number of scores required: #{min_scores}"
-    min = mdt(subtext, header: -1)
+    min = " Min. scores: #{min_scores}."
   end
   # --- Header
   no_range = [ # Don't print range for these rankings
@@ -242,13 +242,15 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   range   = no_range ? '' : format_range(range[0], range[1])
   star    = format_star(star)
   rtypeB  = format_rtype(rtype, ties: ties, range: false, basic: true)
-  max     = format_max(max, use_min)
+  max     = format_max(max, use_min, bd: false)
   board   = !mappack.nil? && !no_board ? format_board(board) : ''
   mappack = format_mappack(mappack)
   play    = !play.empty? ? ' without ' + play.map{ |p| "#{verbatim(p.print_name)}" }.to_sentence : ''
   header  = "#{fullB} #{cool} #{maxed} #{maxable} #{board} #{tabs} #{typeB}"
-  header << " #{range}#{star} #{rtypeB} #{mappack} #{max} #{play} #{format_time}"
-  header  = "Rankings - #{format_header(header)}"
+  header << " #{range}#{star} #{rtypeB} #{mappack} #{play}"
+  header  = mdtext("Rankings - #{format_header(header, close: '')}", header: 2)
+  footer  = mdtext("#{max}. Date: #{format_time(long: false, prep: false)}.#{min}", header: -1)
+  header += "\n" + footer unless footer.empty?
   # --- Rankings
   if rank.empty?
     rank  = format_block('These boards are empty!')
@@ -261,14 +263,17 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     pad3  = rank.map{ |r| r[2].to_i.to_s.length }.max
     fmt   = rank[0][1].is_a?(Integer) ? "%#{pad1}d" : "%#{pad1 + 4}.3f"
     rank  = rank.each_with_index.map{ |r, i|
-      line = "#{Highscoreable.format_rank(pag[:offset] + i)}: #{format_string(r[0], pad2)} - #{fmt % r[1]}"
+      rankf = Highscoreable.format_rank(pag[:offset] + i)
+      rankf = ANSI.red + rankf + ANSI.reset if RICH_RANKINGS
+      namef = format_string(r[0], pad2)
+      namef = ANSI.blue + namef + ANSI.reset if RICH_RANKINGS
+      scoref = fmt % r[1]
+      scoref = ANSI.green + scoref + ANSI.reset if RICH_RANKINGS
+      line = "#{rankf}: #{namef} - #{scoref}"
       line += " (%#{pad3}d)" % [r[2]] if !r[2].nil?
       line
     }.join("\n")
-    rank = format_block(rank)
   end
-  # --- Footer
-  rank.concat("\n" + min) if !min.nil? && (!full || nav)
 
   # SEND message
   if nav
@@ -277,10 +282,10 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     interaction_add_type_buttons(view, type, ties)
     interaction_add_select_menu_rtype(view, rtype)
     interaction_add_select_menu_metanet_tab(view, tab)
-    send_message(event, content: header + "\n" + rank, components: view)
+    send_message(event, content: header + "\n" + format_block(rank), components: view)
   else
     event << header
-    count <= 20 ? event << rank : send_file(event, rank[4..-4], 'rankings.txt')
+    count <= 20 ? event << format_block(rank) : send_file(event, rank, 'rankings.txt')
   end
 rescue => e
   lex(e, 'Failed to perform the rankings.', event: event)

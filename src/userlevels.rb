@@ -1146,7 +1146,7 @@ def send_userlevel_scores(event)
     count = map[:query].completions
     header = format_header(output)
     boards = format_block(map[:query].format_scores)
-    footer = count && count > 0 ? "Scores: **#{count}**" : ''
+    footer = count && count >= 20 ? "Scores: **#{count}**" : ''
     event << header + boards + footer
   }
 rescue => e

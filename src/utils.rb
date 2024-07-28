@@ -678,9 +678,9 @@ end
 
 module ANSI
   # Format
-  NONE      = 0
-  BOLD      = 1
-  UNDERLINE = 4
+  NONE  = 0
+  BOLD  = 1
+  UNDER = 4
 
   # Text colors
   BLACK   = 30
@@ -708,18 +708,35 @@ module ANSI
 
   def self.format(str, bold: false, underlined: false, fg: nil, bg: nil)
     return str if !bold && !underlined && !fg && !bg
-    str.prepend(esc(BOLD))      if bold
-    str.prepend(esc(UNDERLINE)) if underlined
-    str.prepend(esc(fg))        if fg
-    str.prepend(esc(bg))        if bg
+    str.prepend(esc(BOLD))  if bold
+    str.prepend(esc(UNDER)) if underlined
+    str.prepend(esc(fg))    if fg
+    str.prepend(esc(bg))    if bg
     str << esc(NONE)
     str
   end
 
+  # Format code shortcuts
+  def self.none()    esc(NONE)    end
+  def self.clear()   esc(NONE)    end
+  def self.reset()   esc(NONE)    end
+  def self.bold()    esc(BOLD)    end
+  def self.under()   esc(UNDER)   end
+
+  # Color code shortcuts
+  def self.black()   esc(BLACK)   end
+  def self.red()     esc(RED)     end
+  def self.green()   esc(GREEN)   end
+  def self.yellow()  esc(YELLOW)  end
+  def self.blue()    esc(BLUE)    end
+  def self.magenta() esc(MAGENTA) end
+  def self.cyan()    esc(CYAN)    end
+  def self.white()   esc(WHITE)   end
+
 end
 
 # Format Markdown text
-def mdt(str, header: 0, url: nil)
+def mdtext(str, header: 0, url: nil)
   # Header stuff
   str.prepend(' ') unless header == 0
   str.prepend('#' * header.abs)

@@ -3,6 +3,7 @@
 *.sql
 .byebug_history
 Gemfile.lock
+/.ruby-lsp
 /**/__pycache__
 /logs
 /sorbet

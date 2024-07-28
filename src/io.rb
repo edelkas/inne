@@ -1033,7 +1033,7 @@ def format_rtype(rtype, range: true, rank: nil, ties: false, basic: false)
   end
   rtype = rtype.gsub('top1', '0th').gsub('star', '*').tr('_', ' ')
   rtype.remove!('cool', '*', 'maxed', 'maxable') if basic
-  "#{rtype} rankings #{format_ties(ties)}".squish
+  "#{rtype} scores #{format_ties(ties)}".squish
 end
 
 def format_bottom_rank(rank)
@@ -1141,8 +1141,10 @@ def format_tabs(tabs)
   tabs.map { |t| format_tab(t) }.to_sentence
 end
 
-def format_time
-  Time.now.strftime("on %A %B %-d at %H:%M:%S (%z)")
+def format_time(long: true, prep: true)
+  str = long ? '%A %B %-d at %H:%M:%S (%z)' : '%b %d, %Y (%H:%M)'
+  str.prepend('on ') if prep
+  Time.now.strftime(str)
 end
 
 def format_global(full)
@@ -1153,8 +1155,13 @@ def format_full(full)
   full ? 'full' : ''
 end
 
-def format_max(max, min = false)
-  !max.nil? ? " [#{min ? 'MIN' : 'MAX'}. #{(max.is_a?(Integer) ? "%d" : "%.3f") % max}]" : ''
+def format_max(n, min = false, bd: true)
+  return '' if !n
+  str = min ? 'MIN' : 'MAX'
+  num = (n.is_a?(Integer) ? "%d" : "%.3f") % n
+  str = "#{str}: #{num}"
+  str = "[#{str}]" if bd
+  str
 end
 
 def format_author(author)
@@ -1228,7 +1235,7 @@ end
 def format_header(header, close: ':', upcase: true)
   header.squish!
   header[0] = header[0].upcase if upcase
-  header += close
+  header += close if close
 end
 
 def tmp_filename(name)

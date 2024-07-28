@@ -82,6 +82,9 @@ DISCORD_FILE_LIMIT     = 25 * 1000 ** 2      # Attachment size limit
 DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
 CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 
+# Colors
+RICH_RANKINGS = true
+
 # Non-standard character widths in the monospaced font (for padding adjustments)
 WIDTH_EMOJI = 2
 WIDTH_KANJI = 1.67
