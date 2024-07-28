@@ -158,7 +158,6 @@ class Job
     @thread = Thread.new do
       while true
         sleep(WAIT)
-        now = Time.now
 
         # If a start time has been provided, parse it. Otherwise, start now.
         if @time.is_a?(String)
@@ -167,15 +166,14 @@ class Job
             GlobalProperty.set_next_update(@time, start)
             start
           end
-        elsif @time.is_a?(Time)
-          start = @time
         else
-          @time = now
-          start = now
+          @time = Time.now unless @time.is_a?(Time)
+          start = @time
         end
 
         # Suspend thread until it's time to run the task
         @date_next = start
+        now = Time.now
         sleep(start - now) unless start <= now
         @task.run
 
