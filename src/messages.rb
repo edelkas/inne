@@ -240,20 +240,21 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   tabs    = format_tabs(tabs)
   typeB   = format_type(type, true).downcase
   range   = no_range ? '' : format_range(range[0], range[1])
-  star    = format_star(star)
-  rtypeB  = format_rtype(rtype, ties: ties, range: false, basic: true)
-  max     = format_max(max, use_min, bd: false)
+  star    = format_star(star, long: true)
+  rtypeB  = format_rtype(rtype, range: false, basic: true)
+  max     = max ? format_max(max, use_min, bd: false) + '. ' : ''
   board   = !mappack.nil? && !no_board ? format_board(board) : ''
   mappack = format_mappack(mappack)
   play    = !play.empty? ? ' without ' + play.map{ |p| "#{verbatim(p.print_name)}" }.to_sentence : ''
-  header  = "#{fullB} #{cool} #{maxed} #{maxable} #{board} #{tabs} #{typeB}"
-  header << " #{range}#{star} #{rtypeB} #{mappack} #{play}"
+  header  = "#{fullB} #{cool} #{maxed} #{maxable} #{board} #{tabs} #{typeB} #{range} #{rtypeB} s"
+  header.sub!(/\s+s$/, 's')
+  header << " #{format_ties(ties)} #{mappack} #{play}"
   header  = mdtext("Rankings - #{format_header(header, close: '')}", header: 2)
-  footer  = mdtext("#{max}. Date: #{format_time(long: false, prep: false)}.#{min}", header: -1)
-  header += "\n" + footer unless footer.empty?
+  footer  = mdtext("#{max}Date: #{format_time(long: false, prep: false)}.#{min}", header: -1)
+  #header += "\n" + footer
   # --- Rankings
   if rank.empty?
-    rank  = format_block('These boards are empty!')
+    rank  = 'These boards are empty!'
     count = 0
   else
     rank  = rank[pag[:offset]...pag[:offset] + pagesize] if !full || nav
@@ -264,11 +265,11 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     fmt   = rank[0][1].is_a?(Integer) ? "%#{pad1}d" : "%#{pad1 + 4}.3f"
     rank  = rank.each_with_index.map{ |r, i|
       rankf = Highscoreable.format_rank(pag[:offset] + i)
-      rankf = ANSI.red + rankf + ANSI.reset if RICH_RANKINGS
+      rankf = ANSI.red + rankf + ANSI.reset if RICH_RANKINGS && count <= 20
       namef = format_string(r[0], pad2)
-      namef = ANSI.blue + namef + ANSI.reset if RICH_RANKINGS
+      namef = ANSI.blue + namef + ANSI.reset if RICH_RANKINGS && count <= 20
       scoref = fmt % r[1]
-      scoref = ANSI.green + scoref + ANSI.reset if RICH_RANKINGS
+      scoref = ANSI.green + scoref + ANSI.reset if RICH_RANKINGS && count <= 20
       line = "#{rankf}: #{namef} - #{scoref}"
       line += " (%#{pad3}d)" % [r[2]] if !r[2].nil?
       line
@@ -286,6 +287,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   else
     event << header
     count <= 20 ? event << format_block(rank) : send_file(event, rank, 'rankings.txt')
+    event << "> " + footer
   end
 rescue => e
   lex(e, 'Failed to perform the rankings.', event: event)

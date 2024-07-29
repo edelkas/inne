@@ -671,7 +671,7 @@ def parse_rtype(msg)
     'maxable'
   elsif parse_cool(msg)
     'cool'
-  elsif parse_star(msg)
+  elsif parse_star(msg, true, true)
     'star'
   elsif parse_gp(msg)
     'G++'
@@ -974,7 +974,7 @@ end
 # see parse_cool for 'strict'
 # if 'name' then we accept 'star' for parsing stars as well
 def parse_star(msg, strict = false, name = false)
-  !!msg[/#{strict ? "(\A|\W)" : ""}\*#{strict ? "(\z|\W)" : ""}/i] || name && !!msg[/\bstar\b/i]
+  !!msg[/#{strict ? "(\A|\W)" : ""}\*#{strict ? "(\z|\W)" : ""}/i] || name && !!msg[/\bstars?\b/i]
 end
 
 # Parse type of leaderboard (highscore, speedrun, dual, ...)
@@ -1021,19 +1021,18 @@ end
 # (e.g. Top10 Rankings), unless the 'range' parameter is false.
 # 'range' Includes the range (e.g. Top10) or not
 # 'rank'  Override whatever the rank in the rtype is
-# 'ties'  Adds "w/ ties" or something
 # 'basic' Doesn't print words which are now parameters (e.g. cool)
-def format_rtype(rtype, range: true, rank: nil, ties: false, basic: false)
+def format_rtype(rtype, range: true, rank: nil, basic: false)
   if rtype[0..2] == 'top'
     if range
       rtype = format_rank(rank || rtype[/\d+/i] || 1)
     else
-      rtype = rtype.split('_')[1..-1].join('_') if !range
+      rtype = rtype.split('_')[1..-1].join('_')
     end
   end
-  rtype = rtype.gsub('top1', '0th').gsub('star', '*').tr('_', ' ')
+  rtype = rtype.gsub('top1', '0th').tr('_', ' ')
   rtype.remove!('cool', '*', 'maxed', 'maxable') if basic
-  "#{rtype} scores #{format_ties(ties)}".squish
+  "#{rtype.squish} ".squish
 end
 
 def format_bottom_rank(rank)
@@ -1086,8 +1085,8 @@ def format_cool(cool)
   cool ? 'cool' : ''
 end
 
-def format_star(star)
-  star ? '*' : ''
+def format_star(star, long: false)
+  star ? (long ? 'star' : '*') : ''
 end
 
 def format_maxed(maxed)
@@ -1232,7 +1231,7 @@ def format_level_matches(event, msg, page, matches, name)
 end
 
 # Header of outte messages
-def format_header(header, close: ':', upcase: true)
+def format_header(header, close: ':', upcase: true, rich: false)
   header.squish!
   header[0] = header[0].upcase if upcase
   header += close if close
