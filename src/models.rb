@@ -955,16 +955,26 @@ module Highscoreable
           score = c[:score] > 0 ? '+' : '-'
           fmt = c[:score].is_a?(Integer) ? 'd' : '.3f'
           score += "%#{change_padding}#{fmt}" % [c[:score].abs]
-          diff = rank
+          diff = ''
+          diff += ANSI.bold if RICH_DIFFS
+          diff += c[:rank] > 0 ? ANSI.green : c[:rank] < 0 ? ANSI.red : '' if RICH_DIFFS
+          diff += rank
+          diff += ANSI.reset if RICH_DIFFS && c[:rank] != 0
           if diff_score
-            diff += c[:score].abs > 0.01 ? ' ' + score : ' ' * (change_padding + 2)
+            improved = c[:score].abs > 0.01
+            diff += ANSI.green if RICH_DIFFS && improved
+            diff += improved ? ' ' + score : ' ' * (change_padding + 2)
+            diff += ANSI.reset if RICH_DIFFS && improved
           end
         end
       else
-        diff = '❗' + ' ' * rank_padding
+        diff = RICH_DIFFS ? ANSI.bold : ''
+        diff += RICH_DIFFS ? '!' * (rank_padding + 1) : '❗' + ' ' * rank_padding
         diff += ' ' * (change_padding + 2) if diff_score
       end
-      "#{o[:score].format(name_padding, score_padding, false, board, i)} #{diff}"
+      str = "#{o[:score].format(name_padding, score_padding, false, board, i)} #{diff}"
+      str = ANSI.green + str + ANSI.reset if !c && RICH_DIFFS
+      str
     }
   rescue
     []
