@@ -1375,7 +1375,7 @@ def send_splits(event)
         map = !l.is_a?(Map) ? MappackLevel.find(l.id) : l
         File.binwrite(NTRACE_MAP_DATA_E % i, map.dump_level)
       }
-      shell("python3 #{PATH_NTRACE}")
+      python(PATH_NTRACE)
 
       # Read output files
       file = File.binread(NTRACE_OUTPUT_E) rescue nil

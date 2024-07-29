@@ -1399,7 +1399,7 @@ def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
   end
 
   # Execute ntrace and save output
-  stdout, stderr, status = shell("python3 #{PATH_NTRACE}", output: true)
+  stdout, stderr, status = python(PATH_NTRACE, output: true)
   ret = [stdout, stderr].join("\n\n")
   if splits
     FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
@@ -1827,6 +1827,14 @@ def md5(data, hex: false)
   hex ? hash.unpack('H*')[0] : hash
 rescue => e
   lex(e, 'Failed to compute MD5 hash')
+  nil
+end
+
+# Execute a python script
+def python(cmd, stream: LOG_SHELL, output: false)
+  shell("python3 #{cmd}", stream: stream, output: output)
+rescue => e
+  lex(e, "Failed to run Python script.")
   nil
 end
 
