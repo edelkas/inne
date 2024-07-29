@@ -233,7 +233,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     board == 'sr' && rtype == 'score',
     rtype == 'G--'
   ].any?
-  fullB   = format_full(full)
+  fullB   = format_full(nav ? false : full)
   cool    = format_cool(cool)
   maxed   = format_maxed(maxed)
   maxable = format_maxable(maxable)
@@ -1987,7 +1987,7 @@ def send_mappack_update(event)
   hard = flags.key?(:hard)
   name = "#{hard ? 'hard' : 'soft'} update for mappack #{mappack.code.upcase} v#{version}"
   send_message(event, content: "Performing #{name}.")
-  mappack.read(v: version, hard: hard, discord: true)
+  mappack.read(v: version, hard: hard)
   event << "Finished #{name}."
 rescue => e
   lex(e, "Error updating mappack.", event: event)
