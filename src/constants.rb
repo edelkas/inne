@@ -83,7 +83,7 @@ DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
 CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 
 # Colors in certain functions
-RICH_RANKINGS = false
+RICH_RANKINGS = true
 RICH_DIFFS    = true
 
 # Non-standard character widths in the monospaced font (for padding adjustments)

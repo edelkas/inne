@@ -1167,7 +1167,7 @@ module Map
       p = Gifenc::Geometry.transform([marker_bbox[:center]], bbox)[0]
       image.circle(p, rad, nil, colors[i])
 
-      #Draw input display (inputs are offset by 1 frame)
+      # Draw input display (inputs are offset by 1 frame)
       next if !(input = marker_bbox[:input])
       w = ANIMATION_WEDGE_WIDTH
       h = ANIMATION_WEDGE_HEIGHT - 1
