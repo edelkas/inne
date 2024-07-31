@@ -69,7 +69,7 @@ end
 #   - 3 outputs (terminal, file and Discord DMs)
 #   - Both raw and rich format (colored, unicode, etc)
 #   - Methods to config it on the fly from Discord
-module Log
+module Log extend self
 
   MODES = {
     fatal: { long: 'FATAL', short: 'F', fmt: "\x1B[41m" }, # Red background
@@ -98,15 +98,15 @@ module Log
   @modes = LEVELS[LOG_LEVEL] || LEVELS[:normal]
   @modes_file = LEVELS[LOG_LEVEL_FILE] || LEVELS[:quiet]
 
-  def self.fmt(str, mode)
+  def fmt(str, mode)
     "#{MODES[mode][:fmt]}#{str}#{RESET}"
   end
 
-  def self.bold(str)
+  def bold(str)
     "#{BOLD}#{str}#{RESET}"
   end
 
-  def self.level(l)
+  def level(l)
    return dbg("Logging level #{l} does not exist") if !LEVELS.key?(l)
     @modes = LEVELS[l]
     dbg("Changed logging level to #{l.to_s}")
@@ -114,21 +114,21 @@ module Log
     dbg("Failed to change logging level")
   end
 
-  def self.fancy
+  def fancy
     @fancy = !@fancy
     @fancy ? dbg("Enabled fancy logs") : dbg("Disabled fancy logs")
   rescue
     dbg("Failed to change logging fanciness")
   end
 
-  def self.set_modes(modes)
+  def set_modes(modes)
     @modes = modes.select{ |m| MODES.key?(m) }
     dbg("Set logging modes to #{@modes.join(', ')}.")
   rescue
     dbg("Failed to set logging modes")
   end
 
-  def self.change_modes(modes)
+  def change_modes(modes)
     added = []
     removed = []
     modes.each{ |m|
@@ -149,12 +149,12 @@ module Log
     dbg("Failed to change logging modes")
   end
 
-  def self.modes
+  def modes
     @modes
   end
 
   # Main function to log text
-  def self.write(
+  def write(
     text,            # The text to log
     mode,            # The type of log (info, error, debug, etc)
     app = 'BOT',     # The origin of the log (outte, discordrb, webrick, etc)
@@ -250,7 +250,7 @@ module Log
   end
 
   # Handle exceptions
-  def self.exception(e, msg = '', **kwargs)
+  def exception(e, msg = '', **kwargs)
     write(msg, :error, **kwargs)
     write(e.message, :error)
     write(e.backtrace.join("\n"), :debug) if LOG_BACKTRACES
@@ -259,12 +259,12 @@ module Log
   end
 
   # Send DM to botmaster
-  def self.discord(msg)
+  def discord(msg)
     send_message(botmaster.pm, content: msg) if LOG_TO_DISCORD rescue nil
   end
 
   # Clear the current terminal line
-  def self.clear
+  def clear
     write(' ' * LOG_PAD, :info, newline: false, pad: true)
   end
 end
@@ -676,7 +676,7 @@ def remove_command(msg)
   msg.sub(/^!\w+\s*/i, '').strip
 end
 
-module ANSI
+module ANSI extend self
   # Format
   NONE  = 0
   BOLD  = 1
@@ -702,11 +702,11 @@ module ANSI
   CYAN_BG    = 46
   WHITE_BG   = 47
 
-  def self.esc(num)
+  def esc(num)
     "\x1B[#{num}m"
   end
 
-  def self.format(str, bold: false, underlined: false, fg: nil, bg: nil)
+  def format(str, bold: false, underlined: false, fg: nil, bg: nil)
     return str if !bold && !underlined && !fg && !bg
     str.prepend(esc(BOLD))  if bold
     str.prepend(esc(UNDER)) if underlined
@@ -717,21 +717,28 @@ module ANSI
   end
 
   # Format code shortcuts
-  def self.none()    esc(NONE)    end
-  def self.clear()   esc(NONE)    end
-  def self.reset()   esc(NONE)    end
-  def self.bold()    esc(BOLD)    end
-  def self.under()   esc(UNDER)   end
+  def none()    esc(NONE)    end
+  def bold()    esc(BOLD)    end
+  def under()   esc(UNDER)   end
+  alias_method :clear, :none
+  alias_method :reset, :none
 
-  # Color code shortcuts
-  def self.black()   esc(BLACK)   end
-  def self.red()     esc(RED)     end
-  def self.green()   esc(GREEN)   end
-  def self.yellow()  esc(YELLOW)  end
-  def self.blue()    esc(BLUE)    end
-  def self.magenta() esc(MAGENTA) end
-  def self.cyan()    esc(CYAN)    end
-  def self.white()   esc(WHITE)   end
+  # Basic color code shortcuts
+  def black()   esc(BLACK)   end
+  def red()     esc(RED)     end
+  def green()   esc(GREEN)   end
+  def yellow()  esc(YELLOW)  end
+  def blue()    esc(BLUE)    end
+  def magenta() esc(MAGENTA) end
+  def cyan()    esc(CYAN)    end
+  def white()   esc(WHITE)   end
+
+  # Other color shortcuts
+  alias_method :good,  :green
+  alias_method :bad,   :red
+  alias_method :alert, :yellow
+  def bool(b) b ? good : bad end
+  def tri(n) n > 0 ? good : n < 0 ? bad : none end
 
 end
 

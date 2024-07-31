@@ -925,6 +925,56 @@ module Highscoreable
     end
   end
 
+  # Given the changes in a leaderboard, format the suffix for each line, containing
+  # the change in rank and score, with colors if RICH_DIFFS is true.
+  # c          - The change for this player, in the format given by "difference"
+  # diff       - The output string, modified in place
+  # diff_score - Include score change in the suffix (not used for dual boards)
+  # pad_rank   - Length of rank change number
+  # pad_change - Length of score change number
+  # inc        - Whether higher scores are better, for coloring
+  def self.format_diff_change(c, diff, diff_score, pad_rank, pad_change, inc = true)
+    # Score is brand new
+    if !c
+      diff << ANSI.alert + ANSI.bold if RICH_DIFFS
+      diff << 'NEW'
+      diff << ' ' * (pad_change + 2) if diff_score
+      diff << ANSI.reset if RICH_DIFFS
+      return ANSI.alert
+    end
+
+    # Nothing changed (neither rank nor score)
+    if c[:score].abs < 0.01 && c[:rank] == 0
+      diff << '━'
+      diff << ' ' * pad_rank
+      diff << ' ' * (pad_change + 2) if diff_score
+      return ANSI.none
+    end
+
+    # Format rank change
+    rank = "━▲▼"[c[:rank] <=> 0]
+    rank << (c[:rank] != 0 ? "%-#{pad_rank}d" % [c[:rank].abs] : ' ' * pad_rank)
+    diff << (c[:rank] > 0 ? ANSI.good : c[:rank] < 0 ? ANSI.bad : '') if RICH_DIFFS
+    diff << rank
+    diff << ANSI.reset if RICH_DIFFS && c[:rank] != 0
+
+    # Determine score color
+    better = inc && c[:score] >  0.01 || !inc && c[:score] < -0.01
+    worse  = inc && c[:score] < -0.01 || !inc && c[:score] >  0.01
+    color  = better ? ANSI.good : worse ? ANSI.bad : ANSI.none
+    return color unless diff_score
+
+    # Format score change (optional, we don't use it in dual boards)
+    fmt = c[:score].is_a?(Integer) ? 'd' : '.3f'
+    score = "(%+#{pad_change + 1}#{fmt})" % c[:score]
+    changed = better || worse
+    diff << color if RICH_DIFFS && changed
+    diff << (changed ? ' ' + score : ' ' * (pad_change + 2))
+    diff << ANSI.reset if RICH_DIFFS && changed
+
+    color
+  end
+
   # Format Top20 changes between the current boards and 'old' for a single board (e.g. hs / sr)
   #   diff_score : Show score changes
   #   empty      : Return an empty array if there are no differences
@@ -932,57 +982,21 @@ module Highscoreable
     difffs = difference(old, board)
     return [] if empty && difffs.all?{ |d| !d[:change].nil? && d[:change][:score].abs < 0.01 && d[:change][:rank] == 0 }
 
-    hs = board == 'hs' || !is_mappack?
-    sr = board == 'sr'
     boards = leaderboard(board, pluck: false)
     sfield = is_mappack? ? "score_#{board}" : 'score'
-    scale  = is_mappack? && hs ? 60.0 : 1
-    offset = is_mappack? && sr ? 0 : 4
+    scale  = is_mappack? && board == 'hs' ? 60.0 : 1
+    offset = is_mappack? && board == 'sr' ? 0 : 4
 
-    name_padding   = boards.map{ |s| s.player.print_name.length }.max
-    score_padding  = boards.map{ |s| (s[sfield] / scale).abs.to_i }.max.to_s.length + offset
-    rank_padding   = [difffs.map{ |d| d[:change] }.compact.map{ |c| c[:rank].abs.to_i  }.max.to_s.length, 2].max
-    change_padding = difffs.map{ |d| d[:change] }.compact.map{ |c| c[:score].abs.to_i }.max.to_s.length + offset
+    pad_name   = boards.map{ |s| s.player.print_name.length }.max
+    pad_score  = boards.map{ |s| (s[sfield] / scale).abs.to_i }.max.to_s.length + offset
+    pad_rank   = [difffs.map{ |d| d[:change] }.compact.map{ |c| c[:rank].abs.to_i  }.max.to_s.length, 2].max
+    pad_change = difffs.map{ |d| d[:change] }.compact.map{ |c| c[:score].abs.to_i }.max.to_s.length + offset
 
     difffs.each_with_index.map{ |o, i|
       c = o[:change]
-      color = ANSI.none
-      if c
-        if c[:score].abs < 0.01 && c[:rank] == 0 # Rank and score didn't change
-          diff = '━'
-          diff += ' ' * rank_padding
-          diff += ' ' * (change_padding + 2) if diff_score
-        else # Either score or rank, or both, changed
-          rank   = "━▲▼"[c[:rank] <=> 0]
-          rank  += c[:rank] != 0 ? "%-#{rank_padding}d" % [c[:rank].abs] : ' ' * rank_padding
-          score  = c[:score] > 0 ? '+' : '-'
-          fmt    = c[:score].is_a?(Integer) ? 'd' : '.3f'
-          score += "%#{change_padding}#{fmt}" % [c[:score].abs]
-
-          # Format rank change
-          diff = ''
-          diff += c[:rank] > 0 ? ANSI.green : c[:rank] < 0 ? ANSI.red : '' if RICH_DIFFS
-          diff += rank
-          diff += ANSI.reset if RICH_DIFFS && c[:rank] != 0
-          color = hs && c[:score] > 0.01 || sr && c[:score] < -0.01 ? ANSI.green : hs && c[:score] < -0.01 || sr && c[:score] > 0.01  ? ANSI.red : ANSI.none
-
-          # Score change is optional (we don't use it in dual boards)
-          if diff_score
-            changed = c[:score].abs > 0.01
-            diff += color if RICH_DIFFS && changed
-            diff += changed ? ' ' + score : ' ' * (change_padding + 2)
-            diff += ANSI.reset if RICH_DIFFS && changed
-          end
-        end
-      else
-        color = ANSI.yellow
-        diff = RICH_DIFFS ? ANSI.yellow + ANSI.bold : ''
-        #diff += RICH_DIFFS ? '!' * (rank_padding + 1) : '❗' + ' ' * rank_padding
-        diff += 'NEW'
-        diff += ' ' * (change_padding + 2) if diff_score
-        diff += ANSI.reset if RICH_DIFFS
-      end
-      score = o[:score].format(name_padding, score_padding, false, board, i)
+      diff = ''
+      score = o[:score].format(pad_name, pad_score, false, board, i)
+      color = Highscoreable.format_diff_change(c, diff, diff_score, pad_rank, pad_change, board != 'sr')
       score.gsub!(/(\S+)$/, color + '\1' + ANSI.reset) if RICH_DIFFS && !diff_score && color != ANSI.none
       #score = color + score + ANSI.reset if RICH_DIFFS
       "#{score} #{diff}"

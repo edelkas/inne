@@ -1141,9 +1141,9 @@ def format_tabs(tabs)
 end
 
 def format_time(long: true, prep: true)
-  str = long ? '%A %B %-d at %H:%M:%S (%z)' : '%b %d, %Y (%H:%M)'
+  str = long ? '%A %B %-d at %H:%M:%S (%z)' : '%b %d, %Y (%H:%M) UTC'
   str.prepend('on ') if prep
-  Time.now.strftime(str)
+  Time.now.utc.strftime(str)
 end
 
 def format_global(full)
@@ -1158,8 +1158,8 @@ def format_max(n, min = false, bd: true)
   return '' if !n
   str = min ? 'MIN' : 'MAX'
   num = (n.is_a?(Integer) ? "%d" : "%.3f") % n
-  str = "#{str}: #{num}"
-  str = "[#{str}]" if bd
+  str = "__#{str}__: **#{num}**"
+  str = "[#{str}]".tr('_*', '') if bd
   str
 end
 

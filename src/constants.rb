@@ -21,6 +21,7 @@ DEBUG          = false # Breakpoint right after loading the bot
 # Test specific features
 TEST_LOTD      = false # Posts lotd immediately once
 TEST_CTP_LOTD  = false # Posts CTP lotd immediately once
+TEST_UL_REPORT = false # Posts userlevel report immediately once
 BENCH_IMAGES   = false # Benchmark image manipulation steps
 
 # Internal
@@ -83,7 +84,7 @@ DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
 CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 
 # Colors in certain functions
-RICH_RANKINGS = true
+RICH_RANKINGS = false
 RICH_DIFFS    = true
 
 # Non-standard character widths in the monospaced font (for padding adjustments)

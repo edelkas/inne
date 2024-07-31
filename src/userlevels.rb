@@ -277,7 +277,7 @@ class UserlevelHistory < ActiveRecord::Base
       {
         timestamp:  time,
         rank:       rank,
-        player_id:  r[0].id,
+        player_id:  r[0],
         count:      r[1]
       }
     end
@@ -758,11 +758,9 @@ class Userlevel < ActiveRecord::Base
     scores = scores.take(NUM_ENTRIES) if !full
 
     # Find all players in advance (better performance)
-    players = UserlevelPlayer.where(id: scores.map(&:first))
-                    .map{ |p| [p.id, p] }
-                    .to_h
-    scores = scores.map{ |p, c| [players[p], c] }
-    scores.reject!{ |p, c| c <= 0  } unless type == :avg_rank
+    players = UserlevelPlayer.where(id: scores.map(&:first)).pluck(:id, :name).to_h
+    scores = scores.map{ |id, count| [id, count, players[id]] }
+    scores.reject!{ |id, count, name| count <= 0  } unless type == :avg_rank
     bench(:step) if BENCHMARK
 
     scores
@@ -1198,10 +1196,10 @@ def send_userlevel_rankings(event)
   end
 
   score_padding = top.map{ |r| r[1].to_i.to_s.length }.max
-  name_padding  = top.map{ |r| r[0].name.length }.max
+  name_padding  = top.map{ |r| r[2].length }.max
   format        = top[0][1].is_a?(Integer) ? "%#{score_padding}d" : "%#{score_padding + 4}.3f"
   top           = format_block(top.each_with_index.map{ |p, i|
-                    "#{"%02d" % i}: #{format_string(p[0].name, name_padding)} - #{format % p[1]}"
+                    "#{"%02d" % i}: #{format_string(p[2], name_padding)} - #{format % p[1]}"
                   }.join("\n"))
   top.concat("Minimum number of scores required: #{Userlevel.find_min(global, nil, author_id)}") if msg =~ /average/i
 

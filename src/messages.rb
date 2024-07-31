@@ -212,7 +212,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   min = ''
   if ['average_rank', 'average_point'].include?(rtype)
     min_scores = min_scores(type, tabs, !initial, range[0], range[1], star, mappack)
-    min = " Min. scores: #{min_scores}."
+    min = " __Min. scores__: **#{min_scores}**."
   end
   # --- Header
   no_range = [ # Don't print range for these rankings
@@ -250,7 +250,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   header.sub!(/\s+s$/, 's')
   header << " #{format_ties(ties)} #{mappack} #{play}"
   header  = mdtext("Rankings - #{format_header(header, close: '')}", header: 2)
-  footer  = mdtext("#{max}Date: #{format_time(long: false, prep: false)}.#{min}", header: -1)
+  footer  = mdtext("__Date__: #{format_time(long: false, prep: false)}. #{max}#{min}", header: -1)
   #header += "\n" + footer
   # --- Rankings
   if rank.empty?
@@ -286,8 +286,9 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     send_message(event, content: header + "\n" + format_block(rank), components: view)
   else
     event << header
+    event << footer
     count <= 20 ? event << format_block(rank) : send_file(event, rank, 'rankings.txt')
-    event << "> " + footer
+
   end
 rescue => e
   lex(e, 'Failed to perform the rankings.', event: event)

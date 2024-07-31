@@ -15,6 +15,7 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Add special commands to perform highscoring report on command.
 - We should be able to use the Archives to get the diff, and ditch the "saved_scores" rows from GlobalProperties. Ditto for userlevels.
 - Migrate highscoreable_type to integers from 0 to 2.
 - Persist status (bot, sql, etc) into db.

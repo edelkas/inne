@@ -476,25 +476,67 @@ end
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
 def send_userlevel_report
-  if $mapping_channel.nil?
+  while $mapping_channel.nil?
     err("Not connected to a channel, not sending userlevel report")
-    return false
+    sleep(5)
   end
 
-  zeroes = Userlevel.rank(:rank, true, 0)
-                    .each_with_index
-                    .map{ |p, i| "#{"%02d" % i}: #{format_string(p[0].name)} - #{"%3d" % p[1]}" }
-                    .join("\n")
-  points = Userlevel.rank(:points, false, 0)
-                    .each_with_index
-                    .map{ |p, i| "#{"%02d" % i}: #{format_string(p[0].name)} - #{"%3d" % p[1]}" }
-                    .join("\n")
+  # Fetch latest stored rankings
+  last = UserlevelHistory.where('timestamp < ?', Time.now - 12 * 60 * 60)
+                         .order(timestamp: :desc).first.timestamp
+  histories = UserlevelHistory.where(timestamp: last - 3600 .. last)
 
-  send_message($mapping_channel, content: "**Userlevel highscoring update [Newest #{USERLEVEL_REPORT_SIZE} maps]**")
+  # Fetch current and old rankings, compute differences
+  zeroes = Userlevel.rank(:rank, true, 0).map.with_index{ |e, rank| [rank, *e] }
+  zeroes_prev = histories.where(rank: 1)
+                         .order(count: :desc)
+                         .pluck(:player_id, :count)
+                         .map.with_index{ |e, rank| [rank, *e] }
+  diffs = zeroes.map{ |rank, id, count, _|
+    old_rank, _, old_count = zeroes_prev.find{ |_, old_id, _| id == old_id }
+    old_rank ? { rank: old_rank - rank, score: count - old_count } : nil
+  }
+
+  # Find padding and format leaderboard
+  pad_name   = zeroes.map(&:last).map(&:length).max
+  pad_count  = zeroes.map{ |o| o[2].to_s.length }.max
+  pad_rank   = [diffs.compact.map{ |c| c[:rank].abs.to_s.length }.max.to_i, 2].max
+  pad_change = diffs.compact.map{ |c| c[:score].abs.to_s.length }.max.to_i
+  zeroes = zeroes.map.with_index{ |p, i|
+    diff = ''
+    score = "#{"%02d" % i}: #{format_string(p[3], pad_name)} - #{"%#{pad_count}d" % p[2]}"
+    Highscoreable.format_diff_change(diffs[i], diff, true, pad_rank, pad_change)
+    "#{score} #{diff}"
+  }.join("\n")
+
+  # Fetch current and old rankings, compute differences
+  points = Userlevel.rank(:points, false).map.with_index{ |e, rank| [rank, *e] }
+  points_prev = histories.where(rank: -1)
+                         .order(count: :desc)
+                         .pluck(:player_id, :count)
+                         .map.with_index{ |e, rank| [rank, *e] }
+  diffs = points.map{ |rank, id, count, _|
+    old_rank, _, old_count = points_prev.find{ |_, old_id, _| id == old_id }
+    old_rank ? { rank: old_rank - rank, score: count - old_count } : nil
+  }
+
+  # Find padding and format leaderboard
+  pad_name   = points.map(&:last).map(&:length).max
+  pad_count  = points.map{ |o| o[2].to_s.length }.max
+  pad_rank   = [diffs.compact.map{ |c| c[:rank].abs.to_s.length }.max.to_i, 2].max
+  pad_change = diffs.compact.map{ |c| c[:score].abs.to_s.length }.max.to_i
+  points = points.map.with_index{ |p, i|
+    diff = ''
+    score = "#{"%02d" % i}: #{format_string(p[3], pad_name)} - #{"%#{pad_count}d" % p[2]}"
+    Highscoreable.format_diff_change(diffs[i], diff, true, pad_rank, pad_change)
+    "#{score} #{diff}"
+  }.join("\n")
+
+  send_message($mapping_channel, content: mdtext("0th report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2) + "\n" + format_block(zeroes))
   sleep(0.25)
-  send_message($mapping_channel, content: "Userlevel 0th rankings with ties on #{Time.now.to_s}:\n#{format_block(zeroes)}")
-  sleep(0.25)
-  send_message($mapping_channel, content: "Userlevel point rankings on #{Time.now.to_s}:\n#{format_block(points)}")
+  send_message($mapping_channel, content: mdtext("Point report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2) + "\n" + format_block(points))
+
+  #update_userlevel_histories
 end
 
 # Update database scores for Metanet Solo levels, episodes and stories
@@ -762,9 +804,6 @@ def start_metanet_tasks
   # Download scores for newest userlevels daily
   Scheduler.add("Userlevel scores",    freq: USERLEVEL_SCORE_FREQUENCY,   time: 'userlevel_score'  ) { download_userlevel_scores  } if DO_EVERYTHING || UPDATE_USERLEVELS
 
-  # Archive a few userlevel rankings for history daily
-  Scheduler.add("Userlevel histories", freq: USERLEVEL_HISTORY_FREQUENCY, time: 'userlevel_history') { update_userlevel_histories } if DO_EVERYTHING || UPDATE_USER_HIST
-
   # Update userlevels present in each tab (hardest, featured...) daily
   Scheduler.add("Userlevel tabs",      freq: USERLEVEL_TAB_FREQUENCY,     time: 'userlevel_tab'    ) { update_userlevel_tabs      } if DO_EVERYTHING || UPDATE_USER_TABS
 
@@ -794,8 +833,10 @@ def start_discord_tasks
   time = TEST && TEST_CTP_LOTD ? nil : 'ctp_level'
   Scheduler.add("CTP level of the day", freq: freq, time: time) { start_level_of_the_day(true) }
 
-  # Post highscoring report for newest userlevels
-  Scheduler.add("Userlevel report", freq: USERLEVEL_REPORT_FREQUENCY, time: 'userlevel_report') { send_userlevel_report } if DO_EVERYTHING  || REPORT_USERLEVELS
+  # Post highscoring report for newest userlevels, and save histories
+  freq = TEST && TEST_UL_REPORT ? -1 : USERLEVEL_REPORT_FREQUENCY
+  time = TEST && TEST_UL_REPORT ? nil : 'userlevel_report'
+  Scheduler.add("Userlevel report", freq: freq, time: time) { send_userlevel_report } if DO_EVERYTHING  || REPORT_USERLEVELS || TEST_UL_REPORT
 
   # Regularly stun nv2 users with a fruit emoji
   Scheduler.add("Potato", db: false, log: false) { potato } if POTATO
