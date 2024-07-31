@@ -392,10 +392,14 @@ end
 def shutdown(trap: false, force: false)
   log("Shutting down outte...")
 
-  # Stop all background tasks gracefully
-  Scheduler.clear
+  # Stop all background tasks gracefully, unless forcefully killing outte
   if !force && !Scheduler.free?
-    warn("Waiting for background tasks to finish...")
+    _thread do
+      names = Scheduler.list_blocking.map{ |job| job.task.name }.join(", ")
+      warn("Waiting for background tasks to finish (#{names})")
+      sleep(0.5)
+      Scheduler.clear
+    end
     Scheduler.listen(:clear)
   end
 

@@ -20,18 +20,15 @@ require_relative 'models.rb'
 # @name  - Identifier, for logging purposes. If nil, the task won't be logged.
 # @db    - Whether a MySQL database connection is required for this task. In that
 #          case, it will be acquired on start and released on stop.
-# @force - If true, this task will prevent restarting the bot when it's running.
-#          A shutdown can still be forced with Ctrl+C.
 # @log   - Whether to log the task start/end to the terminal.
 # @block - The Proc object containing the code of the task to execute.
 class Task
-  attr_reader :name, :success, :active, :force
+  attr_reader :name, :success, :active
 
-  def initialize(name, db: true, force: true, log: true, &block)
+  def initialize(name, db: true, log: true, &block)
     # Parameters
     @name  = name
     @db    = db
-    @force = force
     @log   = log
     @block = block
 
@@ -74,6 +71,8 @@ class Task
 end
 
 # A job represents a task that is scheduled to be performed regularly or periodically.
+# @force - If true, this job will prevent restarting the bot when it's active.
+#          A shutdown can still be forced with Ctrl+C.
 # @freq  - Frequency of execution in seconds (e.g. daily). 0 means to execute
 #          it constantly, and <0 means to execute it only once. It measures the
 #          time passed between finishing the task and starting again, ignoring
@@ -93,9 +92,10 @@ class Job
     :running  => { order: 0, desc: 'running'  },
   }
 
-  def initialize(task, freq: 0, time: nil, start: true)
+  def initialize(task, force: true, freq: 0, time: nil, start: true)
     # Members
     @task   = task
+    @force  = force
     @freq   = nil
     @time   = nil
     @thread = nil
@@ -104,7 +104,7 @@ class Job
     @date_started = nil
     @date_last    = nil
     @date_next    = nil
-    @should_stop  = false
+    @should_stop  = true
 
     # Schedule and start job
     time = Time.now if !time
@@ -125,7 +125,7 @@ class Job
   end
 
   def free?
-    !@task.active || !@task.force
+    !active? || !@force
   end
 
   # Changes scheduling information
@@ -182,7 +182,7 @@ class Job
           @count += 1
           @date_last = Time.now
         end
-        Scheduler.trigger(:finish)
+        Scheduler.trigger(:stopped)
 
         # Prepare next iteration, if necessary
         break if @should_stop
@@ -192,7 +192,7 @@ class Job
       end
     rescue => e
       lex(e, "Error scheduling job \"#{@task.name}\".")
-      retry
+      retry unless @should_stop
     ensure
       reset
     end
@@ -209,7 +209,8 @@ class Job
   # Try to stop execution of the job gently (waits till task is completed)
   def stop
     return if !running?
-    free? ? kill : @should_stop = true
+    @should_stop = true
+    kill if free?
   end
 
   # Forcefully stops execution of the job, even if task is currently running
@@ -218,6 +219,7 @@ class Job
     reset
     @thread.kill
     @thread = nil
+    Scheduler.trigger(:killed)
   end
 
   # Descriptive status of the job
@@ -254,8 +256,8 @@ module Scheduler extend self
   @@listeners = []
 
   def add(name, freq: 0, time: nil, db: true, force: true, log: true, &block)
-    task = Task.new(name, db: db, force: force, log: log, &block)
-    job = Job.new(task, freq: freq, time: time)
+    task = Task.new(name, db: db, log: log, &block)
+    job = Job.new(task, force: force, freq: freq, time: time)
     @@jobs << job
   end
 
@@ -263,22 +265,25 @@ module Scheduler extend self
   def list()           @@jobs                                end
   def list_scheduled() @@jobs.select{ |job| job.scheduled? } end
   def list_running()   @@jobs.select{ |job| job.running?   } end
-  def list_active ()   @@jobs.select{ |job| job.active?    } end
+  def list_active()    @@jobs.select{ |job| job.active?    } end
+  def list_blocking()  @@jobs.select{ |job| !job.free?     } end
 
   # Counters
   def count()           @@jobs.count                         end
   def count_scheduled() @@jobs.count{ |job| job.scheduled? } end
   def count_running()   @@jobs.count{ |job| job.running?   } end
-  def count_active ()   @@jobs.count{ |job| job.active?    } end
+  def count_active()    @@jobs.count{ |job| job.active?    } end
+  def count_blocking()  @@jobs.count{ |job| !job.free?     } end
 
   # Whether no forced background tasks are active
   def free?
-    @@jobs.count{ |job| !job.free? } == 0
+    @@jobs.all?(&:free?)
   end
 
   # Gracefully stop all jobs
   def clear
     @@jobs.each{ |job| job.stop }
+    broadcast(:clear) if free?
   end
 
   # Forcefully kill all jobs
@@ -306,7 +311,7 @@ module Scheduler extend self
 
     # Test if other events need to be broadcasted
     case event
-    when :finish
+    when :stopped
       broadcast(:clear) if free?
     end
   end

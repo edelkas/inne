@@ -18,10 +18,14 @@ def parse_message(event, clean: true)
   raise "Cannot parse message from a #{event.class.to_s}." if !is_message && !is_component && !is_reaction
 
   # Extract message
+  return '' if !event.message
   msg = event.message.content
   msg = msg.gsub(/```.*```/m, '') if !is_message && clean # Exclude text blocks
 
   msg
+rescue => e
+  lex(e, 'Failed to parse message content')
+  ''
 end
 
 # This is used mainly for page navigation. We determine the current page,
