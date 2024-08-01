@@ -78,8 +78,7 @@ elif tool_mode == "splits":
     with open(RAW_MAP_DATA_4, "rb") as f:
         mdata_list.append([int(b) for b in f.read()])
 
-xposlog = []
-yposlog = []
+poslog = []
 goldlog = []
 frameslog = []
 validlog = []
@@ -119,8 +118,7 @@ for i in range(len(inputs_list)):
             break
 
     #Append to the logs for each replay.
-    xposlog.append(sim.ninja.xposlog)
-    yposlog.append(sim.ninja.yposlog)
+    poslog.append(sim.ninja.poslog)
     entitylog.append(sim.entitylog)
     frameslog.append(inp_len)
     validlog.append(valid)
@@ -143,12 +141,12 @@ for i in range(len(inputs_list)):
 #Plot the route. Only ran in manual mode.
 if tool_mode == "trace" and OUTTE_MODE == False:
     if len(inputs_list) >= 4:
-        mpl.plot(xposlog[3], yposlog[3], "#910A46")
+        mpl.plot([f[1] for f in poslog[3]], [f[2] for f in poslog[3]], "#910A46")
     if len(inputs_list) >= 3:
-        mpl.plot(xposlog[2], yposlog[2], "#4D31AA")
+        mpl.plot([f[1] for f in poslog[2]], [f[2] for f in poslog[2]], "#4D31AA")
     if len(inputs_list) >= 2:
-        mpl.plot(xposlog[1], yposlog[1], "#EADA56")
-    mpl.plot(xposlog[0], yposlog[0], "#000000")
+        mpl.plot([f[1] for f in poslog[1]], [f[2] for f in poslog[1]], "#EADA56")
+    mpl.plot([f[1] for f in poslog[0]], [f[2] for f in poslog[0]], "#000000")
     mpl.axis([0, 1056, 600, 0])
     mpl.axis("off")
     ax = mpl.gca()
@@ -195,10 +193,10 @@ if tool_mode == "trace" and OUTTE_MODE == True:
             for obj in range(objs):
                 f.write(struct.pack('<HBddB', *entitylog[i][obj]))
             # Position log: Write frame count and then dump log
-            frames = len(xposlog[i])
+            frames = len(poslog[i])
             f.write(struct.pack('<H', frames))
             for frame in range(frames):
-                f.write(struct.pack('<2d', xposlog[i][frame], yposlog[i][frame]))
+                f.write(struct.pack('<2d', poslog[i][frame][1], poslog[i][frame][2]))
     print("%.3f" % ((90 * 60 - frameslog[0] + 1 + goldlog[0][0] * 120) / 60))
 
 #Print episode splits and other info to the console. Only ran in manual mode and splits mode.

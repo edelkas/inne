@@ -4,7 +4,10 @@ import os.path
 import struct
 import copy
 import random
+import sys
 
+# Export drone position logs
+INCLUDE_DRONES = '-drones' not in sys.argv
 
 NINJA_ANIM_MODE = True
 if os.path.isfile("anim_data_line_new.txt.bin"):
@@ -16,9 +19,7 @@ else:
 
 
 class Ninja:
-    """This class is responsible for updating and storing the positions and velocities of each ninja.
-    self.xposlog and self.yposlog contain all the coordinates used to generate the traces of the replays.
-    """
+    """This class is responsible for updating and storing the positions and velocities of each ninja."""
 
     #Physics constants for the ninja.
     GRAVITY_FALL = 0.06666666666666665 
@@ -83,10 +84,9 @@ class Ninja:
         self.bones = [[0, 0] for _ in range(13)]
         self.update_graphics()
         self.ragdoll = Ragdoll()
-        self.poslog = [(0, self.xpos, self.ypos)] #Used for debug
-        self.speedlog = [(0,0,0)]
-        self.xposlog = [self.xpos] #Used to produce trace
-        self.yposlog = [self.ypos]
+        self.poslog = []
+        self.speedlog = []
+        self.log()
         
     def integrate(self):
         """Update position and speed by applying drag and gravity before collision phase."""
@@ -638,6 +638,11 @@ class Ninja:
         """Return whether the ninja is a valid target for various interactions."""
         return not self.state in (6, 8, 9)
 
+    def log(self):
+        """Log position and velocity vectors of the ninja for the current frame"""
+        self.poslog.append((self.sim.frame, round(self.xpos, 6), round(self.ypos, 6)))
+        self.speedlog.append((self.sim.frame, round(self.xspeed, 6), round(self.yspeed, 6)))
+
 
 class Ragdoll:
     """None of this is working yet. Might never will."""
@@ -788,19 +793,28 @@ class GridSegmentCircular:
 
 
 class Entity:
+    entity_counts = [0] * 40
+
     """Class that all entity types (gold, bounce blocks, thwumps, etc.) inherit from."""
     def __init__(self, type, sim, xcoord, ycoord):
         """Inititate a member from map data"""
         self.type = type
+        self.index = self.entity_counts[self.type]
+        self.entity_counts[self.type] += 1
         self.sim = sim
         self.xpos = xcoord*6
         self.ypos = ycoord*6
+        self.poslog = []
         self.active = True
         self.is_logical_collidable = False
         self.is_physical_collidable = False
         self.is_movable = False
         self.is_thinkable = False
-        self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))        
+        self.log_positions = False
+        self.log_collisions = True
+        if self.log_positions:
+            self.log_position()
+        self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
     
     def grid_move(self):
         """As the entity is moving, if its center goes from one grid cell to another,
@@ -812,8 +826,14 @@ class Entity:
             self.cell = cell_new
             self.sim.entity_dic[self.cell].append(self)
 
-    def log(self, state=1):
-        self.sim.entitylog.append((self.sim.frame, self.type, self.xpos, self.ypos, state))
+    def log_collision(self, state=1):
+        """Log an interaction with this entity"""
+        if self.log_collisions:
+            self.sim.entitylog.append((self.sim.frame, self.type, self.index, state))
+
+    def log_position(self):
+        """Log position of entity on current frame"""
+        self.poslog.append((self.xpos, self.ypos))
 
 
 class EntityToggleMine(Entity):
@@ -836,7 +856,6 @@ class EntityToggleMine(Entity):
                 if not overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                                 ninja.xpos, ninja.ypos, ninja.RADIUS):
                     self.set_state(0)
-                    self.log(2)
         else:
             if self.state == 2 and ninja.state == 6:
                 self.set_state(1)
@@ -854,6 +873,7 @@ class EntityToggleMine(Entity):
         if state in (0, 1, 2):
             self.state = state
             self.RADIUS = self.RADII[state]
+            self.log_collision(state)
 
 
 class EntityGold(Entity):
@@ -872,7 +892,7 @@ class EntityGold(Entity):
                                         ninja.xpos, ninja.ypos, ninja.RADIUS):
                 self.collected = True
                 self.active = False
-                self.log()
+                self.log_collision()
 
 
 class EntityExit(Entity):
@@ -909,7 +929,7 @@ class EntityExitSwitch(Entity):
             self.collected = True
             self.active = False
             self.sim.entity_dic[self.parent.cell].append(self.parent) #Add door to the entity grid so the ninja can touch it
-            self.log()
+            self.log_collision()
 
 
 class EntityDoorBase(Entity):
@@ -999,7 +1019,7 @@ class EntityDoorLocked(EntityDoorBase):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.change_state(closed = False)
             self.active = False
-            self.log()
+            self.log_collision()
 
 
 class EntityDoorTrap(EntityDoorBase):
@@ -1016,7 +1036,7 @@ class EntityDoorTrap(EntityDoorBase):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.change_state(closed = True)
             self.active = False
-            self.log()
+            self.log_collision()
 
 
 class EntityLaunchPad(Entity):
@@ -1158,6 +1178,7 @@ class EntityDroneZap(EntityDroneBase):
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
         super().__init__(type, sim, xcoord, ycoord, orientation, mode, 8/7)
         self.is_logical_collidable = True
+        self.log_positions = INCLUDE_DRONES
     
     def logical_collision(self):
         ninja = self.sim.ninja
@@ -1171,6 +1192,7 @@ class EntityDroneChaser(EntityDroneZap):
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
         super().__init__(type, sim, xcoord, ycoord, orientation, mode)
         self.is_thinkable = True
+        self.log_positions = INCLUDE_DRONES
         self.speed_slow = self.speed
         self.speed_chase = 2 * self.speed
         self.chasing = False
@@ -1390,6 +1412,7 @@ class EntityMiniDrone(EntityDroneBase):
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
         super().__init__(type, sim, xcoord, ycoord, orientation, mode, 1.3)
         self.is_logical_collidable = True
+        self.log_positions = INCLUDE_DRONES
         self.RADIUS = 4
         self.GRID_WIDTH = 12
     
@@ -1683,6 +1706,7 @@ class Simulator:
         #Initiate each entity (other than ninjas)
         index = 1230
         exit_door_count = self.map_data[1156]
+        Entity.entity_counts = [0] * 40
         while (index < len(map_data)):
             type = self.map_data[index]
             xcoord = self.map_data[index+1]
@@ -1746,7 +1770,7 @@ class Simulator:
         self.ninja.jump_input = jump_input
 
         #Move all movable entities
-        for entity in self.entity_list: 
+        for entity in self.entity_list:
             if entity.is_movable and entity.active:
                 entity.move()
         #Make all thinkable entities think
@@ -1771,10 +1795,10 @@ class Simulator:
             self.ninja.calc_ninja_position()
 
         #Update all the logs for debugging purposes and for tracing the route.
-        self.ninja.poslog.append((self.frame, round(self.ninja.xpos, 6), round(self.ninja.ypos, 6)))
-        self.ninja.speedlog.append((self.frame, round(self.ninja.xspeed, 6), round(self.ninja.yspeed, 6)))
-        self.ninja.xposlog.append(self.ninja.xpos)
-        self.ninja.yposlog.append(self.ninja.ypos)
+        self.ninja.log()
+        for entity in self.entity_list:
+            if entity.log_positions and entity.active:
+                entity.log_position()
 
 
 def gather_segments_from_region(sim, x1, y1, x2, y2):
