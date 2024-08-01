@@ -9,6 +9,7 @@ from nsim import *
 
 OUTTE_MODE = True #Only set to False when manually running the script. Changes what the output of the tool is.
 COMPRESSED_INPUTS = True #Only set to False when manually running the script and using regular uncompressed input files.
+TABLE_OUTPUT = True #Output debug logs to the terminal in table format rather than raw
 
 #Required names for files. Only change values if running manually.
 RAW_INPUTS_0 = "inputs_0"
@@ -79,6 +80,7 @@ elif tool_mode == "splits":
         mdata_list.append([int(b) for b in f.read()])
 
 poslog = []
+speedlog = []
 goldlog = []
 frameslog = []
 validlog = []
@@ -119,6 +121,7 @@ for i in range(len(inputs_list)):
 
     #Append to the logs for each replay.
     poslog.append(sim.ninja.poslog)
+    speedlog.append(sim.ninja.speedlog)
     entitylog.append(sim.entitylog)
     frameslog.append(inp_len)
     validlog.append(valid)
@@ -132,11 +135,32 @@ for i in range(len(inputs_list)):
                 gold_collected += 1
     goldlog.append((gold_collected, gold_amount))
 
-    #Print info useful for debug if in manual mode
-    if not OUTTE_MODE:
-        print(sim.ninja.speedlog)
-        print(sim.ninja.poslog)
-        print(valid)
+#Print info useful for debug if in manual mode
+if not OUTTE_MODE:
+    if TABLE_OUTPUT:
+        sep = f"+------+{(("-" * 44) + "+") * len(inputs_list)}"
+        sep_short = f"       {sep[7:]}"
+        print(sep_short)
+        print(f"       |{"|".join(map(lambda valid: f"{str(valid):^44}", validlog))}|")
+        print(sep_short)
+        print(f"       |{f" {'X':^11} {'Y':^10} {'VX':^9} {'VY':^9} |" * 4}")
+        print(sep)
+        frames = max(map(len, inputs_list))
+        for f in range(frames):
+            line = f"| {f:>4} |"
+            for i in range(len(inputs_list)):
+                if len(poslog[i]) <= f:
+                    line += " " * 44 + "|"
+                else:
+                    line += " %11.6f %10.6f %9.6f %9.6f |" % (poslog[i][f][1:] + speedlog[i][f][1:])
+            print(line)
+            if (f + 1) % 10 == 0: print(sep)
+        if frames % 10 != 0: print(sep)
+    else:
+        for i in range(len(inputs_list)):
+            print(speedlog[i])
+            print(poslog[i])
+            print(validlog[i])
 
 #Plot the route. Only ran in manual mode.
 if tool_mode == "trace" and OUTTE_MODE == False:
