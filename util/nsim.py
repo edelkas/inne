@@ -812,8 +812,6 @@ class Entity:
         self.is_thinkable = False
         self.log_positions = False
         self.log_collisions = True
-        if self.log_positions:
-            self.log_position()
         self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
     
     def grid_move(self):
@@ -1759,6 +1757,10 @@ class Simulator:
                 self.entity_list.append(entity)
                 self.entity_dic[entity.cell].append(entity)
             index += 5
+
+        for entity in self.entity_list:
+            if entity.log_positions and entity.active:
+                entity.log_position()
 
     def tick(self, hor_input, jump_input):
         """Gets called every frame to update the whole physics simulation."""

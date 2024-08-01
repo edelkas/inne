@@ -140,13 +140,9 @@ for i in range(len(inputs_list)):
 
 #Plot the route. Only ran in manual mode.
 if tool_mode == "trace" and OUTTE_MODE == False:
-    if len(inputs_list) >= 4:
-        mpl.plot([f[1] for f in poslog[3]], [f[2] for f in poslog[3]], "#910A46")
-    if len(inputs_list) >= 3:
-        mpl.plot([f[1] for f in poslog[2]], [f[2] for f in poslog[2]], "#4D31AA")
-    if len(inputs_list) >= 2:
-        mpl.plot([f[1] for f in poslog[1]], [f[2] for f in poslog[1]], "#EADA56")
-    mpl.plot([f[1] for f in poslog[0]], [f[2] for f in poslog[0]], "#000000")
+    colors = ["#000000", "#EADA56", "#4D31AA", "#910A46"]
+    for i in range(len(inputs_list) - 1, -1, -1):
+        mpl.plot(*list(zip(*poslog[i]))[1:], colors[i])
     mpl.axis([0, 1056, 600, 0])
     mpl.axis("off")
     ax = mpl.gca()
