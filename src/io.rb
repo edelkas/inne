@@ -830,19 +830,17 @@ end
 # an author or author ID, optionally.
 def parse_userlevel(event, userlevel = nil)
   # --- PARSE message elements
+  return {
+    query:  userlevel,
+    msg:    '',
+    count:  1,
+    title:  userlevel.title.to_s,
+    author: userlevel.author.name.to_s
+  } if userlevel
 
   msg = parse_message(event)
   title, author, msg = parse_title_and_author(msg, true)
   author = UserlevelAuthor.parse(author, event: event)
-  if userlevel
-    return {
-      query:  userlevel,
-      msg:    '',
-      count:  1,
-      title:  userlevel.title.to_s,
-      author: userlevel.author.name.to_s
-    }
-  end
 
   # --- FETCH userlevel(s)
   query = Userlevel
@@ -861,7 +859,7 @@ def parse_userlevel(event, userlevel = nil)
       errs << "with title #{verbatim(title[0...128])}"
     end
     if !author.nil?
-      query = query.where(author: author)
+      query = query.where(author_id: author.id)
       errs << "by author #{verbatim(author.name)}"
     end
     err = "No userlevel #{errs.join(' ')} found."
