@@ -9,7 +9,8 @@ from nsim import *
 
 OUTTE_MODE = True #Only set to False when manually running the script. Changes what the output of the tool is.
 COMPRESSED_INPUTS = True #Only set to False when manually running the script and using regular uncompressed input files.
-TABLE_OUTPUT = True #Output debug logs to the terminal in table format rather than raw
+DEBUG_OUTPUT = True #Print debug logs to the terminal in manual mode.
+TABLE_OUTPUT = True #Use table format for the debug logs, rather than dumping them raw
 
 #Required names for files. Only change values if running manually.
 RAW_INPUTS_0 = "inputs_0"
@@ -23,6 +24,9 @@ RAW_MAP_DATA_1 = "map_data_1"
 RAW_MAP_DATA_2 = "map_data_2"
 RAW_MAP_DATA_3 = "map_data_3"
 RAW_MAP_DATA_4 = "map_data_4"
+OUTPUT_TRACE = "output.bin"
+OUTPUT_SPLITS = "output.txt"
+
 MAP_IMG = None #This one is only needed for manual execution
 
 #Import inputs.
@@ -79,12 +83,14 @@ elif tool_mode == "splits":
     with open(RAW_MAP_DATA_4, "rb") as f:
         mdata_list.append([int(b) for b in f.read()])
 
-poslog = []
-speedlog = []
-goldlog = []
-frameslog = []
-validlog = []
-entitylog = []
+#Logs for debugging, traces and splits
+poslog       = []
+speedlog     = []
+goldlog      = []
+frameslog    = []
+validlog     = []
+collisionlog = []
+entitylog    = []
 
 #This dictionary converts raw input data into the horizontal and jump components.
 HOR_INPUTS_DIC = {0:0, 1:0, 2:1, 3:1, 4:-1, 5:-1, 6:-1, 7:-1}
@@ -122,21 +128,22 @@ for i in range(len(inputs_list)):
     #Append to the logs for each replay.
     poslog.append(sim.ninja.poslog)
     speedlog.append(sim.ninja.speedlog)
-    entitylog.append(sim.entitylog)
     frameslog.append(inp_len)
     validlog.append(valid)
+    collisionlog.append(sim.collisionlog)
+
+    #Entity position logs, including the ninja, for exporting.
+    entities = [(0, 0, [log[1:] for log in sim.ninja.poslog])]
+    entities += [(e.type, e.index, e.poslog) for e in sim.entity_list if e.log_positions]
+    entitylog.append(entities)
 
     #Calculate the amount of gold collected for each replay.
-    gold_amount = mdata[1154]
-    gold_collected = 0
-    for entity in sim.entity_list:
-        if entity.type == 2:
-            if entity.collected:
-                gold_collected += 1
+    gold_amount = struct.unpack('<H', struct.pack('<2B', *mdata[1154:1156]))[0]
+    gold_collected = sum(e.type == 2 and e.collected for e in sim.entity_list)
     goldlog.append((gold_collected, gold_amount))
 
 #Print info useful for debug if in manual mode
-if not OUTTE_MODE:
+if not OUTTE_MODE and DEBUG_OUTPUT:
     if TABLE_OUTPUT:
         sep = f"+------+{(("-" * 44) + "+") * len(inputs_list)}"
         sep_short = f"       {sep[7:]}"
@@ -149,10 +156,10 @@ if not OUTTE_MODE:
         for f in range(frames):
             line = f"| {f:>4} |"
             for i in range(len(inputs_list)):
-                if len(poslog[i]) <= f:
-                    line += " " * 44 + "|"
-                else:
+                if len(poslog[i]) > f:
                     line += " %11.6f %10.6f %9.6f %9.6f |" % (poslog[i][f][1:] + speedlog[i][f][1:])
+                else:
+                    line += " " * 44 + "|"
             print(line)
             if (f + 1) % 10 == 0: print(sep)
         if frames % 10 != 0: print(sep)
@@ -198,25 +205,28 @@ if tool_mode == "trace" and OUTTE_MODE == False:
     ax.add_collection(lc)
     mpl.show()
             
-#For each replay, write to file whether it is valid or not, then write the series 
-#of coordinates for each frame. Only ran in outte mode and in trace mode.
+# Export simulation result for outte
 if tool_mode == "trace" and OUTTE_MODE == True:
-    with open("output.bin", "wb") as f:
+    with open(OUTPUT_TRACE, "wb") as f:
         # Write run count, and then valid log (1 byte per run)
         n = len(inputs_list)
         f.write(struct.pack('B', n))
         f.write(struct.pack(f'{n}B', *validlog))
         for i in range(n):
-            # Entity log: Write collided entities count and then dump log
-            objs = len(entitylog[i])
-            f.write(struct.pack('<H', objs))
-            for obj in range(objs):
-                f.write(struct.pack('<HBddB', *entitylog[i][obj]))
-            # Position log: Write frame count and then dump log
-            frames = len(poslog[i])
-            f.write(struct.pack('<H', frames))
-            for frame in range(frames):
-                f.write(struct.pack('<2d', poslog[i][frame][1], poslog[i][frame][2]))
+            # Entity section: Positions of logged entities, including ninja
+            entities = len(entitylog[i])
+            f.write(struct.pack('<H', entities))
+            for j in range(entities):
+                entity = entitylog[i][j]
+                frames = len(entity[2])
+                f.write(struct.pack('<BHH', *(entity[:2] + (frames,))))
+                for frame in range(frames):
+                    f.write(struct.pack('<2d', *entity[2][frame]))
+            # Collision section
+            collisions = len(collisionlog[i])
+            f.write(struct.pack('<H', collisions))
+            for col in range(collisions):
+                f.write(struct.pack('<HBHB', *collisionlog[i][col]))
     print("%.3f" % ((90 * 60 - frameslog[0] + 1 + goldlog[0][0] * 120) / 60))
 
 #Print episode splits and other info to the console. Only ran in manual mode and splits mode.
@@ -231,7 +241,7 @@ if tool_mode == "splits" and OUTTE_MODE == False:
 #For each level of the episode, write to file whether the replay is valid, then write the score split. Only ran in outte mode and in splits mode.
 if tool_mode == "splits" and OUTTE_MODE == True:
     split = 90*60
-    with open("output.txt", "w") as f:
+    with open(OUTPUT_SPLITS, "w") as f:
         for i in range(5):
             print(validlog[i], file=f)
             split = split - frameslog[i] + 1 + goldlog[i][0]*120

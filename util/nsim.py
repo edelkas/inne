@@ -827,7 +827,7 @@ class Entity:
     def log_collision(self, state=1):
         """Log an interaction with this entity"""
         if self.log_collisions:
-            self.sim.entitylog.append((self.sim.frame, self.type, self.index, state))
+            self.sim.collisionlog.append((self.sim.frame, self.type, self.index, state))
 
     def log_position(self):
         """Log position of entity on current frame"""
@@ -1588,7 +1588,7 @@ class Simulator:
     def load(self, map_data):
         """From the given map data, initiate the level geometry, the entities and the ninja."""
         self.frame = 0
-        self.entitylog = []
+        self.collisionlog = []
 
         #initiate a dictionary mapping each tile id to its cell. Start by filling it with full tiles (id of 1).
         self.tile_dic = {}
