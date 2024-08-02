@@ -690,7 +690,7 @@ def monitor_memory
   if available_ratio < MEMORY_LIMIT.clamp(0, 1)
     str = "#{"%.2f%%" % [100 - 100 * available_ratio]} used, #{"%.2f%%" % [100 * used_ratio]} by outte"
     if used_ratio > MEMORY_USAGE.clamp(0, 1)
-      restart("Lack of memory (#{str})")
+      _thread do restart("Lack of memory (#{str})") end
     elsif !$memory_warned
       warn("Something's taking up excessive memory, and it's not outte! (#{str})", discord: true)
       $memory_warned = true

@@ -390,17 +390,20 @@ end
 
 # Routine to shutdown the program (exit should be called afterwards)
 def shutdown(trap: false, force: false)
-  log("Shutting down outte...")
+  log("Running shutdown tasks...")
 
   # Stop all background tasks gracefully, unless forcefully killing outte
+  # We use a thread to ensure that this one is already listening by the time
+  # the clear takes place.
   if !force && !Scheduler.free?
     _thread do
       names = Scheduler.list_blocking.map{ |job| job.task.name }.join(", ")
       warn("Waiting for background tasks to finish (#{names})")
-      sleep(0.5)
+      sleep(0.1)
       Scheduler.clear
     end
     Scheduler.listen(:clear)
+    sleep(0.1)
   end
 
   # Stop bot and CLE server, disconnect from DB
