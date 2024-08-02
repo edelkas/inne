@@ -486,62 +486,17 @@ def send_userlevel_report
     sleep(5)
   end
 
-  # Fetch latest stored rankings
-  last = UserlevelHistory.where('timestamp < ?', Time.now - 12 * 60 * 60)
-                         .order(timestamp: :desc).first.timestamp
-  histories = UserlevelHistory.where(timestamp: last - 3600 .. last)
-
-  # Fetch current and old rankings, compute differences
-  zeroes = Userlevel.rank(:rank, true, 0).map.with_index{ |e, rank| [rank, *e] }
-  zeroes_prev = histories.where(rank: 1)
-                         .order(count: :desc)
-                         .pluck(:player_id, :count)
-                         .map.with_index{ |e, rank| [rank, *e] }
-  diffs = zeroes.map{ |rank, id, count, _|
-    old_rank, _, old_count = zeroes_prev.find{ |_, old_id, _| id == old_id }
-    old_rank ? { rank: old_rank - rank, score: count - old_count } : nil
-  }
-
-  # Find padding and format leaderboard
-  pad_name   = zeroes.map(&:last).map(&:length).max
-  pad_count  = zeroes.map{ |o| o[2].to_s.length }.max
-  pad_rank   = [diffs.compact.map{ |c| c[:rank].abs.to_s.length }.max.to_i, 2].max
-  pad_change = diffs.compact.map{ |c| c[:score].abs.to_s.length }.max.to_i
-  zeroes = zeroes.map.with_index{ |p, i|
-    diff = ''
-    score = "#{"%02d" % i}: #{format_string(p[3], pad_name)} - #{"%#{pad_count}d" % p[2]}"
-    Highscoreable.format_diff_change(diffs[i], diff, true, pad_rank, pad_change)
-    "#{score} #{diff}"
-  }.join("\n")
-
-  # Fetch current and old rankings, compute differences
-  points = Userlevel.rank(:points, false).map.with_index{ |e, rank| [rank, *e] }
-  points_prev = histories.where(rank: -1)
-                         .order(count: :desc)
-                         .pluck(:player_id, :count)
-                         .map.with_index{ |e, rank| [rank, *e] }
-  diffs = points.map{ |rank, id, count, _|
-    old_rank, _, old_count = points_prev.find{ |_, old_id, _| id == old_id }
-    old_rank ? { rank: old_rank - rank, score: count - old_count } : nil
-  }
-
-  # Find padding and format leaderboard
-  pad_name   = points.map(&:last).map(&:length).max
-  pad_count  = points.map{ |o| o[2].to_s.length }.max
-  pad_rank   = [diffs.compact.map{ |c| c[:rank].abs.to_s.length }.max.to_i, 2].max
-  pad_change = diffs.compact.map{ |c| c[:score].abs.to_s.length }.max.to_i
-  points = points.map.with_index{ |p, i|
-    diff = ''
-    score = "#{"%02d" % i}: #{format_string(p[3], pad_name)} - #{"%#{pad_count}d" % p[2]}"
-    Highscoreable.format_diff_change(diffs[i], diff, true, pad_rank, pad_change)
-    "#{score} #{diff}"
-  }.join("\n")
-
-  send_message($mapping_channel, content: mdtext("0th report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2) + "\n" + format_block(zeroes))
+  # 0th report
+  header = mdtext("0th report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2)
+  diff = format_block(UserlevelHistory.compare(1, Time.now - 12 * 60 * 60))
+  send_message($mapping_channel, content: header + "\n" + diff)
   sleep(0.25)
-  send_message($mapping_channel, content: mdtext("Point report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2) + "\n" + format_block(points))
 
-  #update_userlevel_histories
+  # Point report
+  header = mdtext("Point report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2)
+  diff = format_block(UserlevelHistory.compare(-1, Time.now - 12 * 60 * 60))
+  send_message($mapping_channel, content: header + "\n" + diff)
+  update_userlevel_histories
 end
 
 # Update database scores for Metanet Solo levels, episodes and stories

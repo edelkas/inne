@@ -272,6 +272,7 @@ class UserlevelHistory < ActiveRecord::Base
   alias_method :player, :userlevel_player
   alias_method :player=, :userlevel_player=
 
+  # Transform rankings to history format ready to be created
   def self.compose(rankings, rank, time)
     rankings.select{ |r| r[1] > 0 }.map do |r|
       {
@@ -281,6 +282,41 @@ class UserlevelHistory < ActiveRecord::Base
         count:      r[1]
       }
     end
+  end
+
+  # Compare current rankings with historic ones and compute differences
+  def self.compare(r, time)
+    type = r == -1 ? :points : :rank
+    ties = r == 1
+
+    # Fetch relevant histories to compare against
+    last = where('timestamp <= ?', time).order(timestamp: :desc).first.timestamp
+    histories = where(timestamp: last - 3600 .. last)
+
+    # Fetch current and old rankings, compute differences
+    ranking = Userlevel.rank(type, ties, r - 1).map.with_index{ |e, rank| [rank, *e] }
+    ranking_prev = histories.where(rank: r)
+                            .order(count: :desc)
+                            .pluck(:player_id, :count)
+                            .map.with_index{ |e, rank| [rank, *e] }
+    diffs = ranking.map{ |rank, id, count, _|
+      old_rank, _, old_count = ranking_prev.find{ |_, old_id, _| id == old_id }
+      old_rank ? { rank: old_rank - rank, score: count - old_count } : nil
+    }
+
+    # Find padding and format leaderboard
+    pad_name   = ranking.map(&:last).map(&:length).max
+    pad_count  = ranking.map{ |o| o[2].to_s.length }.max
+    pad_rank   = [diffs.compact.map{ |c| c[:rank].abs.to_s.length }.max.to_i, 2].max
+    pad_change = diffs.compact.map{ |c| c[:score].abs.to_s.length }.max.to_i
+    ranking = ranking.map.with_index{ |p, i|
+      diff = ''
+      score = "#{"%02d" % i}: #{format_string(p[3], pad_name)} - #{"%#{pad_count}d" % p[2]}"
+      Highscoreable.format_diff_change(diffs[i], diff, true, pad_rank, pad_change)
+      "#{score} #{diff}"
+    }.join("\n")
+
+    ranking
   end
 end
 
