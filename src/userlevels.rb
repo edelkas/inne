@@ -858,7 +858,7 @@ end
 # <---                           MESSAGES                                   --->
 # <---------------------------------------------------------------------------->
 
-def format_userlevels(maps, page)
+def format_userlevels(maps, page, color = false)
   return "" if maps.size == 0
   maps = Userlevel::serial(maps)
 
@@ -879,27 +879,34 @@ def format_userlevels(maps, page)
   end
 
   # Print header
-  output  = "%-#{padding[:n]}s "      % "N"
+  output = ANSI.under + ANSI.bold
+  output += "%-#{padding[:n]}s "      % "N"
   output += "%-#{padding[:id]}s "     % "ID"
   output += "%-#{padding[:title]}s "  % "TITLE"
   output += "%-#{padding[:author]}s " % "AUTHOR"
   output += "%-#{padding[:date]}s "   % "DATE"
   output += "%-#{padding[:favs]}s"    % "++"
-  output += "\n"
+  output += ANSI.clear + "\n"
   #output += "-" * (padding.inject(0){ |sum, pad| sum += pad[1] } + padding.size - 1) + "\n"
+
+  colors = { n: ANSI.red, id: ANSI.yellow, title: ANSI.blue, author: ANSI.cyan, date: ANSI.magenta, favs: ANSI.green }
 
   # Print levels
   if maps.nil? || maps.empty?
     output += " " * (padding.inject(0){ |sum, pad| sum += pad[1] } + padding.size - 1) + "\n"
   else
     maps.each_with_index{ |m, i|
-      line = "%#{padding[:n]}.#{padding[:n]}s " % (PAGE_SIZE * (page - 1) + i + 1).to_s
+      line = color ? ANSI.red : ''
+      line += "%#{padding[:n]}.#{padding[:n]}s " % (PAGE_SIZE * (page - 1) + i + 1).to_s
+      line += ANSI.reset if color
       padding.reject{ |k, v| k == :n  }.each{ |k, v|
+        line += colors[k] if color
         if m[k].is_a?(Integer)
-          line += "%#{padding[k]}.#{padding[k]}s " % m[k].to_s
+          line += "%#{padding[k]}.#{padding[k]}s " % [m[k].to_s]
         else
           line += "%-#{padding[k]}.#{padding[k]}s " % m[k].to_s.gsub('```', '')
         end
+        line += ANSI.reset if color
       }
       output << line + "\n"
     }
