@@ -1395,6 +1395,10 @@ def compute_name(id, type)
 end
 
 # Execute ntrace and parse the output.
+# TODO: Make splits use this as well, it's not finished
+# TODO: We might want to abstract this away to a module containing everything
+# ntrace-related. And then abstract everything map related to a different file,
+# as it's already around 2k lines, and not really mappack-related.
 def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
   # Export files for ntrace to read
   if splits
@@ -1405,7 +1409,7 @@ def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
     File.binwrite(NTRACE_MAP_DATA, map_data)
   end
 
-  # Execute ntrace and save output
+  # Execute ntrace and save output, cleanup
   stdout, stderr, status = python(PATH_NTRACE, output: true)
   ret = [stdout, stderr].join("\n\n")
   if splits
@@ -1437,35 +1441,48 @@ def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
     perror(str)
   end
 
-  # Parse output file
+  # Parse ntrace result file
+  # TODO: We should probably add some integrity checks here (e.g. file size)
   valid = []
   coords = []
-  objs = []
+  collisions = []
   File.open(output, 'rb') do |f|
+    # Run count and valid flags
     n = f.read(1).unpack('C')[0]
     valid = f.read(n).bytes.map{ |b| b > 0 }
     n.times do |i|
-      obj_count = f.read(2).unpack('S<')[0]
-      obj_count.times { objs << f.read(20).unpack("S<CEEC") }
-      frames = f.read(2).unpack('S<')[0]
-      coords << f.read(16 * frames).unpack("E#{2 * frames}").each_slice(2).to_a
+      # Entity coordinate section
+      entity_count = f.read(2).unpack('S<')[0]
+      poslog = {}
+      entity_count.times do
+        id, index, frames = f.read(5).unpack('CS<S<')
+        poslog[id] = {} unless poslog.key?(id)
+        next if poslog[id].key?(index)
+        poslog[id][index] = f.read(16 * frames).unpack("E#{2 * frames}").each_slice(2).to_a
+      end
+      coords << poslog
+
+      # Entity collision section
+      collision_count = f.read(2).unpack('S<')[0]
+      collisions << f.read(6 * collision_count).unpack('S<CS<C' * collision_count)
+                     .each_slice(4).to_a.group_by(&:first).to_h
     end
   end
   FileUtils.rm([output])
-  objs.uniq!
-  objs = objs.group_by(&:first).to_h
-  objs.each{ |frame, list|
-    list.each{ |o|
-      o.shift
-      o[0] = 1 if o[0] == 21
-      o[0] = 7 if o[0] == 6
-      o[0] = 9 if o[0] == 8
-      o[1] = (o[1] / 6).round
-      o[2] = (o[2] / 6).round
+
+  # Format ntrace result appropriately
+  collisions.each{ |run|
+    run.each{ |frame, list|
+      list.each{ |o|
+        o.shift
+        o[0] = 1 if o[0] == 21
+        o[0] = 7 if o[0] == 6
+        o[0] = 9 if o[0] == 8
+      }
     }
   }
 
-  { success: true, valid: valid, coords: coords, collisions: objs, msg: ret }
+  { success: true, valid: valid, coords: coords, collisions: collisions, msg: ret }
 end
 
 # <---------------------------------------------------------------------------->

@@ -1673,6 +1673,8 @@ module Map
       # Return
       image
     end
+  rescue
+    nil
   end
 
   def self.trace(event, anim: false, h: nil)
