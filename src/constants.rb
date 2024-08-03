@@ -163,7 +163,7 @@ DIR_SOURCE      = './src'
 DIR_TEST        = './test'
 
 DIR_UTILS       = './util'
-PATH_NTRACE     = "#{DIR_UTILS}/ntrace.py"
+PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
 PATH_SHA1       = "#{DIR_UTILS}/sha1"
 
 DIR_FONTS       = "#{DIR_UTILS}/fonts"

@@ -8,7 +8,6 @@
 #require 'chunky_png'
 require 'oily_png'    # C wrapper for ChunkyPNG
 require 'gifenc'      # Own gem to encode and decode GIFs
-require 'digest'
 require 'matplotlib/pyplot'
 require 'zlib'
 
