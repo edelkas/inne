@@ -104,7 +104,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   nav   = parse_nav(msg) || !initial
   full  = !!msg[/global/i] || parse_full(msg) || nav
   cool  = !rtype.nil? && parse_cool(rtype) || rtype.nil? && parse_cool(msg)
-  star  = !rtype.nil? && parse_star(rtype, false, true) || rtype.nil? && parse_star(msg)
+  star  = !rtype.nil? && parse_star(rtype, false, true) || rtype.nil? && parse_star(msg, true, true)
   maxed = !rtype.nil? && parse_maxed(rtype) || rtype.nil? && parse_maxed(msg)
   maxable = !maxed && (!rtype.nil? && parse_maxable(rtype) || rtype.nil? && parse_maxable(msg))
   rtype2 = rtype # save a copy before we change it

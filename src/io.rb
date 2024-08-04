@@ -970,13 +970,13 @@ end
 # 'strict' means the emoji must be separated from text
 # intended to ignore users with it in the name
 def parse_cool(msg, strict = false)
-  !!msg[/\bcool(s|(ness))?\b/i] || !!msg[/\bckc'?s?\b/i] || !!msg[/#{strict ? "(\A|\W)" : ""}😎'?s?#{strict ? "(\z|\W)" : ""}/i]
+  !!msg[/\bcool(s|(ness))?\b/i] || !!msg[/\bckc'?s?\b/i] || !!msg[/#{strict ? "(^|\s)" : ""}😎'?s?#{strict ? "($|\s)" : ""}/i]
 end
 
 # see parse_cool for 'strict'
 # if 'name' then we accept 'star' for parsing stars as well
 def parse_star(msg, strict = false, name = false)
-  !!msg[/#{strict ? "(\A|\W)" : ""}\*#{strict ? "(\z|\W)" : ""}/i] || name && !!msg[/\bstars?\b/i]
+  !!msg[/#{strict ? "(^|\s)" : ""}\*#{strict ? "($|\s)" : ""}/i] || name && !!msg[/\bstars?\b/i]
 end
 
 # Parse type of leaderboard (highscore, speedrun, dual, ...)
