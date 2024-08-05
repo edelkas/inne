@@ -849,3 +849,12 @@ PATCH_IND_CHG = {
   :story     => {},
   :userlevel => {}
 }
+
+# For these boards, replays won't be visible
+PROTECTED_BOARDS = {
+  'ape' => ['S-A-00', 'S-A-00-00']
+}
+
+# For these boards, scores (and replays) won't be visible
+PRIVATE_BOARDS = {
+}

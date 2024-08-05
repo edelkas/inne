@@ -1178,9 +1178,11 @@ def send_analysis(event)
   h     = parse_highscoreable(event, mappack: true)
 
   # Integrity checks
-  perror("Episodes and columns can't be analyzed yet.") if h.is_a?(Episode) || h.is_a?(Story)
+  perror("Episodes and columns can't be analyzed yet.") if h.is_episode? || h.is_story?
   perror("Metanet levels only support highscore mode for now.") if !h.is_mappack? && board != 'hs'
   perror("G-- mode is not supported yet.") if board == 'gm'
+  code = h.mappack.code if h.is_mappack?
+  perror("This analysis is disabled, figure it out yourself!") if PROTECTED_BOARDS.key?(code) && PROTECTED_BOARDS[code].include?(h.name[4..-1])
 
   # Fetch runs
   boards = h.leaderboard(board, truncate: 0, pluck: false).all
@@ -1306,6 +1308,8 @@ end
 def send_demo_download(event)
   msg   = parse_message(event)
   h     = parse_highscoreable(event)
+  code  = h.mappack.code if h.is_mappack?
+  perror("Downloading this replay is disabled, figure it out yourself!") if PROTECTED_BOARDS.key?(code) && PROTECTED_BOARDS[code].include?(h.name[4..-1])
   rank  = [parse_range(msg).first, h.scores.size - 1].min
   score = h.scores[rank]
   event << "Downloading #{score.player.name}'s #{rank.ordinalize} score in #{h.name} (#{"%.3f" % [score.score]}):"
