@@ -11,9 +11,6 @@
 # See also the TASK VARIABLES in src/constants.rb for configuration. See the end
 # of the file for the list of tasks.
 
-require_relative 'constants.rb'
-require_relative 'utils.rb'
-require_relative 'models.rb'
 
 # Light wrapper that represents an abstract task whose execution is controlled.
 # We have graceful exception handling, we know when the task is active, etc.

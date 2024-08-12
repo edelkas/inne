@@ -13,9 +13,6 @@ require 'socket'
 require 'webrick'
 require 'zlib'
 
-require_relative 'constants.rb'
-require_relative 'utils.rb'
-
 # Monkey patches to get some custom behaviour from a few core classes,
 # as well as ActiveRecord, Discordrb and WEBrick
 module MonkeyPatches

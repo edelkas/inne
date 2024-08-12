@@ -45,8 +45,6 @@ require 'net/http'
 require 'unicode/emoji'
 require 'zip'
 
-require_relative 'constants.rb'
-require_relative 'models.rb'
 
 # <---------------------------------------------------------------------------->
 # <------                           LOGGING                              ------>

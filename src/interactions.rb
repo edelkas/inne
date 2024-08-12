@@ -7,10 +7,7 @@
 #       * Text inputs
 # Currently, only buttons and select menus are being used.
 
-require_relative 'constants.rb'
-require_relative 'utils.rb'
-require_relative 'messages.rb'
-require_relative 'userlevels.rb'
+
 
 # ActionRow builder with a Select Menu for the mode
 #   mode: Name of mode that is currently selected

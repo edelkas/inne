@@ -12,12 +12,6 @@
 require 'time'
 require 'zlib'
 
-require_relative 'constants.rb'
-require_relative 'utils.rb'
-require_relative 'io.rb'
-require_relative 'models.rb'
-require_relative 'mappacks.rb'
-
 # Contains map data (tiles and objects) in a different table for performance reasons.
 class UserlevelData < ActiveRecord::Base
 end

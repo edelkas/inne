@@ -5,13 +5,13 @@
 #                                                                              #
 # ////// Dependencies and pre-requirements:                                    #
 #                                                                              #
-#   - MySQL 5.7 (NOT 8.0+). Use utf8mb4 for both encoding and collation,       #
-#     either server-wide or at least for outte's database. I recommend to use  #
+#   - MySQL 5.7 or higher. Use utf8mb4 for both encoding and collation, either #
+#     server-wide or at least for outte's database. I recommend to use         #
 #     the my.cnf configuration file provided in ./util/my.cnf                  #
 #                                                                              #
-#   - Ruby 2.7, to maximize compatibility. If you have a more recent version   #
-#     you want to maintain, I recommend to install rbenv and use it to manage  #
-#     multiple simultaneous Ruby versions in your environment.                 #
+#   - Ruby 2.7 or higher. If you have other versions you want to maintain,     #
+#     I recommend to install rbenv and use it to manage multiple simultaneous  #
+#     Ruby installations in your environment.                                  #
 #                                                                              #
 #     To ensure you have the correct version of all the gems (libraries)       #
 #     required by outte, install the bundler gem and then run "bundle install" #
@@ -105,16 +105,17 @@ require 'time'
 require 'yaml'
 require 'zlib'
 
-# Import all other source files
-# (each source file still imports all the other ones it needs, to keep track)
+# Import all other source files (the order matters!)
 require_relative 'constants.rb'
 require_relative 'utils.rb'
 require_relative 'io.rb'
 require_relative 'interactions.rb'
+require_relative 'maps.rb'
 require_relative 'models.rb'
-require_relative 'messages.rb'
 require_relative 'userlevels.rb'
 require_relative 'mappacks.rb'
+require_relative 'messages.rb'
+require_relative 'admin.rb'
 require_relative 'threads.rb'
 
 # We monkey patch a few core classes (Enumerable, Array, boolean classes...)

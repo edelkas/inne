@@ -4,9 +4,6 @@
 
 require 'active_support/core_ext/integer/inflections' # ordinalize
 
-require_relative 'constants.rb'
-require_relative 'utils.rb'
-require_relative 'models.rb'
 
 # Fetch message from an event. Depending on the event that was triggered, this
 # may accessed and handled in a different way.
