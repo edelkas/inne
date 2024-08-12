@@ -134,6 +134,7 @@ def initialize_vars
   # Initialize global variables
   $config          = nil
   $channel         = nil
+  $components      = nil
   $mapping_channel = nil
   $nv2_channel     = nil
   $content_channel = nil
@@ -287,9 +288,11 @@ def handle_command(event, log: true, &func)
 
   # Write up response and send it
   acquire_connection
+  initialize_components
   func = special ? -> (e) { respond_special(e) } : -> (e) { respond(e) } if !func
   craft_response(event, func)
   send_message(event)
+  initialize_components
 ensure
   # Ensure to disconnect, otherwise connections leak and the pool fills
   release_connection

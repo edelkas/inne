@@ -1283,6 +1283,9 @@ def send_message(
   files.reject!{ |f| !f.is_a?(File) }
   return if content.empty? && files.empty?
 
+  # Include dynamically created components
+  components = $components if $components && $components.rows.size > 0
+
   # Only update message if it's a component event (no need to log)
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append

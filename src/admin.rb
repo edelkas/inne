@@ -346,7 +346,11 @@ def send_meminfo(event)
 
   str =  "system: #{"%5d MB" % available} of #{"%5d MB" % total} (#{"%5.2f%%" % [100 * available / total]}) available\n"
   str << "outte:  #{"%5d MB" % mem} of #{"%5d MB" % used} (#{"%5.2f%%" % [100 * mem / used]}) used"
-  event << "Memory usage:\n#{format_block(str)}"
+  send_message(
+    event,
+    content: "Memory usage:\n#{format_block(str)}",
+    components: refresh_button('send_meminfo')
+  )
 rescue => e
   lex(e, "Error getting memory info.", event: event)
 end
@@ -957,48 +961,48 @@ def respond_special(event)
   $status[:special_commands] += 1
 
   return send_debug(event)               if cmd == 'debug'
-  return send_status(event)              if cmd == 'status'
-  return send_reaction(event)            if cmd == 'react'
-  return send_unreaction(event)          if cmd == 'unreact'
-  return send_mappack_seed(event)        if cmd == 'mappack_seed'
-  return send_mappack_patch(event)       if cmd == 'mappack_patch'
-  return send_mappack_info(event)        if cmd == 'mappack_info'
-  return send_mappack_digest(event)      if cmd == 'mappack_digest'
-  return send_mappack_update(event)      if cmd == 'mappack_update'
-  return send_mappack_ranks(event)       if cmd == 'mappack_ranks'
-  return send_mappack_completions(event) if cmd == 'mappack_completions'
-  return send_highscore_plot(event)      if cmd == 'highscores_plot'
-  return send_ul_csv(event)              if cmd == 'userlevel_csv'
-  return send_ul_plot(event)             if cmd == 'userlevel_plot'
-  return send_log_config(event)          if cmd == 'logconf'
-  return send_meminfo(event)             if cmd == 'meminfo'
-  return send_restart(event)             if cmd == 'restart'
-  return send_shutdown(event)            if cmd == 'shutdown'
-  return send_shutdown(event, true)      if cmd == 'kill'
-  return send_test(event)                if cmd == 'test'
-  return send_color_test(event)          if cmd == 'test_color'
-  return send_gold_check(event)          if cmd == 'gold_check'
+  return send_delete_score(event)        if cmd == 'delete_score'
   return fill_gold_counts(event)         if cmd == 'fill_gold'
+  return send_gold_check(event)          if cmd == 'gold_check'
   return send_hash(event)                if cmd == 'hash'
   return send_hashes(event)              if cmd == 'hashes'
+  return send_highscore_plot(event)      if cmd == 'highscores_plot'
+  return send_shutdown(event, true)      if cmd == 'kill'
+  return send_logs(event)                if cmd == 'log'
+  return send_log_config(event)          if cmd == 'logconf'
+  return send_mappack_completions(event) if cmd == 'mappack_completions'
+  return send_mappack_digest(event)      if cmd == 'mappack_digest'
+  return send_mappack_info(event)        if cmd == 'mappack_info'
+  return send_mappack_patch(event)       if cmd == 'mappack_patch'
+  return send_mappack_ranks(event)       if cmd == 'mappack_ranks'
+  return send_mappack_seed(event)        if cmd == 'mappack_seed'
+  return send_mappack_update(event)      if cmd == 'mappack_update'
+  return send_meminfo(event)             if cmd == 'meminfo'
   return send_nprofile_gen(event)        if cmd == 'nprofile_gen'
+  return send_reaction(event)            if cmd == 'react'
+  return rename_author(event)            if cmd == 'rename_author'
+  return send_restart(event)             if cmd == 'restart'
   return sanitize_archives(event)        if cmd == 'sanitize_archives'
-  return sanitize_users(event)           if cmd == 'sanitize_users'
-  return sanitize_hashes(event)          if cmd == 'sanitize_hashes'
   return sanitize_demos(event)           if cmd == 'sanitize_demos'
+  return sanitize_hashes(event)          if cmd == 'sanitize_hashes'
+  return sanitize_users(event)           if cmd == 'sanitize_users'
   return seed_hashes(event)              if cmd == 'seed_hashes'
   return set_user_id(event)              if cmd == 'set_user_id'
   return set_replay_id(event)            if cmd == 'set_replay_id'
+  return send_shutdown(event)            if cmd == 'shutdown'
+  return send_sql_list(event)            if cmd == 'sql_list'
+  return send_sql_status(event)          if cmd == 'sql_status'
+  return send_status(event)              if cmd == 'status'
   return submit_score(event)             if cmd == 'submit'
+  return send_tasks(event)               if cmd == 'tasks'
+  return send_test(event)                if cmd == 'test'
+  return send_color_test(event)          if cmd == 'test_color'
+  return test_ntrace(event)              if cmd == 'test_ntrace'
+  return send_unreaction(event)          if cmd == 'unreact'
   return update_completions(event)       if cmd == 'update_completions'
   return userlevel_completions(event)    if cmd == 'userlevel_completions'
-  return send_delete_score(event)        if cmd == 'delete_score'
-  return test_ntrace(event)              if cmd == 'test_ntrace'
-  return rename_author(event)            if cmd == 'rename_author'
-  return send_sql_status(event)          if cmd == 'sql_status'
-  return send_sql_list(event)            if cmd == 'sql_list'
-  return send_tasks(event)               if cmd == 'tasks'
-  return send_logs(event)                if cmd == 'log'
+  return send_ul_csv(event)              if cmd == 'userlevel_csv'
+  return send_ul_plot(event)             if cmd == 'userlevel_plot'
 
   $status[:special_commands] -= 1
   event << "Unsupported special command."

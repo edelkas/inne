@@ -7,7 +7,9 @@
 #       * Text inputs
 # Currently, only buttons and select menus are being used.
 
-
+def initialize_components
+  $components = Discordrb::Webhooks::View.new
+end
 
 # ActionRow builder with a Select Menu for the mode
 #   mode: Name of mode that is currently selected
@@ -255,6 +257,12 @@ end
 
 def refresh_button(id = 'test')
   interaction_button("⟳", "refresh:#{id}")
+end
+
+def add_refresh_button(id = 'test')
+  $components.row{ |r|
+    r.button(label: "⟳", style: :primary, custom_id: "refresh:#{id}")
+  }
 end
 
 def modal(
