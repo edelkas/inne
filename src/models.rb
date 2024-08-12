@@ -1997,7 +1997,7 @@ class Player < ActiveRecord::Base
       when 'hs', 'sr'
         list = list.where.not("rank_#{board}" => nil)
       when 'gm'
-        list = list.where(gold: 0).uniq{ |s| s.highscoreable_id }
+        list = list.where(gold: 0)
       end
     end
 
@@ -2043,7 +2043,8 @@ class Player < ActiveRecord::Base
 
     # Filter scores by type and tabs
     ret = scores_by_type_and_tabs(type, tabs, nil, mappack, board)
-    return ret if high
+    types = "FIELD(`highscoreable_type`, 'Level', 'Episode', 'Story', 'MappackLevel', 'MappackEpisode', 'MappackStory')"
+    return ret.order(types, '`highscoreable_id`') if high
 
     # Filter scores by rank
     if mappack.nil? || ['hs', 'sr'].include?(board)
@@ -2066,7 +2067,7 @@ class Player < ActiveRecord::Base
     end
 
     # Order results and return
-    ret.order("`#{rankf}`", '`highscoreable_type` DESC', '`highscoreable_id`')
+    ret.order("`#{rankf}`", types, '`highscoreable_id`')
   end
 
   def cools(type, tabs, r1 = 0, r2 = 20, ties = false, missing = false)
@@ -2160,7 +2161,7 @@ class Player < ActiveRecord::Base
   def singular(type, tabs, plural = false)
     bench(:start) if BENCHMARK
     type = type.nil? ? DEFAULT_TYPES : [type.to_s]
-    ret = type.map{ |t| singular_(t, tabs, plural) }.flatten#.group_by(&:rank)
+    ret = type.map{ |t| singular_(t, tabs, plural) }.flatten
     bench(:step) if BENCHMARK
     ret
   end

@@ -26,6 +26,7 @@ def send_list(event, file = true, missing = false, third = false)
   ties    = parse_ties(msg)
   tied    = parse_tied(msg)
   sing    = (missing ? -1 : 1) * parse_singular(msg)
+  high    = missing && !(sing != 0 || cool || star) # list of highscoreables, not scores
   perror("Speedrun mode isn't available for Metanet levels yet.") if board == 'sr' && !mappack
 
   # The range must make sense
@@ -41,11 +42,44 @@ def send_list(event, file = true, missing = false, third = false)
     list = player.range_ns(range[0], range[1], type, tabs, ties, tied, cool, star, missing, mappack, board)
   end
 
-  # Format response
+  # Format list
+  if !high
+    c = mappack ? 'Mappack'  : ''
+    t = mappack ? 'mappack_' : ''
+    join = <<~STR.gsub(/\s+/, ' ').strip
+      LEFT JOIN `#{t}levels`   ON (`#{t}scores`.`highscoreable_type` = '#{c}Level'   AND `#{t}levels`.`id`   = `#{t}scores`.`highscoreable_id`)
+      LEFT JOIN `#{t}episodes` ON (`#{t}scores`.`highscoreable_type` = '#{c}Episode' AND `#{t}episodes`.`id` = `#{t}scores`.`highscoreable_id`)
+      LEFT JOIN `#{t}stories`  ON (`#{t}scores`.`highscoreable_type` = '#{c}Story'   AND `#{t}stories`.`id`  = `#{t}scores`.`highscoreable_id`)
+    STR
+    name = <<~STR.gsub(/\s+/, ' ').strip
+      CASE
+        WHEN `#{t}scores`.`highscoreable_type` = '#{c}Level'   THEN `#{t}levels`.`name`
+        WHEN `#{t}scores`.`highscoreable_type` = '#{c}Episode' THEN `#{t}episodes`.`name`
+        WHEN `#{t}scores`.`highscoreable_type` = '#{c}Story'   THEN `#{t}stories`.`name`
+        ELSE ''
+      END
+    STR
+    rank  = !mappack ? '`rank`' : "`rank_#{board}`"
+    score = !mappack ? 'ROUND(`score` * 60)' : "`score_#{board}`"
+    score = "REPLACE(FORMAT(#{score} / 60, 3), ',', '')" if !board || board == 'hs'
+    pad_rank = 2
+    pad_name = !mappack ? 10 : 14
+    pad_score = !board || board == 'hs' ? 8 : 4
+    fields = []
+    fields << "LPAD(#{rank},  #{pad_rank},  '0')" unless board == 'gm'
+    fields << "': '"                              unless board == 'gm'
+    fields << "RPAD(#{name},  #{pad_name},  ' ')"
+    fields << "' - '"                             unless board == 'gm'
+    fields << "LPAD(#{score}, #{pad_score}, ' ')" unless board == 'gm'
+    list = list.joins(join).pluck("CONCAT(#{fields.join(', ')})").uniq
+  else
+    #list = list.pluck(:name)
+  end
+
+  # Format header
   max1     = find_max(:rank, type, tabs, false, mappack, board)
   max2     = player.range_ns(range[0], range[1], type, tabs, ties, tied).count
   full     = !missing || !(cool || star) # max is all scores, not all player's scores
-  high     = missing && !(sing != 0 || cool || star) # list of highscoreables, not scores
   max      = full ? max1 : max2
   type     = format_type(type).downcase
   tabs     = format_tabs(tabs)
@@ -58,19 +92,17 @@ def send_list(event, file = true, missing = false, third = false)
   boardB   = !mappack.nil? ? format_board(board) : ''
   mappackB = format_mappack(mappack)
   count    = list.count
-
-  # Print count and possibly export list in file
   header = "#{player.print_name} #{missing ? 'is missing' : 'has'} "
   header << "#{count} out of #{max} #{cool} #{tied} #{boardB} #{tabs} #{type} "
   header << "#{range}#{star} #{sing} scores #{ties} #{mappackB}"
   event << format_header(header, close: '.', upcase: false)
-  if file
-    list = list.map{ |s| high ? s : format_list_score(s, !mappack.nil? ? board : nil) }.join("\n")
-    if count <= 20
-      event << format_block(list)
-    else
-      send_file(event, list, "scores-#{player.sanitize_name}.txt", false)
-    end
+
+  # Print count and possibly export list in file
+  return unless file
+  if count <= 20
+    event << format_block(list.join("\n"))
+  else
+    send_file(event, list.join("\n"), "scores-#{player.sanitize_name}.txt", false)
   end
 rescue => e
   lex(e, "Error performing #{file ? 'list' : 'count'}.", event: event)

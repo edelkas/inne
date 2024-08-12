@@ -1192,20 +1192,6 @@ def format_sentence(e)
   e[0..-2].map(&:to_s).join(", ")
 end
 
-def format_list_score(s, board = nil)
-  p_rank  = board != 'gm'
-  p_score = board != 'gm'
-  rankf   = board.nil? ? 'rank' : "rank_#{board}"
-  scoref  = board.nil? ? 'score' : "score_#{board}"
-  scale   = board == 'hs' ? 60.0 : 1
-  fmt     = board == 'sr' ? "%4d" : "%7.3f"
-  pad     = board.nil? ? 10 : 14
-  rank_t  = p_rank ? "#{Highscoreable.format_rank(s[rankf])}: ": ''
-  name_t  = s.highscoreable.name.ljust(pad, " ")
-  score_t = p_score ? " - #{fmt % [s[scoref] / scale]}" : ''
-  "#{rank_t}#{name_t}#{score_t}"
-end
-
 def format_level_list(levels)
   return if levels.empty?
   pad = levels.map{ |l| l.name.length }.max + 1
