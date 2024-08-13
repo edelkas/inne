@@ -849,6 +849,19 @@ module Highscoreable
     self.is_a?(Storyish)
   end
 
+  def is_protected?
+    code = map.mappack.code
+    name = map.name[4..-1]
+    PROTECTED_BOARDS.key?(code) && PROTECTED_BOARDS[code].include?(name)
+  end
+
+  def is_private?
+    return true if is_protected?
+    code = map.mappack.code
+    name = map.name[4..-1]
+    PRIVATE_BOARDS.key?(code) && PRIVATE_BOARDS[code].include?(name)
+  end
+
   # Arguments are unused, but they're necessary to be compatible with the corresponding
   # function in MappackHighscoreable
   def leaderboard(*args, **kwargs)

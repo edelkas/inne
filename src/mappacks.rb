@@ -1166,7 +1166,7 @@ class MappackScore < ActiveRecord::Base
     end
 
     # Do not return replays for protected boards
-    return nil if PROTECTED_BOARDS.key?(code) && PROTECTED_BOARDS[code].include?(score.highscoreable.name[4..-1])
+    return nil if score.highscoreable.is_protected?
 
     # Find replay
     demo = score.demo

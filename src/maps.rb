@@ -1681,8 +1681,7 @@ module Map
     h = parse_highscoreable(event, mappack: true) if !h
     perror("Failed to parse highscoreable.") if !h
     perror("Columns can't be traced.") if h.is_story?
-    code = h.mappack.code if h.is_mappack?
-    perror("This trace is disabled, figure it out yourself!") if PROTECTED_BOARDS.key?(code) && PROTECTED_BOARDS[code].include?(h.name[4..-1])
+    perror("This trace is disabled, figure it out yourself!") if h.is_protected?
     msg = parse_message(event)
     hash = parse_palette(event)
     msg, palette, error = hash[:msg], hash[:palette], hash[:error]
