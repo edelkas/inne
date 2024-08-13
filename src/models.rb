@@ -2161,7 +2161,8 @@ class Player < ActiveRecord::Base
   def singular(type, tabs, plural = false)
     bench(:start) if BENCHMARK
     type = type.nil? ? DEFAULT_TYPES : [type.to_s]
-    ret = type.map{ |t| singular_(t, tabs, plural) }.flatten
+    ids = type.map{ |t| singular_(t, tabs, plural).collect(&:id) }.flatten
+    ret = Score.where(id: ids)
     bench(:step) if BENCHMARK
     ret
   end

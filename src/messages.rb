@@ -72,8 +72,6 @@ def send_list(event, file = true, missing = false, third = false)
     fields << "' - '"                             unless board == 'gm'
     fields << "LPAD(#{score}, #{pad_score}, ' ')" unless board == 'gm'
     list = list.joins(join).pluck("CONCAT(#{fields.join(', ')})").uniq
-  else
-    #list = list.pluck(:name)
   end
 
   # Format header
