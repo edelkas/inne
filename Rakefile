@@ -18,42 +18,70 @@ module Rails
   end
 end
 
+# Checks if current Rails version is at least the provided one
+def rails_at_least(ver)
+  ActiveRecord.version >= Gem::Version.create(ver)
+end
+
+# Checks if current Rails version is at most the provided one
+def rails_at_most(ver)
+  ActiveRecord.version <= Gem::Version.create(ver)
+end
+
 namespace :db do
+  desc "Sets database environment and migrations directory"
   task :environment do
     DATABASE_ENV = ENV['DATABASE_ENV'] || DATABASE
     MIGRATIONS_DIR = ENV['MIGRATIONS_DIR'] || DIR_MIGRATION
   end
 
+  desc "Loads database connection configuration from YAML file"
   task :configuration => :environment do
     @config = YAML.load_file(CONFIG)[DATABASE_ENV]
   end
 
+  desc "Establish connection with database using YAML configuration"
   task :configure_connection => :configuration do
     ActiveRecord::Base.establish_connection(@config)
   end
 
+  desc "Alias for 'configure_connection'"
   task :create => :configure_connection do
     ActiveRecord::Base.establish_connection(@config)
   end
 
+  desc "Deletes the database"
   task :drop => :configure_connection do
     ActiveRecord::Base.connection.drop_database(@config['database'])
   end
 
+  desc "Execute new migrations"
   task :migrate => :configure_connection do
     require_relative "#{DIR_SOURCE}/models.rb"
-    ActiveRecord::Migrator.migrate(MIGRATIONS_DIR, ENV['VERSION'] ? ENV['VERSION'].to_i : nil)
+    version = ENV['MIGRATION_VERSION'] ? ENV['MIGRATION_VERSION'].to_i : ENV['VERSION'] ? ENV['VERSION'].to_i : nil
+    if rails_at_most('5.2.0')
+      ActiveRecord::Migrator.migrate(MIGRATIONS_DIR, version)
+    else
+      ActiveRecord::MigrationContext.new(MIGRATIONS_DIR).migrate(version)
+    end
   end
 
+  desc "Rollback latest migration, or a fixed number of them"
   task :rollback => :configure_connection do
-    ActiveRecord::Migrator.rollback(MIGRATIONS_DIR, (ENV['STEP'] || 1).to_i)
+    if rails_at_most('5.2.0')
+      ActiveRecord::Migrator.rollback(MIGRATIONS_DIR, (ENV['STEP'] || 1).to_i)
+    else
+      ActiveRecord::MigrationContext.new(MIGRATIONS_DIR).rollback((ENV['STEP'] || 1).to_i)
+    end
   end
 
+  desc "Seed database with initial records stored in seeds.rb"
   task :seed => :configure_connection do
     require_relative "#{DIR_SOURCE}/models.rb"
     require_relative "#{DIR_DB}/seeds.rb"
   end
 
+  desc "Run tests"
   task :test => :configure_connection do
     require "#{DIR_TEST}/unit"
     require "#{DIR_TEST}/unit/ui/console/testrunner"

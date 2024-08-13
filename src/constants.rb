@@ -19,9 +19,10 @@ RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
 # Test specific features
-TEST_LOTD      = false # Posts lotd immediately once
-TEST_CTP_LOTD  = false # Posts CTP lotd immediately once
-TEST_UL_REPORT = false # Posts userlevel report immediately once
+TEST_LOTD      = false # Post lotd on startup
+TEST_CTP_LOTD  = false # Post CTP lotd on startup
+TEST_UL_REPORT = false # Post userlevel report on startup
+TEST_SCORES    = false # Download all scores on startup
 BENCH_IMAGES   = false # Benchmark image manipulation steps
 
 # Internal
@@ -755,15 +756,16 @@ RTYPES = [
 
 # TODO: Move Dan and crit to PATCH_IND_DEL, they're not cheaters
 
-# Players blacklisted from the leaderboards (hackers and cheaters)
+# Players blacklisted from the leaderboards.
+#   Hackers: Their scores are fake
+#   Cheaters: Their scores are real, but produced illegitimately
 # Keys are the user IDs, values are their known usernames
-BLACKLIST = {
+HACKERS = {
    63944 => ["Kronogenics"],
    72791 => ["Jett Altair"],
    75839 => ["vorcazm", "Treagus"],
    76223 => ["TylerDC"],
   107118 => ["Tabby_Cxt"],
-  115572 => ["Mishu"],
   122681 => ["nietske"],
   128613 => ["cock unsucker"],
   135161 => ["Apjue"],
@@ -771,18 +773,21 @@ BLACKLIST = {
   163573 => ["gronk"],
   173617 => ["You have been banned."],
   201322 => ["dimitry008"],
-  202167 => ["crit a cola drinker"],
   221472 => ["VexatiousCheff", "vex"],
   243184 => ["Player"],
   253072 => ["test8378"],
   253161 => ["Chara"],
   276273 => ["DBYT3"],
-  291743 => ["Yup_This_Is_My_Name"],
   298531 => ["Boringfish"],
   307030 => ["The_Mega_Force"],
   325245 => ["Staticwork"],
   326339 => ["Psina"],
   336069 => ["Progressively idle"]
+}
+
+CHEATERS = {
+  115572 => ["Mishu"],
+  317061 => ["jake"]
 }
 
 # Additional blacklisted names whose ID we don't know, since their scores
@@ -830,7 +835,15 @@ PATCH_IND_DEL = {
   ],
   :level     => [
     3572785, # SuperVolcano's S-B-00-01
-    3622469  # HamSandwich's S-B-00-02
+    3622469, # HamSandwich's S-B-00-02
+    3845087, # crit's SI-A-00-00
+    3845089, # crit's SI-A-00-03
+    3845119, # crit's SI-C-00-01
+    3845121, # crit's SI-C-00-03
+    3845158, # crit's SI-B-01-02
+    3845166, # crit's SI-C-01-01
+    3845167, # crit's SI-C-01-02
+    3846047  # crit's S-A-00-01
   ],
   :story     => [],
   :userlevel => [

@@ -753,16 +753,18 @@ def start_metanet_tasks
   return if DO_NOTHING || OFFLINE_MODE
 
   # Update all Metanet top20 highscores daily
-  Scheduler.add("Download scores",     freq: HIGHSCORE_UPDATE_FREQUENCY,  time: 'score'            ) { download_high_scores       } if DO_EVERYTHING || UPDATE_SCORES
+  freq = TEST && TEST_SCORES ? -1 : HIGHSCORE_UPDATE_FREQUENCY
+  time = TEST && TEST_SCORES ? nil : 'score'
+  Scheduler.add("Download scores", freq: freq, time: time) { download_high_scores } if DO_EVERYTHING || UPDATE_SCORES || TEST && TEST_SCORES
 
   # Download demos for scores missing it daily
-  Scheduler.add("Download demos",      freq: DEMO_UPDATE_FREQUENCY,       time: 'demo'             ) { download_demos             } if DO_EVERYTHING || UPDATE_DEMOS
+  Scheduler.add("Download demos", freq: DEMO_UPDATE_FREQUENCY, time: 'demo') { download_demos } if DO_EVERYTHING || UPDATE_DEMOS
 
   # Download scores for newest userlevels daily
-  Scheduler.add("Userlevel scores",    freq: USERLEVEL_SCORE_FREQUENCY,   time: 'userlevel_score'  ) { download_userlevel_scores  } if DO_EVERYTHING || UPDATE_USERLEVELS
+  Scheduler.add("Userlevel scores", freq: USERLEVEL_SCORE_FREQUENCY, time: 'userlevel_score') { download_userlevel_scores } if DO_EVERYTHING || UPDATE_USERLEVELS
 
   # Update userlevels present in each tab (hardest, featured...) daily
-  Scheduler.add("Userlevel tabs",      freq: USERLEVEL_TAB_FREQUENCY,     time: 'userlevel_tab'    ) { update_userlevel_tabs      } if DO_EVERYTHING || UPDATE_USER_TABS
+  Scheduler.add("Userlevel tabs", freq: USERLEVEL_TAB_FREQUENCY, time: 'userlevel_tab') { update_userlevel_tabs } if DO_EVERYTHING || UPDATE_USER_TABS
 
   # Gradually update all userlevel scores (every 5 secs)
   Scheduler.add("Userlevel chunk", force: false, log: false) { update_all_userlevels_chunk } if DO_EVERYTHING || UPDATE_USER_GLOB
@@ -775,10 +777,10 @@ def start_discord_tasks
   return if DO_NOTHING
 
   # Update the bot's status, update lotd scores, etc, every 5 mins
-  Scheduler.add("Update status",  freq: STATUS_UPDATE_FREQUENCY, log: false) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
+  Scheduler.add("Update status", freq: STATUS_UPDATE_FREQUENCY, log: false) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
 
   # Check for new N++-related streams of Twitch every minute
-  Scheduler.add("Update Twitch",  freq: TWITCH_UPDATE_FREQUENCY, log: false, db: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
+  Scheduler.add("Update Twitch", freq: TWITCH_UPDATE_FREQUENCY, log: false, db: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY

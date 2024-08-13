@@ -883,8 +883,9 @@ class MappackScore < ActiveRecord::Base
 
     # Apply blacklist
     name = "ID:#{uid}"
-    if BLACKLIST.key?(uid)
-      warn("Blacklisted player #{BLACKLIST[uid][0]} submitted a score", discord: true)
+    if HACKERS.key?(uid) || CHEATERS.key?(uid)
+      name = (HACKERS[uid] || CHEATERS[uid]).first
+      warn("Blacklisted player #{name} submitted a score", discord: true)
       return
     end
 

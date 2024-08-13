@@ -464,10 +464,15 @@ module Downloadable
       TABS[self.class.to_s].each{ |k, v| if v[0].include?(self.id) then limit = v[1]; break end  }
     end
 
-    # Filter out cheated/hacked runs, incorrect scores and too high scores
+    # Filter out hacked runs, incorrect scores and too high scores
     k = self.class.to_s.downcase.to_sym
     boards.reject!{ |s|
-      BLACKLIST.keys.include?(s['user_id']) || BLACKLIST_NAMES.include?(s['user_name']) || PATCH_IND_DEL[k].include?(s['replay_id']) || s['score'] / 1000.0 >= limit
+      HACKERS.key?(s['user_id']) || BLACKLIST_NAMES.include?(s['user_name']) || PATCH_IND_DEL[k].include?(s['replay_id']) || s['score'] / 1000.0 >= limit
+    }
+
+    # Mark cheated runs, to be archived separately
+    boards.each{ |s|
+      s['cheated'] = true if CHEATERS.key?(s['user_id'])
     }
 
     # Batch patch old incorrect runs
@@ -495,7 +500,11 @@ module Downloadable
       stars = scores.where(star: true).pluck(:player_id) if self.class != Userlevel
 
       # Loop through all new scores
-      updated.each_with_index do |score, i|
+      i = -1
+      updated.each do |score|
+        # Rank field
+        i += 1 unless score['cheated']
+
         # Precompute player and score
         playerclass = self.class == Userlevel ? UserlevelPlayer : Player
         player = playerclass.find_or_create_by(metanet_id: score['user_id'])
@@ -509,14 +518,18 @@ module Downloadable
           replay_id: score['replay_id'].to_i,
           player:    player,
           tied_rank: updated.find_index { |s| s['score'] == score['score'] }
-        )
+        ) unless score['cheated']
 
         # Non-userlevel updates (tab, archive, demos)
         next if self.class == Userlevel
-        scores.find_by(rank: i).update(tab: self.tab, cool: false, star: false)
+        scores.find_by(rank: i).update(tab: self.tab, cool: false, star: false) unless score['cheated']
 
         # Create archive and demo if they don't already exist
-        next if !Archive.find_by(highscoreable: self, replay_id: score['replay_id']).nil?
+        ar = Archive.find_by(highscoreable: self, replay_id: score['replay_id'])
+        if !!ar
+          ar.update(cheated: !!score['cheated'])
+          next
+        end
 
         # Update old archives
         Archive.where(highscoreable: self, player: player).update_all(expired: true)
@@ -531,7 +544,8 @@ module Downloadable
           date:          Time.now,
           tab:           self.tab,
           lost:          false,
-          expired:       false
+          expired:       false,
+          cheated:       !!score['cheated']
         )
 
         # Create demo
@@ -2441,24 +2455,24 @@ class Archive < ActiveRecord::Base
 
   # Returns the leaderboards at a particular point in time
   def self.scores(highscoreable, date)
-    self.select('metanet_id', 'max(score)')
-        .where(highscoreable: highscoreable)
-        .where("unix_timestamp(date) <= #{date}")
-        .group('metanet_id')
-        .order('max(score) desc, max(replay_id) asc')
+    self.select(:metanet_id, 'MAX(`score`)')
+        .where(highscoreable: highscoreable, cheated: false)
+        .where("UNIX_TIMESTAMP(`date`) <= #{date}")
+        .group(:metanet_id)
+        .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
         .take(20)
         .map{ |s|
-          [s.metanet_id.to_i, s['max(score)'].to_i]
+          [s.metanet_id.to_i, s['MAX(`score`)'].to_i]
         }
   end
 
   # Return a list of all dates where a highscoreable changed
   # We consider dates less than MAX_SECS apart to be the same
   def self.changes(highscoreable)
-    dates = self.where(highscoreable: highscoreable)
-                .select('unix_timestamp(date)')
+    dates = self.where(highscoreable: highscoreable, cheated: false)
+                .select('UNIX_TIMESTAMP(`date`)')
                 .distinct
-                .pluck('unix_timestamp(date)')
+                .pluck('UNIX_TIMESTAMP(`date`)')
                 .sort
     dates[0..-2].each_with_index.select{ |d, i| dates[i + 1] - d > MAX_SECS }.map(&:first).push(dates.last)
   end
@@ -2475,9 +2489,9 @@ class Archive < ActiveRecord::Base
     date = Time.now.to_i if date.nil?
 
     dates[0..-2].each_with_index.reject{ |d, i| dates[i + 1] > date }.each{ |d, i|
-      a = self.where(highscoreable: highscoreable)
-              .where("unix_timestamp(date) > #{d} AND unix_timestamp(date) <= #{dates[i + 1]}")
-              .order('score DESC')
+      a = self.where(highscoreable: highscoreable, cheated: false)
+              .where("UNIX_TIMESTAMP(`date`) > #{d} AND UNIX_TIMESTAMP(`date`) <= #{dates[i + 1]}")
+              .order('`score` DESC')
               .first
       if a.score > zeroth[1]
         zeroth = [a.metanet_id, a.score]
@@ -2505,22 +2519,28 @@ class Archive < ActiveRecord::Base
     ret = {}
 
     # Delete scores by ignored players
-    query = Score.joins("INNER JOIN players ON players.id = scores.player_id")
-                 .where("players.metanet_id" => BLACKLIST.keys)
+    query = Score.joins("INNER JOIN `players` ON `players`.`id` = `scores`.`player_id`")
+                 .where("players.metanet_id" => HACKERS.keys + CHEATERS.keys)
     count = query.count.to_i
-    ret['score_del'] = "Deleted #{count} scores by ignored players." unless count == 0
+    ret['score_del'] = "Deleted #{count} illegitimate scores." unless count == 0
     query.delete_all
 
-    # Delete archives (and their corresponding demos) by ignored players
-    query = Archive.where(metanet_id: BLACKLIST.keys)
+    # Delete archives (and their corresponding demos) by hackers
+    query = Archive.where(metanet_id: HACKERS.keys)
     count = query.count.to_i
-    ret['archive_del'] = "Deleted #{count} archives by ignored players." unless count == 0
+    ret['archive_del'] = "Deleted #{count} archives by hackers." unless count == 0
     query.each(&:wipe)
 
-    # Delete ignored players
-    query = Player.where(metanet_id: BLACKLIST.keys)
+    # Flag archives by cheaters
+    query = Archive.where(metanet_id: CHEATERS.keys, cheated: false)
     count = query.count.to_i
-    ret['player_del'] = "Deleted #{count} ignored players." unless count == 0
+    ret['archive_del'] = "Flagged #{count} archives by cheaters." unless count == 0
+    query.update_all(cheated: true)
+
+    # Delete ignored players
+    query = Player.where(metanet_id: HACKERS.keys)
+    count = query.count.to_i
+    ret['player_del'] = "Deleted #{count} hackers." unless count == 0
     query.delete_all
 
     # Delete individual incorrect archives
@@ -2538,8 +2558,8 @@ class Archive < ActiveRecord::Base
       :highscoreable_id,
       :player_id,
       :score
-    ).having('count(score) > 1')
-     .select(:highscoreable_type, :highscoreable_id, :player_id, :score, 'min(date)')
+    ).having('COUNT(`score`) > 1')
+     .select(:highscoreable_type, :highscoreable_id, :player_id, :score, 'MIN(`date`)')
      .to_a
     count = 0
     duplicates.each{ |d|
@@ -2555,8 +2575,8 @@ class Archive < ActiveRecord::Base
     ret['duplicates'] = "Deleted #{count} duplicated archives." unless count == 0
 
     # Delete demos with missing archives
-    query = Demo.joins("LEFT JOIN archives ON archives.id = demos.id")
-                .where("archives.id IS NULL")
+    query = Demo.joins("LEFT JOIN `archives` ON `archives`.`id` = `demos`.`id`")
+                .where("`archives`.`id` IS NULL")
     count = query.count.to_i
     ret['orphan_demos'] = "Deleted #{count} orphaned demos." unless count == 0
     query.delete_all
