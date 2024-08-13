@@ -527,7 +527,7 @@ module Downloadable
         # Create archive and demo if they don't already exist
         ar = Archive.find_by(highscoreable: self, replay_id: score['replay_id'])
         if !!ar
-          ar.update(cheated: !!score['cheated'])
+          ar.update(cheated: true) if score['cheated']
           next
         end
 

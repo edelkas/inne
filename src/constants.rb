@@ -754,8 +754,6 @@ RTYPES = [
   'average_point'
 ]
 
-# TODO: Move Dan and crit to PATCH_IND_DEL, they're not cheaters
-
 # Players blacklisted from the leaderboards.
 #   Hackers: Their scores are fake
 #   Cheaters: Their scores are real, but produced illegitimately
