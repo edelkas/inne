@@ -376,8 +376,8 @@ def send_report
   pad   = [2, DEFAULT_PADDING, 6, 6, 6, 5, 4]
   log   = [] if LOG_REPORT
 
-  changes = Archive.where("unix_timestamp(date) > #{time}")
-                   .order('date desc')
+  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time} AND `cheated` = 0")
+                   .order('`date` DESC')
                    .map{ |ar| [ar.metanet_id, ar.find_rank(time), ar.find_rank(now), ar.highscoreable, ar.score] }
                    .group_by{ |s| s[0] }
                    .map{ |id, scores|
@@ -448,8 +448,8 @@ def send_summary
   time  = [now - SUMMARY_UPDATE_SIZE, base].max
   total = { "Level" => [0, 0, 0, 0, 0], "Episode" => [0, 0, 0, 0, 0], "Story" => [0, 0, 0, 0, 0] }
 
-  changes = Archive.where("unix_timestamp(date) > #{time}")
-                   .order('date desc')
+  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time}", cheated: false)
+                   .order('`date` DESC')
                    .map{ |ar|
                      total[ar.highscoreable.class.to_s][2] += 1
                      [ar.metanet_id, ar.highscoreable]
@@ -483,16 +483,9 @@ def send_userlevel_report
     sleep(5)
   end
 
-  # 0th report
-  header = mdtext("0th report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2)
-  diff = format_block(UserlevelHistory.compare(1, Time.now - 12 * 60 * 60))
-  send_message($mapping_channel, content: header + "\n" + diff)
+  send_message($mapping_channel, content: UserlevelHistory.report(1))
   sleep(0.25)
-
-  # Point report
-  header = mdtext("Point report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2)
-  diff = format_block(UserlevelHistory.compare(-1, Time.now - 12 * 60 * 60))
-  send_message($mapping_channel, content: header + "\n" + diff)
+  send_message($mapping_channel, content: UserlevelHistory.report(-1))
   update_userlevel_histories
 end
 

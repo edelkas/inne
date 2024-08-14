@@ -964,6 +964,20 @@ rescue => e
   lex(e, "Failed to send outte logs.", event: event)
 end
 
+# Send the highscoring report
+def test_report(event)
+  flags = parse_flags(event)
+  if !flags.key?(:userlevel)
+    send_report
+    sleep(0.25)
+    send_summary
+  else
+    send_message(event.channel, content: UserlevelHistory.report(1))
+    sleep(0.25)
+    send_message(event.channel, content: UserlevelHistory.report(-1))
+  end
+end
+
 
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
@@ -1006,6 +1020,7 @@ def respond_special(event)
   return send_nprofile_gen(event)        if cmd == 'nprofile_gen'
   return send_reaction(event)            if cmd == 'react'
   return rename_author(event)            if cmd == 'rename_author'
+  return test_report(event)              if cmd == 'report'
   return send_restart(event)             if cmd == 'restart'
   return sanitize_archives(event)        if cmd == 'sanitize_archives'
   return sanitize_demos(event)           if cmd == 'sanitize_demos'
