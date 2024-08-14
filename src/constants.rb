@@ -87,6 +87,7 @@ CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 # Colors in certain functions
 RICH_RANKINGS = false
 RICH_DIFFS    = true
+SHOW_CHEATERS = true
 
 # Non-standard character widths in the monospaced font (for padding adjustments)
 WIDTH_EMOJI = 2

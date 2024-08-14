@@ -866,18 +866,19 @@ module Highscoreable
   # function in MappackHighscoreable
   def leaderboard(*args, **kwargs)
     ul = self.is_a?(Userlevel)
-    attr_names = %W[rank id score name metanet_id cool star]
+    attr_names = %W[rank id score name metanet_id replay_id cool star]
     attrs = [
       'rank',
       "#{ul ? 'userlevel_' : ''}scores.id",
       'score',
-      ul ? 'name' : 'IF(display_name IS NOT NULL, display_name, name)',
-      'metanet_id'
+      ul ? 'name' : 'IF(`display_name` IS NOT NULL, `display_name`, `name`)',
+      'metanet_id',
+      'replay_id'
     ]
     attrs.push('cool', 'star') if !ul
     if !kwargs.key?(:pluck) || kwargs[:pluck]
       pclass = ul ? 'userlevel_players' : 'players'
-      scores.joins("INNER JOIN #{pclass} ON #{pclass}.id = player_id")
+      scores.joins("INNER JOIN `#{pclass}` ON `#{pclass}`.`id` = `player_id`")
             .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
     else
       scores
@@ -885,7 +886,6 @@ module Highscoreable
   end
 
   def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true)
-    mappack = self.is_a?(MappackHighscoreable)
     userlevel = self.is_a?(Userlevel)
     hs = board == 'hs'
 
@@ -893,18 +893,41 @@ module Highscoreable
     scores.reload
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
-    }.sort_by{ |_, r| full ? r : ranks.index(r) }
+    }.sort_by{ |_, r| full ? r : ranks.index(r) }.map(&:first)
+
+    # Figure out if cheated scores need to be inserted
+    if SHOW_CHEATERS && !is_mappack? && !full
+      cheated_scores = Archive.where(highscoreable: self, expired: false, cheated: true)
+                              .joins("INNER JOIN `players` ON `players`.`metanet_id` = `archives`.`metanet_id`")
+                              .order('`score` DESC', '`replay_id` ASC')
+                              .pluck(:name, '`score` / 60.0', :metanet_id, :replay_id)
+      cheated_scores.map!{ |s|
+        h = {}
+        h['score']      = s[1]
+        h['name']       = s[0]
+        h['metanet_id'] = s[2]
+        h['replay_id']  = s[3]
+        h['cool']       = false
+        h['star']       = false
+        h['cheated']    = true
+        h
+      }
+      boards += cheated_scores
+      boards.sort_by!{ |s| [-(s['score'] * 60).round, s['replay_id']] }
+    end
 
     # Calculate padding
-    name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
-    field = !mappack ? 'score' : "score_#{board}"
-    score_padding = sp > 0 ? sp : boards.map{ |s, _|
-      mappack && hs || userlevel ? s[field] / 60.0 : s[field]
-    }.max.to_i.to_s.length + (!mappack || hs ? 4 : 0)
+    name_padding = np > 0 ? np : boards.map{ |s| s['name'].to_s.length }.max
+    field = !is_mappack? ? 'score' : "score_#{board}"
+    score_padding = sp > 0 ? sp : boards.map{ |s|
+      is_mappack? && hs || userlevel ? s[field] / 60.0 : s[field]
+    }.max.to_i.to_s.length + (!is_mappack? || hs ? 4 : 0)
 
     # Print scores
-    boards.map{ |s, r|
-      Scorish.format(name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r, mappack: mappack, userlevel: userlevel, h: s)
+    r = -1
+    boards.map{ |s|
+      r += 1 unless s['cheated']
+      Scorish.format(name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r, mappack: is_mappack?, userlevel: userlevel, h: s)
     }
   end
 
@@ -1463,10 +1486,12 @@ module Scorish
   def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {})
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
+    cheat = !!h['cheated']
 
     # Compose each element
+
     t_star   = mappack || !stars ? '' : (h['star'] ? '*' : ' ')
-    t_rank   = !mappack ? h['rank'] : (t_rank || 0)
+    t_rank   = cheat ? 'xx' : t_rank || h['rank'] || '--'
     t_rank   = Highscoreable.format_rank(t_rank)
     t_player = format_string(h['name'], name_padding)
     f_score  = !mappack ? 'score' : "score_#{mode}"
@@ -1477,7 +1502,9 @@ module Scorish
     t_cool   = !mappack && cools && h['cool'] ? " 😎" : ""
 
     # Put everything together
-    "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}"
+    line = "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}"
+    line = "#{ANSI.red}#{line}#{ANSI.clear}" if cheat
+    line
   end
 
   def format(name_padding = DEFAULT_PADDING, score_padding = 0, cools = true, mode = 'hs', t_rank = nil)
@@ -2467,16 +2494,17 @@ class Archive < ActiveRecord::Base
   enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   # Returns the leaderboards at a particular point in time
-  def self.scores(highscoreable, date)
-    self.select(:metanet_id, 'MAX(`score`)')
-        .where(highscoreable: highscoreable, cheated: false)
-        .where("UNIX_TIMESTAMP(`date`) <= #{date}")
-        .group(:metanet_id)
-        .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
-        .take(20)
-        .map{ |s|
-          [s.metanet_id.to_i, s['MAX(`score`)'].to_i]
-        }
+  def self.scores(highscoreable, date = nil, cheated: false, pluck: true)
+    ret = self.select(:metanet_id, 'MAX(`score`)')
+              .where(highscoreable: highscoreable, cheated: cheated)
+              .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date}" : '')
+              .group(:metanet_id)
+              .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
+              .limit(20)
+    return ret unless pluck
+    ret.map{ |s|
+      [s.metanet_id.to_i, s['MAX(`score`)'].to_i]
+    }
   end
 
   # Return a list of all dates where a highscoreable changed
