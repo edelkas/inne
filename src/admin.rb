@@ -18,6 +18,29 @@ rescue => e
   lex(e, "Error sanitizing archives.", event: event)
 end
 
+def sanitize_userlevels(event)
+  # Delete scores by ignored players
+  query = UserlevelScore.joins("INNER JOIN `userlevel_players` ON `userlevel_players`.`id` = `userlevel_scores`.`player_id`")
+                        .where("userlevel_players.metanet_id" => HACKERS.keys + CHEATERS.keys)
+  count = query.count.to_i
+  query.delete_all
+  event << "* Deleted #{count} illegitimate userlevel scores." unless count == 0
+
+  # Delete individual incorrect scores
+  query = UserlevelScore.where(replay_id: PATCH_IND_DEL[:userlevel])
+  count = query.count.to_i
+  query.delete_all
+  event << "* Deleted #{count} incorrect userlevel scores." unless count == 0
+
+  # Delete ignored players
+  query = UserlevelPlayer.where(metanet_id: HACKERS.keys + CHEATERS.keys)
+  count = query.count.to_i
+  event << "* Deleted #{count} userlevel hackers." unless count == 0
+  query.delete_all
+
+  event << "Done"
+end
+
 def send_test(event)
 end
 
@@ -937,6 +960,8 @@ def send_logs(event, page: nil)
      .chomp
   }.compact
   pager(event, page, header: "Logs", func: 'send_logs', list: lines)
+rescue => e
+  lex(e, "Failed to send outte logs.", event: event)
 end
 
 
@@ -985,6 +1010,7 @@ def respond_special(event)
   return sanitize_archives(event)        if cmd == 'sanitize_archives'
   return sanitize_demos(event)           if cmd == 'sanitize_demos'
   return sanitize_hashes(event)          if cmd == 'sanitize_hashes'
+  return sanitize_userlevels(event)      if cmd == 'sanitize_userlevels'
   return sanitize_users(event)           if cmd == 'sanitize_users'
   return seed_hashes(event)              if cmd == 'seed_hashes'
   return set_user_id(event)              if cmd == 'set_user_id'

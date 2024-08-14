@@ -1963,6 +1963,8 @@ def send_denubbed(event)
                   .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{'%2d' % gap[1]}f - #{gap[2]} people - #{gap[0]}" }
                   .join("\n")
   event << format_block(str)
+rescue => e
+  lex(e, "Error fetching denubbed scores.", event: event)
 end
 
 # Handle responses to new reactions
