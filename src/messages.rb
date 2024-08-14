@@ -1944,6 +1944,26 @@ def robot(event)
   send_message(event, db: false, content: start.sample + middle.sample + ending.sample)
 end
 
+def send_denubbed(event)
+  mishu_id = 115572
+  mishu_scores = Archive.where(metanet_id: mishu_id, expired: false)
+                        .pluck(:highscoreable_type, :highscoreable_id, :score, :replay_id)
+                        .map{ |s|
+                          [s[0].constantize.find(s[1]), { score: s[2], replay_id: s[3] }]
+                        }.to_h
+  max_scores = {}
+  mishu_scores.each{ |k, v|
+    scores = Archive.scores(k, nil, cheated: true, full: true)
+    index = scores.index{ |s| s[0] == mishu_id }
+    next unless index && index > 0
+    max_scores[k] = scores[0][1] - v[:score]
+  }
+  str = max_scores.sort_by{ |h, gap| [-gap, h.id] }.to_h
+                  .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{gap} frames" }
+                  .join("\n")
+  event << format_block(str)
+end
+
 # Handle responses to new reactions
 def respond_reaction(event)
   # Only have tasks for reactions to outte messages
@@ -2032,6 +2052,7 @@ def respond(event)
   return update_ntrace(event)        if msg =~ /\bupdate\s*ntrace\b/i
   return faceswap(event)             if msg =~ /faceswap/i
   return send_mappacks(event)        if msg =~ /mappacks/i
+  return send_denubbed(event)        if msg =~ /\bdenubbed\b/i
   return hello(event)                if msg =~ /\bhello\b/i || msg =~ /\bhi\b/i
   return thanks(event)               if msg =~ /\bthank you\b/i || msg =~ /\bthanks\b/i
 

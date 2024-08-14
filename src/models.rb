@@ -2494,13 +2494,14 @@ class Archive < ActiveRecord::Base
   enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
 
   # Returns the leaderboards at a particular point in time
-  def self.scores(highscoreable, date = nil, cheated: false, pluck: true)
+  def self.scores(highscoreable, date = nil, cheated: false, pluck: true, full: false)
     ret = self.select(:metanet_id, 'MAX(`score`)')
-              .where(highscoreable: highscoreable, cheated: cheated)
+              .where(highscoreable: highscoreable)
+              .where(!cheated ? '`cheated = 0`' : '')
               .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date}" : '')
               .group(:metanet_id)
               .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
-              .limit(20)
+    ret = ret.limit(20) if !full
     return ret unless pluck
     ret.map{ |s|
       [s.metanet_id.to_i, s['MAX(`score`)'].to_i]
