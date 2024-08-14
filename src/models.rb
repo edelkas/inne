@@ -885,7 +885,7 @@ module Highscoreable
     end
   end
 
-  def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true)
+  def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false)
     userlevel = self.is_a?(Userlevel)
     hs = board == 'hs'
 
@@ -896,7 +896,7 @@ module Highscoreable
     }.sort_by{ |_, r| full ? r : ranks.index(r) }.map(&:first)
 
     # Figure out if cheated scores need to be inserted
-    if SHOW_CHEATERS && !is_mappack? && !full
+    if cheated && SHOW_CHEATERS && !is_mappack? && !full
       cheated_scores = Archive.where(highscoreable: self, expired: false, cheated: true)
                               .joins("INNER JOIN `players` ON `players`.`metanet_id` = `archives`.`metanet_id`")
                               .order('`score` DESC', '`replay_id` ASC')
@@ -931,15 +931,15 @@ module Highscoreable
     }
   end
 
-  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true)
+  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false)
     if !self.is_a?(MappackHighscoreable) || mode != 'dual'
-      ret = format_scores_board(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars)
+      ret = format_scores_board(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated)
       ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"] if ret.size == 0
       ret = ret.join("\n") if join
       return ret
     end
-    board_hs = format_scores_board('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars)
-    board_sr = format_scores_board('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars)
+    board_hs = format_scores_board('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated)
+    board_sr = format_scores_board('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated)
     length_hs = board_hs.first.length rescue 0
     length_sr = board_sr.first.length rescue 0
     size = [board_hs.size, board_sr.size].max
@@ -2497,7 +2497,7 @@ class Archive < ActiveRecord::Base
   def self.scores(highscoreable, date = nil, cheated: false, pluck: true, full: false)
     ret = self.select(:metanet_id, 'MAX(`score`)')
               .where(highscoreable: highscoreable)
-              .where(!cheated ? '`cheated = 0`' : '')
+              .where(!cheated ? '`cheated` = 0' : '')
               .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date}" : '')
               .group(:metanet_id)
               .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')

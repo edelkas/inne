@@ -436,6 +436,7 @@ def send_scores(event, map = nil, ret = false)
   board   = parse_board(msg, 'hs', dual: true)
   board   = 'hs' if !mappack && board == 'dual'
   full    = parse_full(msg)
+  cheated = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i]
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
   res     = ""
 
@@ -453,9 +454,9 @@ def send_scores(event, map = nil, ret = false)
   end
 
   # Format scores
-  header = format_header("#{format_full(full)} #{format_board(board).pluralize} for #{h.format_name}")
+  header = format_header("#{format_full(full)} #{format_board(board).pluralize} for #{h.format_name}#{cheated ? ' [with cheaters]' : ''}")
   res << header
-  scores = h.format_scores(mode: board, full: full, join: false)
+  scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated)
   if full && scores.count > 20
     send_file(event, scores.join("\n"), "#{h.name}-scores.txt")
   else
@@ -1956,10 +1957,10 @@ def send_denubbed(event)
     scores = Archive.scores(k, nil, cheated: true, full: true)
     index = scores.index{ |s| s[0] == mishu_id }
     next unless index && index > 0
-    max_scores[k] = scores[0][1] - v[:score]
+    max_scores[k] = [Player.find_by(metanet_id: scores[0][0]).name, scores[0][1] - v[:score], index]
   }
-  str = max_scores.sort_by{ |h, gap| [-gap, h.id] }.to_h
-                  .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{gap} frames" }
+  str = max_scores.sort_by{ |h, gap| [-gap[1], h.id] }.to_h
+                  .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{'%2d' % gap[1]}f - #{gap[2]} people - #{gap[0]}" }
                   .join("\n")
   event << format_block(str)
 end
