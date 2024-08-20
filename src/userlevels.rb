@@ -576,7 +576,7 @@ class Userlevel < ActiveRecord::Base
     return (CLE_FORWARD ? forward(req) : nil) if mode != m
 
     # Return saved userlevel query
-    $status[:http_levels] += 1
+    action_inc('http_levels')
     res
   rescue => e
     lex(e, 'Failed to socket userlevel query.')
@@ -1711,7 +1711,7 @@ end
 
 def respond_userlevels(event)
   msg = parse_message(event)
-  $status[:commands] += 1
+  action_inc('commands')
 
   # Exclusively global methods
   if !msg[NAME_PATTERN, 2]
@@ -1739,6 +1739,6 @@ def respond_userlevels(event)
   return send_userlevel_summary(event)       if msg =~ /summary/i
   return send_userlevel_times(event)         if msg =~ /\bwhen\b/i
 
-  $status[:commands] -= 1
+  action_dec('commands')
   event << "Sorry, I didn't understand your userlevel command."
 end

@@ -155,13 +155,6 @@ def initialize_vars
   $sql_vars        = {}
   $sql_status      = {}
   $sql_conns       = []
-  $status          = {
-    commands:      0, main_commands: 0, special_commands: 0, messages:     0,
-    edits:         0, pings:         0, dms:              0, interactions: 0,
-    logs:          0, errors:        0, warnings:         0, exceptions:   0,
-    http_requests: 0, http_errors:   0, http_forwards:    0, http_scores:  0,
-    http_replay:   0, http_submit:   0, http_login:       0, http_levels:  0
-  }
   $trace_context   = {
     theme:   "",
     bg:      nil,
@@ -197,6 +190,7 @@ end
 # Connect to the database
 def connect_db
   ActiveRecord::Base.establish_connection($config)
+  GlobalProperty.status_init
   log("Connected to database")
 rescue => e
   fatal("Failed to connect to the database: #{e}")
@@ -305,7 +299,7 @@ end
 def setup_bot
   # Respond to DMs
   $bot.private_message do |event|
-    $status[:dms] += 1
+    action_inc('dms')
     handle_command(event)
   rescue => e
     lex(e, 'Failed to handle Discord DM')
@@ -313,7 +307,7 @@ def setup_bot
 
   # Respond to pings
   $bot.mention do |event|
-    $status[:pings] += 1
+    action_inc('pings')
     handle_command(event) unless event.channel.type == 1
   rescue => e
     lex(e, 'Failed to handle Discord ping')
@@ -337,7 +331,7 @@ def setup_bot
 
   # Respond to button interactions
   $bot.button do |event|
-    $status[:interactions] += 1
+    action_inc('interactions')
     handle_command(event, log: false) { |e| respond_interaction_button(e) }
   rescue => e
     lex(e, 'Failed to handle Discord button interaction')
@@ -345,7 +339,7 @@ def setup_bot
 
   # Respond to select menu interactions
   $bot.select_menu do |event|
-    $status[:interactions] += 1
+    action_inc('interactions')
     handle_command(event, log: false) { |e| respond_interaction_menu(e) }
   rescue => e
     lex(e, 'Failed to handle Discord select menu interaction')
@@ -353,7 +347,7 @@ def setup_bot
 
   # Respond to text input interactions
   $bot.modal_submit do |event|
-    $status[:interactions] += 1
+    action_inc('interactions')
     handle_command(event, log: false) { |e| respond_interaction_modal(e) }
   rescue => e
     lex(e, 'Failed to handle Discord text input interaction')
@@ -440,13 +434,13 @@ binding.pry if DEBUG
 # Idle until we need to execute commands on the main thread issued from
 # different threads
 while cmd = $main_queue.pop
-  $status[:main_commands] += 1
+  action_inc('main_commands')
   case cmd.proc
     # Matplotlib depends on PyCall, which is not thread safe
   when :trace
     cmd.result = Map::mpl_trace(**$trace_context)
   else
-    $status[:main_commands] -= 1
+    action_dec('main_commands')
   end
   cmd.thread.run
 end

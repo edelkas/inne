@@ -1985,7 +1985,7 @@ def respond(event)
   # Divert flow to userlevel specific functions
   return respond_userlevels(event) if !!msg[/userlevel/i]
 
-  $status[:commands] += 1
+  action_inc('commands')
 
   # Exclusively global methods
   if !msg[NAME_PATTERN, 2]
@@ -2060,6 +2060,6 @@ def respond(event)
   return thanks(event)               if msg =~ /\bthank you\b/i || msg =~ /\bthanks\b/i
 
   # If we get to this point, no command was executed
-  $status[:commands] -= 1
+  action_dec('commands')
   event << "Sorry, I didn't understand your command."
 end

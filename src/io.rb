@@ -1275,7 +1275,7 @@ def send_message(
   # Only update message if it's a component event (no need to log)
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append
-    $status[:edits] += 1
+    action_inc('edits')
     return dest.update_message(content: content, components: components)
   end
 
@@ -1297,7 +1297,7 @@ def send_message(
   return if !dest.respond_to?(:send_message)
   msg = dest.send_message(content, false, nil, files, nil, nil, components)
   Message.create(id: msg.id, user_id: user_id, date: Time.now) if user_id && db
-  $status[:messages] += 1
+  action_inc('messages')
   msg
 rescue => e
   lex(e, 'Failed to send message to Discord')

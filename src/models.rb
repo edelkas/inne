@@ -1935,7 +1935,7 @@ class Player < ActiveRecord::Base
   # Proxy a login request and register player
   def self.login(mappack, req)
     # Forward request to Metanet
-    $status[:http_login] += 1
+    action_inc('http_login')
     res = forward(req)
     invalid = res.nil? || res == INVALID_RESP
     raise 'Invalid response' if invalid && !LOCAL_LOGIN
@@ -2334,6 +2334,15 @@ class User < ActiveRecord::Base
 end
 
 class GlobalProperty < ActiveRecord::Base
+  # Different types of interactions we log
+  STATUS_ENTRIES = [
+    'commands',      'main_commands', 'special_commands', 'messages',
+    'edits',         'pings',         'dms',              'interactions',
+    'logs',          'errors',        'warnings',         'exceptions',
+    'http_requests', 'http_errors',   'http_forwards',    'http_scores',
+    'http_replay',   'http_submit',   'http_login',       'http_levels'
+  ]
+
   # Get current lotd/eotw/cotm
   def self.get_current(type, ctp = false)
     klass = ctp ? type.mappack : type
@@ -2422,8 +2431,8 @@ class GlobalProperty < ActiveRecord::Base
   # Update "active" boolean for recently active IDs
   def self.update_steam_actives
     period = FAST_PERIOD * 24 * 60 * 60
-    Player.where("unix_timestamp(last_active) >= #{Time.now.to_i - period}").update_all(active: true)
-    Player.where("unix_timestamp(last_active) < #{Time.now.to_i - period}").update_all(active: false)
+    Player.where("UNIX_TIMESTAMP(`last_active`) >= #{Time.now.to_i - period}").update_all(active: true)
+    Player.where("UNIX_TIMESTAMP(`last_active`) <  #{Time.now.to_i - period}").update_all(active: false)
   end
 
   def self.get_avatar
@@ -2432,6 +2441,25 @@ class GlobalProperty < ActiveRecord::Base
 
   def self.set_avatar(str)
     self.find_by(key: 'avatar').update(value: str)
+  end
+
+  def self.status_init
+    STATUS_ENTRIES.each{ |key|
+      entry = status(key)
+      create(key: "status_#{key}", value: '0') if !entry
+    }
+  end
+
+  def self.status(key)
+    self.find_by(key: "status_#{key}")
+  end
+
+  def self.status_get(key)
+    status(key).value rescue nil
+  end
+
+  def self.status_set(key, value)
+    status(key).update(value: value.to_s) rescue nil
   end
 end
 
@@ -3039,7 +3067,7 @@ module Sock extend self
     )
     # Setup callback for requests (ensuring we are connected to SQL)
     @@servers[name].mount_proc '/' do |req, res|
-      $status[:http_requests] += 1
+      action_inc('http_requests')
       acquire_connection
       handle(req, res)
       release_connection
@@ -3115,7 +3143,7 @@ module Server extend self
 
     fwd(req, res)
   rescue => e
-    $status[:http_errors] += 1
+    action_inc('http_errors')
     lex(e, "CLE socket failed to parse request for: #{req.path}")
     nil
   end

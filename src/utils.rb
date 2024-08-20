@@ -231,12 +231,10 @@ module Log extend self
     discord(text) if log_to_discord
     send_message(event, content: text, edit: false) if event
 
-    # Account for log
-    if $status
-      $status[:logs] += 1
-      $status[:errors] += 1 if [:error, :fatal].include?(mode)
-      $status[:warnings] += 1 if mode == :warn
-    end
+    # Log occurrence to db
+    action_inc('logs')
+    action_inc('errors') if [:error, :fatal].include?(mode)
+    action_inc('warnings') if mode == :warn
 
     # Return original text
     text
@@ -252,7 +250,7 @@ module Log extend self
     write(msg, :error, **kwargs)
     write(e.message, :error)
     write(e.backtrace.join("\n"), :debug) if LOG_BACKTRACES
-    $status[:exceptions] += 1
+    action_inc('exceptions')
     msg
   end
 
@@ -279,6 +277,17 @@ def lout  (msg, **kwargs)    Log.write(msg, :out,   **kwargs) end
 def fatal (msg, **kwargs)    Log.write(msg, :fatal, **kwargs) end
 def lex   (e, msg, **kwargs) Log.exception(e, msg, **kwargs)  end
 def ld    (msg)              Log.discord(msg)                 end
+
+# Shortcuts for logging bot's status (action counters) to db
+def action_inc(key)
+  value = GlobalProperty.status_get(key).to_i
+  GlobalProperty.status_set(key, value + 1)
+end
+
+def action_dec(key)
+  value = GlobalProperty.status_get(key).to_i
+  GlobalProperty.status_set(key, value - 1)
+end
 
 # <---------------------------------------------------------------------------->
 # <------                     EXCEPTION HANDLING                         ------>
@@ -348,7 +357,7 @@ end
 # Forward an arbitrary request to Metanet, return response's body if 200, nil else
 def forward(req)
   return nil if req.nil?
-  $status[:http_forwards] += 1
+  action_inc('http_forwards')
 
   # Parse request elements
   host = 'dojo.nplusplus.ninja'

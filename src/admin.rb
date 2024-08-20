@@ -932,6 +932,10 @@ rescue => e
 end
 
 def send_status(event)
+  $status = GlobalProperty.where("`key` LIKE 'status\\_%'")
+                          .pluck(:key, :value)
+                          .map{ |k, v| [k.remove('status_').to_sym, v] }
+                          .to_h
   str  = "Uptime:   #{format_timespan(Time.now - $boot_time)} (boot #{$boot_time.strftime('%F %T')})\n"
   str << "Commands: #{$status[:commands]} normal, #{$status[:special_commands]} special, #{$status[:main_commands]} on main thread\n"
   str << "Received: #{$status[:pings]} mentions, #{$status[:dms]} DMs, #{$status[:interactions]} interactions\n"
@@ -997,7 +1001,7 @@ def respond_special(event)
   cmd = msg[/^!(\w+)/i, 1]
   return if cmd.nil?
   cmd.downcase!
-  $status[:special_commands] += 1
+  action_inc('special_commands')
 
   return send_debug(event)               if cmd == 'debug'
   return send_delete_score(event)        if cmd == 'delete_score'
@@ -1045,6 +1049,6 @@ def respond_special(event)
   return send_ul_csv(event)              if cmd == 'userlevel_csv'
   return send_ul_plot(event)             if cmd == 'userlevel_plot'
 
-  $status[:special_commands] -= 1
+  action_dec('special_commands')
   event << "Unsupported special command."
 end
