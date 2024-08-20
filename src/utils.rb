@@ -1937,6 +1937,30 @@ def correct_time(time, frequency)
   time
 end
 
+# Checks if current Rails version is at least the provided one
+def rails_at_least(ver)
+  ActiveRecord.version >= Gem::Version.create(ver)
+end
+
+# Checks if current Rails version is at most the provided one
+def rails_at_most(ver)
+  ActiveRecord.version <= Gem::Version.create(ver)
+end
+
+# Creates an enum in Rails. The syntax changed in Rails 7 from keyword to
+# positional arguments. The content can be provided as an array of symbols, in
+# which case the corresponding values will start at 0. Explicit values can
+# be provided if a hash is used instead. An optional hash of options can be
+# provided.
+def create_enum(name, values, opts = {})
+  if rails_at_least('7.0.0')
+    enum(name, values, **opts)
+  else
+    opts[name] = values
+    enum(opts)
+  end
+end
+
 # Transform a table (2-dim array) into a text table
 # Individual entries can be either strings or numbers:
 #   - Strings will be left-aligned

@@ -1255,7 +1255,7 @@ class Level < ActiveRecord::Base
   has_many :challenges
   has_many :level_aliases
   belongs_to :episode
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
     MappackLevel
@@ -1354,7 +1354,7 @@ class Episode < ActiveRecord::Base
   has_many :videos, as: :highscoreable
   has_many :levels
   belongs_to :story
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
     MappackEpisode
@@ -1469,7 +1469,7 @@ class Story < ActiveRecord::Base
   has_many :scores, ->{ order(:rank) }, as: :highscoreable
   has_many :videos, as: :highscoreable
   has_many :episodes
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
     MappackStory
@@ -1519,7 +1519,7 @@ class Score < ActiveRecord::Base
   belongs_to :player
   belongs_to :highscoreable, polymorphic: true
 #  default_scope -> { select("scores.*, score * 1.000 as score")} # Ensure 3 correct decimal places
-  enum tab:  TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # Filter all scores by type, tabs, rank, etc.
   def self.filter(
@@ -2491,7 +2491,7 @@ class Archive < ActiveRecord::Base
   belongs_to :player
   belongs_to :highscoreable, polymorphic: true
   has_one :demo, foreign_key: :id
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # Returns the leaderboards at a particular point in time
   def self.scores(highscoreable, date = nil, cheated: false, pluck: true, full: false)

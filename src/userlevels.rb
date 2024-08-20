@@ -333,7 +333,7 @@ class Userlevel < ActiveRecord::Base
   alias_method :author,  :userlevel_author
   alias_method :author=, :userlevel_author=
   alias_method :scores,  :userlevel_scores
-  enum mode: [:solo, :coop, :race]
+  create_enum(:mode, [:solo, :coop, :race])
   # Attributes:
   #   id           - ID of the userlevel in Metanet's database (and ours)
   #   author_id    - Map author user ID in Metanet's database (and ours)

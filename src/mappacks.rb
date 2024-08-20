@@ -662,7 +662,7 @@ class MappackLevel < ActiveRecord::Base
   alias_method :episode,  :mappack_episode
   alias_method :episode=, :mappack_episode=
   alias_method :hashes,   :mappack_hashes
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
     MappackLevel
@@ -761,7 +761,7 @@ class MappackEpisode < ActiveRecord::Base
   alias_method :story,  :mappack_story
   alias_method :story=, :mappack_story=
   alias_method :tweaks, :mappack_scores_tweaks
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
     MappackEpisode
@@ -813,7 +813,7 @@ class MappackStory < ActiveRecord::Base
   alias_method :scores,   :mappack_scores
   alias_method :episodes, :mappack_episodes
   alias_method :hashes,   :mappack_hashes
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
     MappackStory
@@ -868,7 +868,7 @@ class MappackScore < ActiveRecord::Base
   belongs_to :mappack
   alias_method :demo,  :mappack_demo
   alias_method :demo=, :mappack_demo=
-  enum tab: TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h
+  create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # TODO: Add integrity checks and warnings in Demo.parse
 

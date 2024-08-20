@@ -8,6 +8,7 @@ require 'yaml_db'
 require_relative 'src/constants.rb'
 require_relative 'src/models.rb'
 require_relative 'src/messages.rb'
+require_relative 'src/utils.rb'
 
 # Supress warnings, too spammy in migrations!
 $VERBOSE = nil
@@ -16,16 +17,6 @@ module Rails
   def Rails.env
     DATABASE_ENV
   end
-end
-
-# Checks if current Rails version is at least the provided one
-def rails_at_least(ver)
-  ActiveRecord.version >= Gem::Version.create(ver)
-end
-
-# Checks if current Rails version is at most the provided one
-def rails_at_most(ver)
-  ActiveRecord.version <= Gem::Version.create(ver)
 end
 
 namespace :db do
