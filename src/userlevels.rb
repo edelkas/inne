@@ -1240,13 +1240,14 @@ def send_userlevel_rankings(event)
     max       = Userlevel.find_max(:rank, global, nil, author_id)
   end
 
+  count         = top.size
   score_padding = top.map{ |r| r[1].to_i.to_s.length }.max
   name_padding  = top.map{ |r| r[2].length }.max
-  format        = top[0][1].is_a?(Integer) ? "%#{score_padding}d" : "%#{score_padding + 4}.3f"
-  top           = format_block(top.each_with_index.map{ |p, i|
-                    "#{"%02d" % i}: #{format_string(p[2], name_padding)} - #{format % p[1]}"
-                  }.join("\n"))
-  top.concat("Minimum number of scores required: #{Userlevel.find_min(global, nil, author_id)}") if msg =~ /average/i
+  fmt           = top[0][1].is_a?(Integer) ? "%#{score_padding}d" : "%#{score_padding + 4}.3f"
+  top           = top.each_with_index.map{ |p, i|
+                    "#{"%02d" % i}: #{format_string(p[2], name_padding)} - #{fmt % p[1]}"
+                  }.join("\n")
+  footer = "Minimum number of scores required: #{Userlevel.find_min(global, nil, author_id)}" if msg =~ /average/i
 
   full   = format_full(full)
   global = format_global(global)
@@ -1254,7 +1255,8 @@ def send_userlevel_rankings(event)
   header = "Userlevel #{full} #{global} #{type} #{ties} rankings #{format_author(author)} #{format_max(max)} #{format_time}"
   length = header.length + top.length
   event << format_header(header)
-  length < DISCORD_CHAR_LIMIT ? event << top : send_file(event, top[3..-4], "userlevel-rankings.txt", false)
+  count <= 20 ? event << format_block(top) : send_file(event, top, "userlevel-rankings.txt", false)
+  event << footer if footer
 rescue => e
   lex(e, 'Error performing userlevel rankings.', event: event)
 end
