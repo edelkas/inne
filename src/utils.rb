@@ -1401,11 +1401,82 @@ def compute_name(id, type)
   end
 end
 
+# Stores the result of a simulation by nsim of possibly multiple runs on the same
+# level merged together, since it's all traced on the same animation. This class
+# includes methods to retrieve the positions of the ninjas or other moving objects
+# at any given frame, collisions that took place, etc.
+class NSimRes
+
+  attr_reader :valid
+  Collision = Struct.new(:id, :index, :state)
+
+  # Parse nsim's output file and read entity coordinates and collisions
+  # TODO: Add integrity checks (e.g. file size)
+  # TODO: We're not deduplicating collisions (e.g. gold being collected multiple
+  # times). Sometimes it makes sense (e.g. a toggle toggling).
+  def initialize(path)
+    @valid = []
+    @coords = 40.times.map{ |id| [id, {}] }.to_h
+    @collisions = {}
+
+    File.open(output, 'rb') do |f|
+      # Run count and valid flags
+      n = f.read(1).unpack('C')[0]
+      @valid = f.read(n).bytes.map{ |b| b > 0 }
+
+      n.times do |i|
+        # Entity coordinate section
+        entity_count = f.read(2).unpack('S<')[0]
+        entity_count.times do
+          id, index, frames = f.read(5).unpack('CS<S<')
+          next if @coords[id][index]
+          @coords[id][index] = f.read(16 * frames).unpack("E#{2 * frames}").each_slice(2).to_a
+        end
+
+        # Entity collision section
+        collision_count = f.read(2).unpack('S<')[0]
+        collision_count.times do
+          frame, id, index, state = f.read(6).unpack('S<CS<C')
+          @collisions[frame] = [] unless @collisions[frame]
+          id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
+          @collisions[frame] << Collision.new(id, index, state)
+        end
+      end
+    end
+  end
+
+  # Whether simulation was successful or not
+  def success
+    @valid.all?
+  end
+
+  # Amount of runs in this simulation
+  def size
+    @valid.size
+  end
+  alias_method :count, :size
+
+  # Return coordinates of an entity for the given frame
+  def coords(id, index, frame)
+    @coords[id][index][frame] rescue [0, 0]
+  end
+
+  # Return coordinates of a ninja for the given frame
+  def ninja(index, frame)
+    coords(0, index, frame)
+  end
+
+  # Return array of collisions for the given frame
+  def collisions(frame)
+    return [] if !@collisions[frame]
+    @collisions[frame]
+  end
+end
+
 # Execute ntrace and parse the output.
 # TODO: Make splits use this as well, it's not finished
 # TODO: We might want to abstract this away to a module containing everything
-# ntrace-related. And then abstract everything map related to a different file,
-# as it's already around 2k lines, and not really mappack-related.
+# ntrace-related.
 def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
   # Export files for ntrace to read
   if splits
@@ -1449,47 +1520,10 @@ def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
   end
 
   # Parse ntrace result file
-  # TODO: We should probably add some integrity checks here (e.g. file size)
-  valid = []
-  coords = []
-  collisions = []
-  File.open(output, 'rb') do |f|
-    # Run count and valid flags
-    n = f.read(1).unpack('C')[0]
-    valid = f.read(n).bytes.map{ |b| b > 0 }
-    n.times do |i|
-      # Entity coordinate section
-      entity_count = f.read(2).unpack('S<')[0]
-      poslog = {}
-      entity_count.times do
-        id, index, frames = f.read(5).unpack('CS<S<')
-        poslog[id] = {} unless poslog.key?(id)
-        next if poslog[id].key?(index)
-        poslog[id][index] = f.read(16 * frames).unpack("E#{2 * frames}").each_slice(2).to_a
-      end
-      coords << poslog
-
-      # Entity collision section
-      collision_count = f.read(2).unpack('S<')[0]
-      collisions << f.read(6 * collision_count).unpack('S<CS<C' * collision_count)
-                     .each_slice(4).to_a.group_by(&:first).to_h
-    end
-  end
+  result = NSimRes.new(output)
   FileUtils.rm([output])
 
-  # Format ntrace result appropriately
-  collisions.each{ |run|
-    run.each{ |frame, list|
-      list.each{ |o|
-        o.shift
-        o[0] = 1 if o[0] == 21
-        o[0] = 7 if o[0] == 6
-        o[0] = 9 if o[0] == 8
-      }
-    }
-  }
-
-  { success: true, valid: valid, coords: coords, collisions: collisions, msg: ret }
+  { success: true, result: result, msg: ret }
 end
 
 # <---------------------------------------------------------------------------->

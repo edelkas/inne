@@ -455,7 +455,7 @@ module Map
       next unless objs.key?(f + s)
       objs[f + s].each{ |obj|
         # Only include a select few collisions
-        next unless [1, 2, 4, 7, 9].include?(obj[0])
+        next unless [1, 2, 4, 7, 9, 21].include?(obj[0])
 
         # Gather objects matching the collided one
         x = (obj[1] / 4).floor
