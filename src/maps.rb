@@ -282,9 +282,9 @@ module Map
   #   - hash:    Recursively fetches object data from next level to compute hash later
   #   - version: Version of the map (for mappacks we may hold multiple edits)
   def dump_level(query: false, hash: false, version: nil)
-    objs = self.objects(version: version)
     # HEADER
     header = ""
+    objs = self.objects(version: version)
     if !query
       header << _pack(0, 4)                    # Magic number
       header << _pack(1230 + 5 * objs.size, 4) # Filesize
@@ -312,24 +312,6 @@ module Map
     return nil if hash && !complete_object_data(object_data, object_counts[6] + object_counts[8])
     object_counts = object_counts.pack('S<*')
 
-    # TODO: Perhaps optimize the commented code below, in case it's useful in the future
-
-=begin # Don't remove, as this is the code that works if objects aren't already sorted in the database
-    OBJECTS.sort_by{ |id, entity| id }.each{ |id, entity|
-      if ![7,9].include?(id) # ignore door switches for counting
-        object_counts << objs.select{ |o| o[0] == id }.size.to_s(16).rjust(4,"0").scan(/../).reverse.map{ |b| [b].pack('H*')[0] }.join
-      else
-        object_counts << "\x00\x00"
-      end
-      if ![6,7,8,9].include?(id) # doors must once again be treated differently
-        object_data << objs.select{ |o| o[0] == id }.map{ |o| o.map{ |b| [b.to_s(16).rjust(2,"0")].pack('H*')[0] }.join }.join
-      elsif [6,8].include?(id)
-        doors = objs.select{ |o| o[0] == id }.map{ |o| o.map{ |b| [b.to_s(16).rjust(2,"0")].pack('H*')[0] }.join }
-        switches = objs.select{ |o| o[0] == id + 1 }.map{ |o| o.map{ |b| [b.to_s(16).rjust(2,"0")].pack('H*')[0] }.join }
-        object_data << doors.zip(switches).flatten.join
-      end
-    }
-=end
     (header + tile_data + object_counts + object_data).force_encoding("ascii-8bit")
   end
 
@@ -1732,7 +1714,6 @@ module Map
     # Execute ntrace
     concurrent_edit(event, tmp_msg, 'Calculating routes...')
     levels = h.is_level? ? [h] : h.levels
-    bench(:start)
     res = levels.each_with_index.map{ |l, i|
       attrs = ntrace(l.map.dump_level, demos[i], silent: false, debug: debug)
       bench(:step, 'Routes', pad_str: 12, pad_num: 9) if BENCH_IMAGES

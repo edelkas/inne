@@ -1401,60 +1401,118 @@ def compute_name(id, type)
   end
 end
 
-# Stores the result of a simulation by nsim of possibly multiple runs on the same
-# level merged together, since it's all traced on the same animation. This class
-# includes methods to retrieve the positions of the ninjas or other moving objects
-# at any given frame, collisions that took place, etc.
-class NSimRes
+# Stores all the information related to an NSim simulation, including the input
+# map data and demo data, the resulting position and collision information, etc.
+# It may contain multiple simulations for the same level, since they're all traced
+# together.
+# TODO: Make splits use this as well.
+class NSim
 
-  attr_reader :valid
+  attr_reader :count, :valid_flags, :success
   Collision = Struct.new(:id, :index, :state)
 
-  # Parse nsim's output file and read entity coordinates and collisions
-  # TODO: Add integrity checks (e.g. file size)
-  # TODO: We're not deduplicating collisions (e.g. gold being collected multiple
-  # times). Sometimes it makes sense (e.g. a toggle toggling).
-  def initialize(path)
-    @valid = []
-    @coords = 40.times.map{ |id| [id, {}] }.to_h
-    @collisions = {}
+  def initialize(map_data, demo_data, silent: false, debug: false)
+    @map_data    = map_data
+    @demo_data   = demo_data
+    @splits      = @map_data.is_a?(Array)
+    @count       = @splits ? 1 : @demo_data.size
+    @output      = ''
+    @valid_flags = []
+    @coords      = 40.times.map{ |id| [id, {}] }.to_h
+    @collisions  = {}
+  end
 
-    File.open(output, 'rb') do |f|
-      # Run count and valid flags
-      n = f.read(1).unpack('C')[0]
-      @valid = f.read(n).bytes.map{ |b| b > 0 }
-
-      n.times do |i|
-        # Entity coordinate section
-        entity_count = f.read(2).unpack('S<')[0]
-        entity_count.times do
-          id, index, frames = f.read(5).unpack('CS<S<')
-          next if @coords[id][index]
-          @coords[id][index] = f.read(16 * frames).unpack("E#{2 * frames}").each_slice(2).to_a
-        end
-
-        # Entity collision section
-        collision_count = f.read(2).unpack('S<')[0]
-        collision_count.times do
-          frame, id, index, state = f.read(6).unpack('S<CS<C')
-          @collisions[frame] = [] unless @collisions[frame]
-          id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
-          @collisions[frame] << Collision.new(id, index, state)
-        end
-      end
+  # Export input files for nsim
+  def export
+    if @splits
+      File.binwrite(NTRACE_INPUTS_E, @demo_data)
+      @map_data.each_with_index{ |map, i| File.binwrite(NTRACE_MAP_DATA_E % i, map) }
+    else
+      @demo_data.each_with_index{ |demo, i| File.binwrite(NTRACE_INPUTS % i, demo) }
+      File.binwrite(NTRACE_MAP_DATA, @map_data)
     end
   end
 
-  # Whether simulation was successful or not
-  def success
-    @valid.all?
+  # Execute simulation
+  def execute
+    stdout, stderr, status = python(PATH_NTRACE, output: true)
+    @output = [stdout, stderr].join("\n\n")
+    @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
   end
 
-  # Amount of runs in this simulation
-  def size
-    @valid.size
+  # Remove all temp files
+  def clean
+    if @splits
+      FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')], force: true)
+    else
+      FileUtils.rm([NTRACE_MAP_DATA, *Dir.glob(NTRACE_INPUTS % '*')], force: true)
+    end
+    FileUtils.rm([@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT], force: true)
   end
-  alias_method :count, :size
+
+  # Parse nsim's output file and read entity coordinates and collisions
+  # TODO: Should we deduplicate collisions, or handle it later?
+  def parse
+    f = File.open(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT, 'rb')
+
+    # Run count and valid flags
+    n, = fparse(f, 'C')
+    @valid_flags = fparse(f, 'C' * n).map{ |b| b > 0 }
+
+    n.times do |i|
+      # Entity coordinate section
+      entity_count, = fparse(f, 'S<')
+      entity_count.times do
+        id, index, frames = fparse(f, 'CS<S<')
+        next if @coords[id][index]
+        @coords[id][index] = fparse(f, "E#{2 * frames}").each_slice(2).to_a
+      end
+
+      # Entity collision section
+      collision_count, = fparse(f, 'S<')
+      collision_count.times do
+        frame, id, index, state = fparse(f, 'S<CS<C')
+        @collisions[frame] ||= []
+        id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
+        @collisions[frame] << Collision.new(id, index, state)
+      end
+    end
+
+    @success = true
+  rescue
+    @success = false
+  ensure
+    f.close
+  end
+
+  # Print debug information
+  def debug(event)
+    if @output.length < DISCORD_CHAR_LIMIT - 100
+      event << "Debug info (terminal output):" + format_block(@output)
+      return
+    end
+
+    _thread do
+      sleep(0.5)
+      event.send_file(
+        tmp_file(@output, 'nsim_output.txt', binary: false),
+        caption: "Debug info (terminal output):"
+      )
+    end
+  end
+
+  # Run simulation and parse result
+  def run
+    export
+    execute
+    parse if @success
+    clean
+  end
+
+  # Whether simulation was successful or not
+  def valid
+    @valid_flags.all?
+  end
 
   # Return coordinates of an entity for the given frame
   def coords(id, index, frame)
@@ -1471,59 +1529,6 @@ class NSimRes
     return [] if !@collisions[frame]
     @collisions[frame]
   end
-end
-
-# Execute ntrace and parse the output.
-# TODO: Make splits use this as well, it's not finished
-# TODO: We might want to abstract this away to a module containing everything
-# ntrace-related.
-def ntrace(map_data, demo_data, silent: false, debug: false, splits: false)
-  # Export files for ntrace to read
-  if splits
-    File.binwrite(NTRACE_INPUTS_E, demo_data)
-    map_data.each_with_index{ |map, i| File.binwrite(NTRACE_MAP_DATA_E % i, map) }
-  else
-    demo_data.each_with_index{ |demo, i| File.binwrite(NTRACE_INPUTS % i, demo) }
-    File.binwrite(NTRACE_MAP_DATA, map_data)
-  end
-
-  # Execute ntrace and save output, cleanup
-  stdout, stderr, status = python(PATH_NTRACE, output: true)
-  ret = [stdout, stderr].join("\n\n")
-  if splits
-    FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
-  else
-    FileUtils.rm([NTRACE_MAP_DATA, *Dir.glob(NTRACE_INPUTS % '*')])
-  end
-  output = splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT
-
-  # If ntrace failed, return or perror
-  if !status.success? || !File.file?(output)
-    FileUtils.rm([output]) if File.file?(output)
-    return { success: false } if silent
-    str = "ntrace failed, please contact the botmaster for details."
-    if debug
-      if ret.length < DISCORD_CHAR_LIMIT - 100
-        str << "\n"
-        str << format_block(ret)
-      else
-        _thread do
-          sleep(0.5)
-          event.send_file(
-            tmp_file(ret, 'ntrace_output.txt', binary: false),
-            caption: 'ntrace output:'
-          )
-        end
-      end
-    end
-    perror(str)
-  end
-
-  # Parse ntrace result file
-  result = NSimRes.new(output)
-  FileUtils.rm([output])
-
-  { success: true, result: result, msg: ret }
 end
 
 # <---------------------------------------------------------------------------->
@@ -1922,6 +1927,27 @@ def unzip(data)
     }
   }
   res
+end
+
+# Helper for reading files. Raises if not n bytes left to read.
+def assert_left(f, n)
+  raise if f.size - f.pos < n
+end
+
+# Unpacks a series of bytes from a binary string. Only works for unpacking numeric
+# types (e.g. integers or floats), not strings.
+def fparse(f, fmt)
+  sizes = {
+    'c' => 1, 'C' => 1,
+    's' => 2, 'S' => 2, 'n' => 2, 'v' => 2,
+    'l' => 4, 'L' => 4, 'i' => 4, 'I' => 4, 'N' => 4, 'V' => 4,
+    'f' => 4, 'F' => 4, 'e' => 4, 'g' => 4,
+    'q' => 8, 'Q' => 8, 'j' => 8, 'J' => 8,
+    'd' => 8, 'D' => 8, 'E' => 8, 'G' => 8
+  }
+  sz = fmt.tr('<>!_', '').each_char.inject(0){ |sum, c| sum + sizes[c]  }
+  assert_left(f, sz)
+  f.read(sz).unpack(fmt)
 end
 
 def acquire_connection
