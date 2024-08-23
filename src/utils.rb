@@ -229,7 +229,7 @@ module Log extend self
 
     # Log to Discord DMs, if specified
     discord(text) if log_to_discord
-    send_message(event, content: text, edit: false) if event
+    !TmpMsg.empty? ? TmpMsg.final(text) : send_message(event, content: text, edit: false) if event
 
     # Log occurrence to db
     action_inc('logs')
@@ -1129,45 +1129,53 @@ end
 # Class to hold a temporary message sent to Discord, whose content may be updated
 # and eventually deleted. Intended for easy manipulation of things like progress
 # indicators for long processes.
-class TmpMsg
-  def initialize
-    clear
-  end
+module TmpMsg extend self
 
   def init?
-    !!@event
+    !!@@event
   end
 
   def empty?
-    !init? || @content&.empty?
+    !init? || !@@sent
+  end
+
+  def tmp?
+    @@is_tmp
   end
 
   def init(event)
-    @event = event
+    reset
+    @@event = event
+  end
+
+  def update_now(content)
+    @@sent = true
+    @@msg = !@@msg ? send_message(@@event, content: content) : @@msg.edit(content)
   end
 
   def update(content)
     return if content&.empty?
     raise "Uninitialized TmpMsg" if !init?
-    @content = content
-    _thread do
-      @msg = !@msg ? send_message(@event, content: @content) : @msg.edit(@content)
-    end
+    _thread do update_now(content) end
+  end
+
+  def final(content)
+    @@is_tmp = false
+    update_now(content)
   end
 
   def delete
-    @msg.delete if @msg
-  end
-
-  def clear
-    @event = nil
-    @msg = nil
-    @content = nil
+    return if !@@msg
+    @@msg.delete
+    @@msg = nil
+    @@sent = false
   end
 
   def reset
-    delete
-    clear
+    @@event  = nil
+    @@msg    = nil
+    @@sent   = false
+    @@is_tmp = true
   end
 end
 
@@ -1524,17 +1532,17 @@ class NSim
     end
 
     @success = true
-  rescue
+  rescue => e
+    lex(e, 'Failed to parse nsim output')
     @success = false
   ensure
-    f.close
+    f&.close
   end
 
   # Print debug information
   def debug(event)
     if @output.length < DISCORD_CHAR_LIMIT - 100
-      event << "Debug info (terminal output):" + format_block(@output)
-      return
+      return "Debug info (terminal output):" + format_block(@output)
     end
 
     _thread do
@@ -1544,6 +1552,8 @@ class NSim
         caption: "Debug info (terminal output):"
       )
     end
+
+    ''
   end
 
   # Run simulation and parse result
@@ -1991,7 +2001,8 @@ def fparse(f, fmt)
     'q' => 8, 'Q' => 8, 'j' => 8, 'J' => 8,
     'd' => 8, 'D' => 8, 'E' => 8, 'G' => 8
   }
-  sz = fmt.tr('<>!_', '').each_char.inject(0){ |sum, c| sum + sizes[c]  }
+  sz = fmt.tr('<>!_', '').scan(/([A-Za-z])(\d+)?/)
+          .inject(0){ |sum, pat| sum + sizes[pat[0]] * (pat[1] || 1).to_i }
   assert_left(f, sz)
   f.read(sz).unpack(fmt)
 end

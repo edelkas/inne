@@ -152,7 +152,6 @@ def initialize_vars
   $mutex           = { ntrace: Mutex.new }
   $threads         = []
   $main_queue      = Queue.new
-  $tmp_msg         = TmpMsg.new
   $sql_vars        = {}
   $sql_status      = {}
   $sql_conns       = []
@@ -164,6 +163,7 @@ def initialize_vars
     markers: [],
     texts:   []
   }
+  TmpMsg.reset
 
   # Set environment variables
   ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
@@ -238,7 +238,6 @@ end
 
 # Prepare response to a command (new message / edit message)
 def craft_response(event, func)
-  del_tmp = true
   func.call(event)
 rescue OutteError => e
   # These exceptions are manually triggered errors, usually user errors that
@@ -248,11 +247,11 @@ rescue OutteError => e
   return if msg.empty?
   err(msg) if e.log
   return if !e.discord
-  if !$tmp_msg.empty?
-    $tmp_msg.update(msg)
-    event.drain
-    del_tmp = false
-  elsif event.is_a?(Discordrb::Events::Respondable)
+  is_auto = event.is_a?(Discordrb::Events::Respondable)
+  if !TmpMsg.empty?
+    TmpMsg.final(msg)
+    event.drain if is_auto
+  elsif is_auto
     event << msg
   else
     send_message(event.channel, content: msg)
@@ -263,7 +262,8 @@ rescue => e
 
   lex(e, "Error parsing message.", event: event)
 ensure
-  del_tmp ? $tmp_msg.reset : $tmp_msg.clear
+  TmpMsg.delete if TmpMsg.tmp?
+  TmpMsg.reset
 end
 
 # Handle a new command, by crafting a response and sending it appropriately

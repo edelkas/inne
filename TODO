@@ -83,7 +83,6 @@ Ongoing:
 - Ownages with ties (add "with ties"), also add to mappacks
 - Minimum scores to appear in mappack average rank rankings are 0, fix.
 - Create a class QueryResult for when we parse a highscoreable, that contains the array of results, the header of text, a function to format the result, etc. Perhaps do the same for parsing players and other things.
-- For concurrent_edit, perhaps create a specific class that takes care of send a message if new, otherwise edit it, and be able to delete it, etc.
 - Add function to update stars in scores table, since due to errors we could sporadicaly lose some of them, but we can rebuild them by looking at the archives table.
 - Use average rank for tie-breaking rankings
 - For mappack ranking navigation, add button for HS/SR, and perhaps select menu for mappacks

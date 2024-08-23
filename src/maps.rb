@@ -1658,7 +1658,7 @@ module Map
 
   def self.trace(event, anim: false, h: nil)
     # Parse message parameters
-    tmp_msg = [nil]
+    TmpMsg.init(event)
     t = Time.now
     h = parse_highscoreable(event, mappack: true) if !h
     perror("Failed to parse highscoreable.") if !h
@@ -1674,7 +1674,7 @@ module Map
     perror("Non-highscore modes (e.g. speedrun) are only available for mappacks.") if !h.is_mappack? && board != 'hs'
     perror("Traces are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
     if userlevel
-      concurrent_edit(event, tmp_msg, "Updating scores and downloading replays...")
+      TmpMsg.update("Updating scores and downloading replays...")
       h.update_scores(fast: true)
     end
     leaderboard = h.leaderboard(board, pluck: false)
@@ -1712,18 +1712,17 @@ module Map
     }.transpose
 
     # Execute ntrace
-    concurrent_edit(event, tmp_msg, 'Calculating routes...')
+    TmpMsg.update('Running simulation...')
     levels = h.is_level? ? [h] : h.levels
-    res = levels.each_with_index.map{ |l, i|
-      result = NSim.new(l.map.dump_level, demos[i]).run
+    res = levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
+    res.each{ |nsim|
+      nsim.run
       bench(:step, 'Simulation', pad_str: 12, pad_num: 9) if BENCH_IMAGES
-      result
     }
     if res.any?{ |l| !l.success }
-      event << "Simulation failed, contact the botmaster for details."
-      res.each{ |l| l.debug(event) if !l.success } if debug
-      tmp_msg.first.delete rescue nil
-      return
+      str = "Simulation failed, contact the botmaster for details."
+      res.each{ |l| str << l.debug(event) if !l.success } if debug
+      perror(str)
     end
     valids = res.map{ |l| l[:valid] }.transpose.map{ |s| s.all?(true) }
     ntrace_log = res.map{ |l| l[:msg] }.join("\n---\n")
@@ -1740,7 +1739,7 @@ module Map
     event << "(**Warning**: #{'Trace'.pluralize(wrong_names.count)} for #{wrong_names.to_sentence} #{wrong_names.count == 1 ? 'is' : 'are'} likely incorrect)." if valids.count(false) > 0
 
     # Render trace or animation
-    concurrent_edit(event, tmp_msg, 'Generating screenshot...')
+    TmpMsg.update('Generating screenshot...')
     if gif
       trace = screenshot(
         palette,
@@ -1760,7 +1759,7 @@ module Map
     else
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
       perror('Failed to generate screenshot') if screenshot.nil?
-      concurrent_edit(event, tmp_msg, 'Plotting routes...')
+      TmpMsg.update('Plotting routes...')
       $trace_context = {
         theme:   palette,
         bg:      screenshot,
@@ -1792,17 +1791,9 @@ module Map
         end
       end
     end
-    tmp_msg.first.delete rescue nil
     dbg("FINAL: #{"%8.3f" % [1000 * (Time.now - t)]}") if BENCH_IMAGES
-  rescue OutteError => e
-    # TODO: See if we can refactor this to avoid having to reference OutteError
-    # directly and making this handling more elegant (have a specific TmpMsg class)
-    !tmp_msg.first.nil? ? tmp_msg.first.edit(e) : raise
-    event.drain
   rescue => e
-    tmp_msg.first.edit('Failed to trace replays') if !tmp_msg.first.nil?
-    event.drain
-    lex(e, 'Failed to trace replays')
+    lex(e, 'Failed to trace replays', event: event)
   end
 
   # Tests whether ntrace is working with this level or not
