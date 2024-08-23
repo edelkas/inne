@@ -1715,10 +1715,16 @@ module Map
     concurrent_edit(event, tmp_msg, 'Calculating routes...')
     levels = h.is_level? ? [h] : h.levels
     res = levels.each_with_index.map{ |l, i|
-      attrs = ntrace(l.map.dump_level, demos[i], silent: false, debug: debug)
-      bench(:step, 'Routes', pad_str: 12, pad_num: 9) if BENCH_IMAGES
-      attrs
+      result = NSim.new(l.map.dump_level, demos[i]).run
+      bench(:step, 'Simulation', pad_str: 12, pad_num: 9) if BENCH_IMAGES
+      result
     }
+    if res.any?{ |l| !l.success }
+      event << "Simulation failed, contact the botmaster for details."
+      res.each{ |l| l.debug(event) if !l.success } if debug
+      tmp_msg.first.delete rescue nil
+      return
+    end
     valids = res.map{ |l| l[:valid] }.transpose.map{ |s| s.all?(true) }
     ntrace_log = res.map{ |l| l[:msg] }.join("\n---\n")
     demos.each{ |l| l.map!{ |d| Demo.decode(d) } }

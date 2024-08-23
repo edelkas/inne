@@ -152,6 +152,7 @@ def initialize_vars
   $mutex           = { ntrace: Mutex.new }
   $threads         = []
   $main_queue      = Queue.new
+  $tmp_msg         = TmpMsg.new
   $sql_vars        = {}
   $sql_status      = {}
   $sql_conns       = []
@@ -237,25 +238,32 @@ end
 
 # Prepare response to a command (new message / edit message)
 def craft_response(event, func)
+  del_tmp = true
   func.call(event)
 rescue OutteError => e
   # These exceptions are manually triggered errors, usually user errors that
   # we may want to log back to Discord
 
-  err(e.message.strip) if e.log && !e.message.strip.empty?
-
-  if e.discord && !e.message.strip.empty?
-    if event.is_a?(Discordrb::Events::Respondable)
-      event << e
-    else
-      send_message(event.channel, content: e.message)
-    end
+  msg = e.message.strip
+  return if msg.empty?
+  err(msg) if e.log
+  return if !e.discord
+  if !$tmp_msg.empty?
+    $tmp_msg.update(msg)
+    event.drain
+    del_tmp = false
+  elsif event.is_a?(Discordrb::Events::Respondable)
+    event << msg
+  else
+    send_message(event.channel, content: msg)
   end
 rescue => e
   # These exceptions are internal errors, so send warning to the channel and
   # log full trace to the terminal/log file
 
   lex(e, "Error parsing message.", event: event)
+ensure
+  del_tmp ? $tmp_msg.reset : $tmp_msg.clear
 end
 
 # Handle a new command, by crafting a response and sending it appropriately

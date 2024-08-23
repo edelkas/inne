@@ -1126,6 +1126,51 @@ def spoiler(str)
   "||#{str.gsub('||', '')}||"
 end
 
+# Class to hold a temporary message sent to Discord, whose content may be updated
+# and eventually deleted. Intended for easy manipulation of things like progress
+# indicators for long processes.
+class TmpMsg
+  def initialize
+    clear
+  end
+
+  def init?
+    !!@event
+  end
+
+  def empty?
+    !init? || @content&.empty?
+  end
+
+  def init(event)
+    @event = event
+  end
+
+  def update(content)
+    return if content&.empty?
+    raise "Uninitialized TmpMsg" if !init?
+    @content = content
+    _thread do
+      @msg = !@msg ? send_message(@event, content: @content) : @msg.edit(@content)
+    end
+  end
+
+  def delete
+    @msg.delete if @msg
+  end
+
+  def clear
+    @event = nil
+    @msg = nil
+    @content = nil
+  end
+
+  def reset
+    delete
+    clear
+  end
+end
+
 # Send or edit a Discord message in parallel
 # We actually send an array of messages, not only so that we can edit them all,
 # but mainly because that way we actually can edit the original message object.
@@ -1405,13 +1450,13 @@ end
 # map data and demo data, the resulting position and collision information, etc.
 # It may contain multiple simulations for the same level, since they're all traced
 # together.
-# TODO: Make splits use this as well.
+# TODO: Make splits use this as well. Also ntrace_test and all others.
 class NSim
 
   attr_reader :count, :valid_flags, :success
   Collision = Struct.new(:id, :index, :state)
 
-  def initialize(map_data, demo_data, silent: false, debug: false)
+  def initialize(map_data, demo_data)
     @map_data    = map_data
     @demo_data   = demo_data
     @splits      = @map_data.is_a?(Array)
@@ -1506,12 +1551,13 @@ class NSim
     export
     execute
     parse if @success
+  ensure
     clean
   end
 
   # Whether simulation was successful or not
   def valid
-    @valid_flags.all?
+    @success && @valid_flags.all?
   end
 
   # Return coordinates of an entity for the given frame
