@@ -1253,12 +1253,12 @@ def send_message(
     append:     false  # Whether to append content to preexisting message
   )
   # Save stuff already appended to message, and remove it to prevent autosend
-  if dest.is_a?(Discordrb::Events::MessageEvent)
-    # Grab message
+  if dest.is_a?(Discordrb::Events::Respondable)  # Grab message
     content = dest.saved_message.dup if content.empty?
     dest.drain
+  end
 
-    # Grab attachment
+  if dest.is_a?(Discordrb::Events::MessageEvent) # Grab attachment
     files << dest.file if files.empty?
     spoiler ||= !!dest.file_spoiler
     dest.detach_file

@@ -95,7 +95,7 @@ def send_list(event, file = true, missing = false, third = false)
   header << "#{range}#{star} #{sing} scores #{ties} #{mappackB}"
   event << format_header(header, close: '.', upcase: false)
 
-  # Print count and possibly export list in file
+  # Optionally export list in file
   return unless file
   if count <= 20
     event << format_block(list.join("\n"))

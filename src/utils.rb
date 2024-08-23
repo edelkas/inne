@@ -1461,7 +1461,7 @@ end
 # TODO: Make splits use this as well. Also ntrace_test and all others.
 class NSim
 
-  attr_reader :count, :valid_flags, :success
+  attr_reader :count, :valid_flags, :success, :correct
   Collision = Struct.new(:id, :index, :state)
 
   def initialize(map_data, demo_data)
@@ -1469,6 +1469,8 @@ class NSim
     @demo_data   = demo_data
     @splits      = @map_data.is_a?(Array)
     @count       = @splits ? 1 : @demo_data.size
+    @success     = false
+    @correct     = false
     @output      = ''
     @valid_flags = []
     @coords      = 40.times.map{ |id| [id, {}] }.to_h
@@ -1531,10 +1533,7 @@ class NSim
       end
     end
 
-    @success = true
-  rescue => e
-    lex(e, 'Failed to parse nsim output')
-    @success = false
+    @correct = true
   ensure
     f&.close
   end
