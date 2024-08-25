@@ -2343,6 +2343,8 @@ class GlobalProperty < ActiveRecord::Base
     'http_replay',   'http_submit',   'http_login',       'http_levels'
   ]
 
+  @@status = STATUS_ENTRIES.map{ |k| [k, 0] }.to_h
+
   # Get current lotd/eotw/cotm
   def self.get_current(type, ctp = false)
     klass = ctp ? type.mappack : type
@@ -2443,23 +2445,29 @@ class GlobalProperty < ActiveRecord::Base
     self.find_by(key: 'avatar').update(value: str)
   end
 
-  def self.status_init
-    STATUS_ENTRIES.each{ |key|
-      entry = status(key)
-      create(key: "status_#{key}", value: '0') if !entry
-    }
+  def self.statuses
+    where("`key` LIKE 'status\\_%'")
   end
 
-  def self.status(key)
-    self.find_by(key: "status_#{key}")
+  def self.status_init
+    entries = statuses.pluck(:key).map{ |k| k.remove('status_') }
+    create((STATUS_ENTRIES - entries).map{ |k| { key: 'status_' + k, value: '0' } })
+    @@status = statuses.pluck(:key, :value).map{ |k, v| [k.remove('status_'), v.to_i] }.to_h
+  end
+
+  def self.status_persist
+    @@status.each do |k, v|
+      entry = find_by(key: 'status_' + k)
+      entry ? entry.update(value: v.to_s) : create(key: 'status_' + k, value:  v.to_s)
+    end
   end
 
   def self.status_get(key)
-    status(key).value rescue nil
+    @@status[key]
   end
 
   def self.status_set(key, value)
-    status(key).update(value: value.to_s) rescue nil
+    @@status[key] = value
   end
 end
 

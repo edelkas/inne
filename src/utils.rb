@@ -280,13 +280,11 @@ def ld    (msg)              Log.discord(msg)                 end
 
 # Shortcuts for logging bot's status (action counters) to db
 def action_inc(key)
-  value = GlobalProperty.status_get(key).to_i
-  GlobalProperty.status_set(key, value + 1)
+  GlobalProperty.status_set(key, GlobalProperty.status_get(key) + 1) rescue -1
 end
 
 def action_dec(key)
-  value = GlobalProperty.status_get(key).to_i
-  GlobalProperty.status_set(key, value - 1)
+  GlobalProperty.status_set(key, GlobalProperty.status_get(key) - 1) rescue -1
 end
 
 # <---------------------------------------------------------------------------->

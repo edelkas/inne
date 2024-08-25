@@ -339,6 +339,9 @@ def update_status
   Message.clean
   UserlevelCache.clean
 
+  # Persist bot status (action counters, etc) to db
+  GlobalProperty.status_persist
+
   # Finish
   $status_update = Time.now.to_i
 end
