@@ -932,17 +932,14 @@ rescue => e
 end
 
 def send_status(event)
-  $status = GlobalProperty.where("`key` LIKE 'status\\_%'")
-                          .pluck(:key, :value)
-                          .map{ |k, v| [k.remove('status_').to_sym, v] }
-                          .to_h
+  status = GlobalProperty.status
   str  = "Uptime:   #{format_timespan(Time.now - $boot_time)} (boot #{$boot_time.strftime('%F %T')})\n"
-  str << "Commands: #{$status[:commands]} normal, #{$status[:special_commands]} special, #{$status[:main_commands]} on main thread\n"
-  str << "Received: #{$status[:pings]} mentions, #{$status[:dms]} DMs, #{$status[:interactions]} interactions\n"
-  str << "Sent:     #{$status[:messages]} messages, #{$status[:edits]} edits\n"
-  str << "Logged:   #{$status[:logs]} lines, #{$status[:errors]} errors, #{$status[:warnings]} warnings, #{$status[:exceptions]} exceptions\n"
-  str << "Network:  #{$status[:http_requests]} requests, #{$status[:http_errors]} errors, #{$status[:http_forwards]} forwards\n"
-  str << "CLE:      #{$status[:http_scores]} leaderboards, #{$status[:http_replay]} replays, #{$status[:http_submit]} submissions, #{$status[:http_login]} logins, #{$status[:http_levels]} userlevel queries"
+  str << "Commands: #{status['commands']} normal, #{status['special_commands']} special, #{status['main_commands']} on main thread\n"
+  str << "Received: #{status['pings']} mentions, #{status['dms']} DMs, #{status['interactions']} interactions\n"
+  str << "Sent:     #{status['messages']} messages, #{status['edits']} edits\n"
+  str << "Logged:   #{status['logs']} lines, #{status['errors']} errors, #{status['warnings']} warnings, #{status['exceptions']} exceptions\n"
+  str << "Network:  #{status['http_requests']} requests, #{status['http_errors']} errors, #{status['http_forwards']} forwards\n"
+  str << "CLE:      #{status['http_scores']} leaderboards, #{status['http_replay']} replays, #{status['http_submit']} submissions, #{status['http_login']} logins, #{status['http_levels']} userlevel queries"
   send_message(
     event,
     content: "Status #{format_time}:\n" + format_block(str),

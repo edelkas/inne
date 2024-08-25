@@ -2334,6 +2334,8 @@ class User < ActiveRecord::Base
 end
 
 class GlobalProperty < ActiveRecord::Base
+  cattr_reader :status
+
   # Different types of interactions we log
   STATUS_ENTRIES = [
     'commands',      'main_commands', 'special_commands', 'messages',
