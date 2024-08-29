@@ -1459,16 +1459,18 @@ end
 # TODO: Make splits use this as well. Also ntrace_test and all others.
 class NSim
 
-  attr_reader :count, :valid_flags, :success, :correct
+  attr_reader :count, :success, :correct, :valid, :valid_flags
   Collision = Struct.new(:id, :index, :state)
 
   def initialize(map_data, demo_data)
+    @splits      = @map_data.is_a?(Array)
     @map_data    = map_data
     @demo_data   = demo_data
-    @splits      = @map_data.is_a?(Array)
+    @demos       = @splits ? Demo.decode(@demo_data) : @demo_data.map{ |d| Demo.decode(d) }
     @count       = @splits ? 1 : @demo_data.size
-    @success     = false
-    @correct     = false
+    @success     = false # Was nsim executed successfully?
+    @correct     = false # Was nsim output parsed correctly?
+    @valid       = false # Was nsim result a valid run?
     @output      = ''
     @valid_flags = []
     @coords      = 40.times.map{ |id| [id, {}] }.to_h
@@ -1553,18 +1555,20 @@ class NSim
     ''
   end
 
+  # Check if nsim was executed successfully, its output parsed correctly, and
+  # its result is a valid run
+  def validate
+    @valid = @success && @correct && @valid_flags.all?
+  end
+
   # Run simulation and parse result
   def run
     export
     execute
     parse if @success
+    validate
   ensure
     clean
-  end
-
-  # Whether simulation was successful or not
-  def valid
-    @success && @valid_flags.all?
   end
 
   # Return coordinates of an entity for the given frame

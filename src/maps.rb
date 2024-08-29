@@ -1396,6 +1396,7 @@ module Map
   # the used memory.
   def self.screenshot(
       theme =     DEFAULT_PALETTE,        # Palette to generate screenshot in
+      nsim:       [],                     # NSim objects (simulation results)
       file:       false,                  # Whether to export to a file or return the raw data
       inputs:     false,                  # Add input display to animation
       blank:      false,                  # Only draw background
@@ -1404,10 +1405,7 @@ module Map
       trace:      false,                  # Whether the animation should be a trace or a moving object
       step:       ANIMATION_STEP_NORMAL,  # How many frames per frame to trace
       delay:      ANIMATION_DELAY_NORMAL, # Time between frames, in 1/100ths sec
-      coords:     [],                     # Coordinates of routes to trace, per level and player
-      demos:      [],                     # Run inputs, for input display, per level and player
       texts:      [],                     # Texts for the legend
-      collisions: {},                     # Collected objects in the runs, keyed by frame
       spoiler:    false,                  # Whether the screenshot should be spoilered in Discord
       v:          nil                     # Version of the map data to use (nil = latest)
     )
@@ -1514,8 +1512,7 @@ module Map
       theme:   DEFAULT_PALETTE, # Palette to generate screenshot in
       bg:      nil,             # Background image (screenshot) file object
       animate: false,           # Animate trace instead of still image
-      coords:  [],              # Array of coordinates to plot routes
-      demos:   [],              # Array of demo inputs, to mark parts of the route
+      nsim:    [],              # NSim objects (simulation results)
       texts:   [],              # Names for the legend
       markers: { jump: true, left: false, right: false} # Mark changes in replays
     )
@@ -1711,7 +1708,7 @@ module Map
       end
     }.transpose
 
-    # Execute ntrace
+    # Execute simulation and parse result
     TmpMsg.update('Running simulation...')
     levels = h.is_level? ? [h] : h.levels
     res = levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
@@ -1719,41 +1716,53 @@ module Map
       nsim.run
       bench(:step, 'Simulation', pad_str: 12, pad_num: 9) if BENCH_IMAGES
     }
-    if res.any?{ |l| !l.success }
-      str = "Simulation failed, contact the botmaster for details."
-      res.each{ |l| str << l.debug(event) if !l.success } if debug
+
+    # Check simulation success
+    all_success = res.all?(&:success)
+    all_correct = res.all?(&:correct)
+    all_valid   = res.all?(&:valid)
+    if !all_success || !all_correct
+      if !all_success
+        str = "Simulation failed, contact the botmaster for details."
+      else
+        str = "Failed to parse simulation result, contact the botmaster for details."
+      end
+      res.each{ |l| str << l.debug(event) } if debug
       perror(str)
     end
-    valids = res.map{ |l| l[:valid] }.transpose.map{ |s| s.all?(true) }
-    ntrace_log = res.map{ |l| l[:msg] }.join("\n---\n")
-    demos.each{ |l| l.map!{ |d| Demo.decode(d) } }
-    coords = res.map{ |l| l[:coords] }
-    collisions = res.map{ |l| l[:collisions] }
 
     # Prepare output message
     names = scores.map{ |s| s.player.print_name }
+    valids = res.map{ |l| l.valid_flags }.transpose.map{ |s| s.all?(true) }
     wrong_names = names.each_with_index.select{ |_, i| !valids[i] }.map(&:first)
     event << error.strip if !error.empty?
-    event << "Replay #{format_board(board)} #{'trace'.pluralize(names.count)} for #{names.to_sentence} in #{userlevel ? "userlevel #{verbatim(h.name)} by #{verbatim(h.author.name)}" : h.name} using palette #{verbatim(palette)}:"
+    header = "Replay #{format_board(board)} #{'trace'.pluralize(names.count)}"
+    header << " for #{names.to_sentence}"
+    header << " in #{userlevel ? "userlevel #{verbatim(h.name)} by #{verbatim(h.author.name)}" : h.name}"
+    header << " using palette #{verbatim(palette)}:"
+    event << header
     texts = h.format_scores(np: gif ? 0 : 11, mode: board, ranks: ranks, join: false, cools: false, stars: false)
-    event << "(**Warning**: #{'Trace'.pluralize(wrong_names.count)} for #{wrong_names.to_sentence} #{wrong_names.count == 1 ? 'is' : 'are'} likely incorrect)." if valids.count(false) > 0
+    if !all_valid
+      warning = "(**Warning**: #{'Trace'.pluralize(wrong_names.count)}"
+      warning << " for #{wrong_names.to_sentence}"
+      warning << " #{wrong_names.count == 1 ? 'is' : 'are'} likely incorrect)."
+      event << warning
+    end
 
     # Render trace or animation
     TmpMsg.update('Generating screenshot...')
     if gif
       trace = screenshot(
         palette,
-        h:          h,
-        trace:      !!msg[/trace/i],
-        coords:     coords,
-        demos:      demos,
-        texts:      texts,
-        collisions: collisions,
-        anim:       anim,
-        blank:      blank,
-        inputs:     ANIMATION_DEFAULT_INPUT || !!msg[/\binputs?\b/i],
-        step:       step,
-        delay:      delay
+        h:      h,
+        trace:  !!msg[/trace/i],
+        nsim:   res,
+        texts:  texts,
+        anim:   anim,
+        blank:  blank,
+        inputs: ANIMATION_DEFAULT_INPUT || !!msg[/\binputs?\b/i],
+        step:   step,
+        delay:  delay
       )
       perror('Failed to generate screenshot') if trace.nil?
     else
@@ -1763,8 +1772,7 @@ module Map
       $trace_context = {
         theme:   palette,
         bg:      screenshot,
-        coords:  res[0][:coords],
-        demos:   demos[0],
+        nsim:    res,
         markers: markers,
         texts:   !blank ? texts : []
       }
@@ -1778,19 +1786,7 @@ module Map
     send_file(event, trace, "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}", true)
 
     # Output debug info
-    if debug
-      if ntrace_log.length < DISCORD_CHAR_LIMIT - 200
-        event << format_block(ntrace_log)
-      else
-        _thread do
-          sleep(0.5)
-          event.send_file(
-            tmp_file(ntrace_log, 'ntrace_output.txt', binary: false),
-            caption: 'ntrace output:'
-          )
-        end
-      end
-    end
+    event << res.map{ |l| l.debug(event) }.join("\n\n") if debug
     dbg("FINAL: #{"%8.3f" % [1000 * (Time.now - t)]}") if BENCH_IMAGES
   rescue => e
     lex(e, 'Failed to trace replays', event: event)

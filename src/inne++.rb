@@ -158,8 +158,7 @@ def initialize_vars
   $trace_context   = {
     theme:   "",
     bg:      nil,
-    coords:  [],
-    demos:   [],
+    nsim:    [],
     markers: [],
     texts:   []
   }

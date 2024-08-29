@@ -316,6 +316,7 @@ class UserlevelHistory < ActiveRecord::Base
   # Generate the highscoring report for a specific ranking type
   def self.report(type = 1)
     word = type > 0 ? format_rank(type).capitalize : 'Point'
+    word += ' (w/ ties)' if type == 1
     header = mdtext("#{word} report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2)
     diff = format_block(compare(type, Time.now - 12 * 60 * 60))
     header + "\n" + diff
