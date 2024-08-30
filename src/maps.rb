@@ -1512,11 +1512,11 @@ module Map
       theme:   DEFAULT_PALETTE, # Palette to generate screenshot in
       bg:      nil,             # Background image (screenshot) file object
       animate: false,           # Animate trace instead of still image
-      nsim:    [],              # NSim objects (simulation results)
+      nsim:    nil,              # NSim objects (simulation results)
       texts:   [],              # Names for the legend
       markers: { jump: true, left: false, right: false} # Mark changes in replays
     )
-    return if coords.empty?
+    return if !nsim
 
     _fork do
       # Parse palette
@@ -1527,9 +1527,7 @@ module Map
       palette_idx = themes.index(theme)
 
       # Setup parameters and Matplotlib
-      n = [coords.size, MAX_TRACES].min
-      coords = coords.take(n).reverse
-      demos = demos.take(n).reverse
+      n = [nsim.count, MAX_TRACES].min
       texts = texts.take(n).reverse
       colors = n.times.map{ |i| ChunkyPNG::Color.to_hex(PALETTE[OBJECTS[0][:pal] + n - 1 - i, palette_idx]) }
       Matplotlib.use('agg')
@@ -1559,23 +1557,27 @@ module Map
 
       # Plot inputs
       n.times.each{ |i|
-        break if markers.values.count(true) == 0  || demos[i].nil?
+        break if markers.values.count(true) == 0
         last_coord = nil
-        demos[i].each_with_index{ |f, j|
-          if !coords[i][j]
+        i = n - 1 - i
+        nsim.length.times.each{ |j|
+          f = nsim.inputs(i, j)
+          next if !f
+
+          if !nsim.ninja(i, j)
             mpl.plot(last_coord[0], last_coord[1], color: colors[i], marker: 'x', markersize: 2) if last_coord
             break
           else
-            last_coord = coords[i][j]
+            last_coord = nsim.ninja(i, j)
           end
 
-          if markers[:jump] && f[0] == 1 && (j == 0 || demos[i][j - 1][0] == 0)
+          if markers[:jump] && f[0] == 1 && (j == 0 || nsim.inputs(i, j - 1)[0] == 0)
             mpl.plot(last_coord[0], last_coord[1], color: colors[i], marker: '.', markersize: 1)
           end
-          if markers[:right] && f[1] == 1 && (j == 0 || demos[i][j - 1][1] == 0)
+          if markers[:right] && f[1] == 1 && (j == 0 || nsim.inputs(i, j - 1)[1] == 0)
             mpl.plot(last_coord[0], last_coord[1], color: colors[i], marker: '>', markersize: 1)
           end
-          if markers[:left] && f[2] == 1 && (j == 0 || demos[i][j - 1][2] == 0)
+          if markers[:left] && f[2] == 1 && (j == 0 || nsim.inputs(i, j - 1)[2] == 0)
             mpl.plot(last_coord[0], last_coord[1], color: colors[i], marker: '<', markersize: 1)
           end
         }
@@ -1592,7 +1594,7 @@ module Map
         c = 8
         m = dx / 2.9
         dm = 4
-        x, y = UNITS + dx * (n - i - 1), UNITS - 5
+        x, y = UNITS + dx * (n - 1 - i), UNITS - 5
         vert_x = [x + bx, x + bx, x + bx + c, x + dx - m - dm, x + dx - m, x + dx - m + dm, x + dx - bx - c, x + dx - bx, x + dx - bx]
         vert_y = [2, UNITS - c - 2, UNITS - 2, UNITS - 2, UNITS - dm - 2, UNITS - 2, UNITS - 2, UNITS - c - 2, 2]
         color_bg = ChunkyPNG::Color.to_hex(PALETTE[2, palette_idx])
@@ -1603,36 +1605,15 @@ module Map
       }
       bench(:step, 'Trace texts', pad_str: 11) if BENCH_IMAGES
 
-      # Plot or animate traces
-      # Note: I've deprecated the animation code because the performance was horrible.
-      # Instead, for animations I render each frame in the screenshot function,
-      # and then use Gifenc to generate a GIF.
-      if false# animate
-        anim = PyCall.import_module('matplotlib.animation')
-        x = []
-        y = []
-        plt = mpl.plot(x, y, colors[0], linewidth: 0.5)
-        an = anim.FuncAnimation.new(
-          mpl.gcf,
-          -> (f) {
-            x << coords[0][f][0]
-            y << coords[0][f][1]
-            plt[0].set_data(x, y)
-            plt
-          },
-          frames: 20,
-          interval: 200
+      # Plot traces
+      n.times.each{ |i|
+        mpl.plot(
+          nsim.coords_raw[0][n - 1 - i].map(&:first),
+          nsim.coords_raw[0][n - 1 - i].map(&:last),
+          colors[n - 1 - i],
+          linewidth: 0.5
         )
-        an.save(
-          '/mnt/c/Users/Usuario2/Downloads/N/test.gif',
-          writer: 'imagemagick',
-          savefig_kwargs: { bbox_inches: 'tight', pad_inches: 0, dpi: 390 }
-        )
-      else
-        coords.each_with_index{ |c, i|
-          mpl.plot(c.map(&:first), c.map(&:last), colors[i], linewidth: 0.5)
-        }
-      end
+      }
       bench(:step, 'Trace plot', pad_str: 11) if BENCH_IMAGES
 
       # Save result
@@ -1723,9 +1704,9 @@ module Map
     all_valid   = res.all?(&:valid)
     if !all_success || !all_correct
       if !all_success
-        str = "Simulation failed, contact the botmaster for details."
+        str = "Simulation failed, contact the botmaster for details. "
       else
-        str = "Failed to parse simulation result, contact the botmaster for details."
+        str = "Failed to parse simulation result, contact the botmaster for details. "
       end
       res.each{ |l| str << l.debug(event) } if debug
       perror(str)
@@ -1772,7 +1753,7 @@ module Map
       $trace_context = {
         theme:   palette,
         bg:      screenshot,
-        nsim:    res,
+        nsim:    res.first,
         markers: markers,
         texts:   !blank ? texts : []
       }

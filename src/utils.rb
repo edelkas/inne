@@ -1459,22 +1459,22 @@ end
 # TODO: Make splits use this as well. Also ntrace_test and all others.
 class NSim
 
-  attr_reader :count, :success, :correct, :valid, :valid_flags
+  attr_reader :count, :success, :correct, :valid, :valid_flags, :coords_raw
   Collision = Struct.new(:id, :index, :state)
 
   def initialize(map_data, demo_data)
-    @splits      = @map_data.is_a?(Array)
-    @map_data    = map_data
-    @demo_data   = demo_data
-    @demos       = @splits ? Demo.decode(@demo_data) : @demo_data.map{ |d| Demo.decode(d) }
-    @count       = @splits ? 1 : @demo_data.size
-    @success     = false # Was nsim executed successfully?
-    @correct     = false # Was nsim output parsed correctly?
-    @valid       = false # Was nsim result a valid run?
-    @output      = ''
-    @valid_flags = []
-    @coords      = 40.times.map{ |id| [id, {}] }.to_h
-    @collisions  = {}
+    @splits         = @map_data.is_a?(Array)
+    @map_data       = map_data
+    @demo_data      = demo_data
+    @demos          = @splits ? Demo.decode(@demo_data) : @demo_data.map{ |d| Demo.decode(d) }
+    @count          = @splits ? 1 : @demo_data.size
+    @success        = false # Was nsim executed successfully?
+    @correct        = false # Was nsim output parsed correctly?
+    @valid          = false # Was nsim result a valid run?
+    @output         = ''
+    @valid_flags    = []
+    @coords_raw     = 40.times.map{ |id| [id, {}] }.to_h
+    @collisions_raw = {}
   end
 
   # Export input files for nsim
@@ -1519,17 +1519,17 @@ class NSim
       entity_count, = fparse(f, 'S<')
       entity_count.times do
         id, index, frames = fparse(f, 'CS<S<')
-        next if @coords[id][index]
-        @coords[id][index] = fparse(f, "E#{2 * frames}").each_slice(2).to_a
+        next if @coords_raw[id][index]
+        @coords_raw[id][index] = fparse(f, "E#{2 * frames}").each_slice(2).to_a
       end
 
       # Entity collision section
       collision_count, = fparse(f, 'S<')
       collision_count.times do
         frame, id, index, state = fparse(f, 'S<CS<C')
-        @collisions[frame] ||= []
+        @collisions_raw[frame] ||= []
         id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
-        @collisions[frame] << Collision.new(id, index, state)
+        @collisions_raw[frame] << Collision.new(id, index, state)
       end
     end
 
@@ -1571,9 +1571,13 @@ class NSim
     clean
   end
 
+  def length
+    @splits ? @demos.map(&:size).sum : @demos.map(&:size).max
+  end
+
   # Return coordinates of an entity for the given frame
   def coords(id, index, frame)
-    @coords[id][index][frame] rescue [0, 0]
+    @coords_raw[id][index]&.[](frame)
   end
 
   # Return coordinates of a ninja for the given frame
@@ -1581,10 +1585,15 @@ class NSim
     coords(0, index, frame)
   end
 
+  # Return inputs of a ninja during the given frame
+  def inputs(index, frame)
+    @demo_data&.[](index)&.[](frame)
+  end
+
   # Return array of collisions for the given frame
   def collisions(frame)
-    return [] if !@collisions[frame]
-    @collisions[frame]
+    return [] if !@collisions_raw[frame]
+    @collisions_raw[frame]
   end
 end
 
