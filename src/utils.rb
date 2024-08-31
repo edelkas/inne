@@ -1465,7 +1465,7 @@ class NSim
   def initialize(map_data, demo_data)
     @splits         = @map_data.is_a?(Array)
     @map_data       = map_data
-    @demo_data      = demo_data
+    @demo_data      = demo_data.take(MAX_TRACES)
     @demos          = @splits ? Demo.decode(@demo_data) : @demo_data.map{ |d| Demo.decode(d) }
     @count          = @splits ? 1 : @demo_data.size
     @success        = false # Was nsim executed successfully?
@@ -1571,13 +1571,18 @@ class NSim
     clean
   end
 
+  # Length of the simulation, in frames
   def length
-    @splits ? @demos.map(&:size).sum : @demos.map(&:size).max
+    @splits ? @demos.map(&:size).sum : @coords_raw[0].map{ |index, coords| coords.length }.max
   end
 
   # Return coordinates of an entity for the given frame
-  def coords(id, index, frame)
-    @coords_raw[id][index]&.[](frame)
+  # ppc contains the scale (in pixels per coordinate) if the coordinates need
+  # to be scaled for drawing
+  def coords(id, index, frame, ppc: nil)
+    pair = @coords_raw[id][index]&.[](frame)
+    return nil if !pair
+    !ppc ? pair : pair.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
   end
 
   # Return coordinates of a ninja for the given frame

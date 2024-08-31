@@ -145,12 +145,12 @@ for i in range(len(inputs_list)):
 #Print info useful for debug if in manual mode
 if not OUTTE_MODE and DEBUG_OUTPUT:
     if TABLE_OUTPUT:
-        sep = f"+------+{(("-" * 44) + "+") * len(inputs_list)}"
+        sep = f"+------+{(('-' * 44) + '+') * len(inputs_list)}"
         sep_short = f"       {sep[7:]}"
         print(sep_short)
-        print(f"       |{"|".join(map(lambda valid: f"{str(valid):^44}", validlog))}|")
+        print(f"       |{'|'.join(map(lambda valid: f'{str(valid):^44}', validlog))}|")
         print(sep_short)
-        print(f"       |{f" {'X':^11} {'Y':^10} {'VX':^9} {'VY':^9} |" * 4}")
+        print(f"""       |{f" {'X':^11} {'Y':^10} {'VX':^9} {'VY':^9} |" * 4}""")
         print(sep)
         frames = max(map(len, inputs_list))
         for f in range(frames):

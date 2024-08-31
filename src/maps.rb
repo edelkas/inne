@@ -541,26 +541,11 @@ module Map
   end
 
   # Parse all elements we'll need to screenshot and trace / animate the routes
-  def self.parse_trace(coords, demos, collisions, texts, h, input: false, ppc: nil, v: nil, blank: false, trace: false)
+  def self.parse_trace(nsim, texts, h, ppc: PPC, v: nil)
     # Filter parameters
-    n = [coords.map(&:size).max || 0, MAX_TRACES].min
-    coords = coords.map{ |l| l.take(n).reverse }
-    demos  = demos.map{ |l| input ? l.take(n).reverse : nil }
-    texts  = texts.take(n).reverse
-    names  = texts.map{ |t| t[/\d+:(.*)-/, 1].strip }
-    scores = texts.map{ |t| t[/\d+:(.*)-(.*)/, 2].strip }
-
-    # Scale N++ coordinates to image dimensions
-    ppu = 4.0 * ppc / UNITS
-    coords.each{ |level|
-      level.each{ |player|
-        player.each{ |coordinates|
-          coordinates.map!{ |c|
-            (ppu * c).round
-          }
-        }
-      }
-    }
+    n = [nsim.map(&:count).max || 0, MAX_TRACES].min
+    names = texts.take(n).map{ |t| t[/\d+:(.*)-/, 1].strip }
+    scores = texts.take(n).map{ |t| t[/\d+:(.*)-(.*)/, 2].strip }
 
     # Parse map data
     maps = h.is_level? ? [h] : h.levels
@@ -568,17 +553,13 @@ module Map
 
     # Return full context as a hash for easy management
     {
-      h:          h,
-      n:          n,
-      tiles:      tiles,
-      objects:    objects,
-      coords:     coords,
-      demos:      demos,
-      collisions: collisions,
-      names:      names,
-      scores:     scores,
-      trace:      trace,
-      blank:      blank
+      h:       h,
+      n:       n,
+      tiles:   tiles,
+      objects: objects,
+      nsim:    nsim,
+      names:   names,
+      scores:  scores
     }
   end
 
@@ -1414,7 +1395,7 @@ module Map
     bench(:start) if BENCHMARK
 
     anim = false if !FEATURE_ANIMATE
-    gif = !coords.empty?
+    gif = !nsim.empty?
     filename =  "#{spoiler ? 'SPOILER_' : ''}#{sanitize_filename(h.name)}.#{gif ? 'gif' : 'png'}"
     memory = [] if BENCH_IMAGES
     $time = 0
@@ -1433,7 +1414,7 @@ module Map
       # We will encapsulate all necessary info in a few context hashes, for easy management
       context_png  = nil
       context_gif  = nil
-      context_info = parse_trace(coords, demos, collisions, texts, h, input: inputs, ppc: ppc, v: v, blank: blank, trace: trace)
+      context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v).merge(inputs: inputs, trace: trace, blank: blank)
       res = nil
 
       # Render each highscoreable
