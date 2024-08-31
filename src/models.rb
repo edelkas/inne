@@ -893,7 +893,7 @@ module Highscoreable
     scores.reload
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
-    }.sort_by{ |_, r| full ? r : ranks.index(r) }.map(&:first)
+    }.sort_by{ |_, r| full ? r : ranks.index(r) }
 
     # Figure out if cheated scores need to be inserted
     if cheated && SHOW_CHEATERS && !is_mappack? && !full
@@ -910,23 +910,21 @@ module Highscoreable
         h['cool']       = false
         h['star']       = false
         h['cheated']    = true
-        h
+        [h, -1]
       }
       boards += cheated_scores
-      boards.sort_by!{ |s| [-(s['score'] * 60).round, s['replay_id']] }
+      boards.sort_by!{ |s, _| [-(s['score'] * 60).round, s['replay_id']] }
     end
 
     # Calculate padding
-    name_padding = np > 0 ? np : boards.map{ |s| s['name'].to_s.length }.max
+    name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
     field = !is_mappack? ? 'score' : "score_#{board}"
-    score_padding = sp > 0 ? sp : boards.map{ |s|
+    score_padding = sp > 0 ? sp : boards.map{ |s, _|
       is_mappack? && hs || userlevel ? s[field] / 60.0 : s[field]
     }.max.to_i.to_s.length + (!is_mappack? || hs ? 4 : 0)
 
     # Print scores
-    r = -1
-    boards.map{ |s|
-      r += 1 unless s['cheated']
+    boards.map{ |s, r|
       Scorish.format(name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r, mappack: is_mappack?, userlevel: userlevel, h: s)
     }
   end

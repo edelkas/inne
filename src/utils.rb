@@ -1592,7 +1592,7 @@ class NSim
 
   # Return inputs of a ninja during the given frame
   def inputs(index, frame)
-    @demo_data&.[](index)&.[](frame)
+    @demos&.[](index)&.[](frame)
   end
 
   # Return array of collisions for the given frame

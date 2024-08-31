@@ -133,7 +133,7 @@ for i in range(len(inputs_list)):
     collisionlog.append(sim.collisionlog)
 
     #Entity position logs, including the ninja, for exporting.
-    entities = [(0, 0, [log[1:] for log in sim.ninja.poslog])]
+    entities = [(0, i, [log[1:] for log in sim.ninja.poslog])]
     entities += [(e.type, e.index, e.poslog) for e in sim.entity_list if e.log_positions]
     entitylog.append(entities)
 

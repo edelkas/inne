@@ -1509,8 +1509,8 @@ module Map
 
       # Setup parameters and Matplotlib
       n = [nsim.count, MAX_TRACES].min
-      texts = texts.take(n).reverse
-      colors = n.times.map{ |i| ChunkyPNG::Color.to_hex(PALETTE[OBJECTS[0][:pal] + n - 1 - i, palette_idx]) }
+      texts = texts.take(n)
+      colors = n.times.map{ |i| ChunkyPNG::Color.to_hex(PALETTE[OBJECTS[0][:pal] + i, palette_idx]) }
       Matplotlib.use('agg')
       mpl = Matplotlib::Pyplot
       mpl.ioff
@@ -1575,7 +1575,7 @@ module Map
         c = 8
         m = dx / 2.9
         dm = 4
-        x, y = UNITS + dx * (n - 1 - i), UNITS - 5
+        x, y = UNITS + dx * i, UNITS - 5
         vert_x = [x + bx, x + bx, x + bx + c, x + dx - m - dm, x + dx - m, x + dx - m + dm, x + dx - bx - c, x + dx - bx, x + dx - bx]
         vert_y = [2, UNITS - c - 2, UNITS - 2, UNITS - 2, UNITS - dm - 2, UNITS - 2, UNITS - 2, UNITS - c - 2, 2]
         color_bg = ChunkyPNG::Color.to_hex(PALETTE[2, palette_idx])

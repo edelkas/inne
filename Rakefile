@@ -6,9 +6,9 @@ require 'yaml'
 require 'yaml_db'
 
 require_relative 'src/constants.rb'
+require_relative 'src/utils.rb'
 require_relative 'src/models.rb'
 require_relative 'src/messages.rb'
-require_relative 'src/utils.rb'
 
 # Supress warnings, too spammy in migrations!
 $VERBOSE = nil
