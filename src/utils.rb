@@ -459,10 +459,10 @@ def _fork
     read.close
     result = yield
     Marshal.dump(result, write)
-    exit!(0)
   rescue => e
     lex(e, 'Error in forked process')
-    nil
+  ensure
+    exit!(0)
   end
 
   ActiveRecord::Base.connection.reconnect!
@@ -1148,7 +1148,7 @@ module TmpMsg extend self
 
   def update_now(content)
     @@sent = true
-    @@msg = !@@msg ? send_message(@@event, content: content) : @@msg.edit(content)
+    @@msg = !@@msg ? send_message(@@event, content: content) : @@msg.edit(content) rescue nil
   end
 
   def update(content)
@@ -1164,7 +1164,7 @@ module TmpMsg extend self
 
   def delete
     return if !@@msg
-    @@msg.delete
+    @@msg.delete rescue nil
     @@msg = nil
     @@sent = false
   end
@@ -1586,8 +1586,8 @@ class NSim
   end
 
   # Return coordinates of a ninja for the given frame
-  def ninja(index, frame)
-    coords(0, index, frame)
+  def ninja(index, frame, ppc: nil)
+    coords(0, index, frame, ppc: ppc)
   end
 
   # Return inputs of a ninja during the given frame

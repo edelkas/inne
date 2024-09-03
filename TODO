@@ -15,8 +15,8 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Persist task counters in db (using task_ prefix). Don't do it constantly, perhaps only sum them when shutting down.
 - Migrate highscoreable_type to integers from 0 to 2.
-- Persist status (bot, sql, etc) into db.
 - Add a special command to run arbitrary Ruby code, sent from Discord, and print the return inside a text block. Ensure to execute inside guards for exceptions. Perhaps even code a simple Debugger that can be started in a separate Thread, which waits for commands (e.g. using a Queue).
 - Add Interaction module to handle them, now the code is too unorganized.
 - Add robust test suite that automatically tests as many outte features as possible. At least that they execute without throwing, even better if we can assert equality in some cases.
@@ -117,6 +117,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 
 \\ ------------------------ mappacks -----------------------
 
+- Add hs scores around mine in 2nd leaderboard.
 - Add outte command to choose what to put in the 2nd/3rd leaderboard (toggle between hs, sr, g--, etc, with different rank ranges too)
 
 \\ ------------------------ ntrace ------------------------

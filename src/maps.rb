@@ -1216,7 +1216,7 @@ module Map
     gct = init_gct(png[:palette_idx])
     palette = gct.colors.compact.each_with_index.to_h
     ninja_colors = info[:n].times.map{ |i|
-      PALETTE[OBJECTS[0][:pal] + info[:n] - 1 - i, png[:palette_idx]]
+      PALETTE[OBJECTS[0][:pal] + i, png[:palette_idx]]
     }
 
     # Initialize GIF
@@ -1267,13 +1267,28 @@ module Map
 
     # Trace -> Draw whole trace and return encoded (static) GIF
     dim = 4 * gif[:ppc]
+    scale = gif[:ppc] * 4.0 / Map::UNITS
     off_x = !info[:h].is_level? ? dim : 0
     off_y = off_x
-    info[:coords].each{ |level|
-      level.each_with_index{ |c_list, i|
+    info[:nsim].each{ |level|
+      #level.length.times.each{ |frame|
+      #  level.count.times.each{ |ninja|
+      #    p1 = level.ninja(ninja, frame, ppc: gif[:ppc])
+      #    p2 = level.ninja(ninja, frame + 1, ppc: gif[:ppc])
+      #    break if !p1 || !p2
+      #    p1 = [off_x + p1[0], off_y + p1[1]]
+      #    p2 = [off_x + p2[0], off_y + p2[1]]
+      #    background.line(p1: p1, p2: p2, color: gif[:colors][:ninja][ninja], weight: info[:h].is_level? ? 2 : 1)
+      #  }
+      #}
+      level.coords_raw[0].reverse_each{ |i, c_list|
         (0 ... c_list.size - 1).each{ |f|
-          p1 = [off_x + c_list[f][0],     off_y + c_list[f][1]    ]
-          p2 = [off_x + c_list[f + 1][0], off_y + c_list[f + 1][1]]
+          x1 = (c_list[f][0] * scale).round
+          y1 = (c_list[f][1] * scale).round
+          x2 = (c_list[f + 1][0] * scale).round
+          y2 = (c_list[f + 1][1] * scale).round
+          p1 = [off_x + x1, off_y + y1]
+          p2 = [off_x + x2, off_y + y2]
           background.line(p1: p1, p2: p2, color: gif[:colors][:ninja][i], weight: info[:h].is_level? ? 2 : 1)
         }
       }
