@@ -427,17 +427,16 @@ module Map
     end
   end
 
-  # Find all touched objects in a given frame range by any ninja, and logically
-  # collide with them, by either removing or toggling them.
-  def self.collide_vs_objects(objects, objs, f, step, ppc)
+  # Parse all collided objects in a given frame range by any ninja, and logically
+  # collide with them, by removing / toggling / moving them.
+  def self.collide_vs_objects(objects, nsim, f, step, ppc)
     # For every frame in the range, find collided objects by any ninja, by matching
     # the log returned by ntrace with the object dictionary
     collided_objects = []
     (0 ... step).each{ |s|
-      next unless objs.key?(f + s)
-      objs[f + s].each{ |obj|
+      nsim.collisions(f + s).each{ |col|
         # Only include a select few collisions
-        next unless [1, 2, 4, 7, 9, 21].include?(obj[0])
+        next unless [1, 2, 4, 7, 9, 21].include?(col.id)
 
         # Gather objects matching the collided one
         x = (obj[1] / 4).floor
@@ -484,36 +483,37 @@ module Map
 
     # Perform some additional convenience modifications and sanity checks
     objects.each{ |map|
+      counts = [0] * 40
       map.each{ |o|
         # Remove glitched orientations and non-zero orientations for still objects
         o[3] = 0 if o[3] > 7 || FIXED_OBJECTS.include?(o[0])
 
-        # Use 5th field as "toggled" marker, all objects start untoggled
+        # Use 5th field to store the "state"
         o[4] = 0
 
-        # Convert toggle mines and mines to the same object
-        o[4] = 1 if o[0] == 1
-        o[0] = 1 if o[0] == 21
+        # Change state of toggle mines to "untoggled"
+        o[4] = 1 if o[0] == 21
+
+        # Add 6th field containing the entity index
+        o << counts[o[0]]
+        counts[o[0]] += 1
       }
 
       # Link each door-switch pair within the object data
       [[3, 4], [6, 7], [8, 9]].each{ |door_id, switch_id|
-        door_index = 0
-        doors      = map.select{ |o| o[0] == door_id   }
-        switches   = map.select{ |o| o[0] == switch_id }
+        doors    = map.select{ |o| o[0] == door_id   }
+        switches = map.select{ |o| o[0] == switch_id }
         warn("Unpaired doors/switches found when parsing map data.") if doors.size != switches.size
         switches.each_with_index{ |switch, i|
           break if !doors[i]
-          switch << door_index << doors[i][1] << doors[i][2]
-          doors[i] << door_index
-          door_index += 1
+          switch << doors[i][1] << doors[i][2]
         }
       }
     }
 
     # Build an object dictionary keyed on row and column, for fast access, akin
     # to GridEntity
-    object_dicts = maps.map{
+    object_grid = maps.map{
       (COLUMNS + 2).times.map{ |t|
         [t, (ROWS + 2).times.map{ |s| [s, []] }.to_h]
       }.to_h
@@ -524,8 +524,15 @@ module Map
         x = o[1] / 4
         y = o[2] / 4
         next if x < 0 || x > COLUMNS + 1 || y < 0 || y > ROWS + 1
-        object_dicts[i][x][y] << o
+        object_grid[i][x][y] << o
       }
+    }
+
+    # Build another object dictionary, this time keyed by id and index
+    object_dict = objects.map{ |list|
+      list.group_by{ |o| o[0] }.map{ |id, objs|
+        [id, objs.group_by{ |o| o[5] }.map{ |idx, o| [idx, o.first] }.to_h]
+      }.to_h
     }
 
     # Parse tiles, add frame, and reject glitch tiles
@@ -537,7 +544,7 @@ module Map
       tile_list
     }
 
-    [object_dicts, tiles]
+    [tiles, object_grid, object_dict]
   end
 
   # Parse all elements we'll need to screenshot and trace / animate the routes
@@ -549,17 +556,18 @@ module Map
 
     # Parse map data
     maps = h.is_level? ? [h] : h.levels
-    objects, tiles = parse_maps(maps, v)
+    tiles, object_grid, object_dict = parse_maps(maps, v)
 
     # Return full context as a hash for easy management
     {
-      h:       h,
-      n:       n,
-      tiles:   tiles,
-      objects: objects,
-      nsim:    nsim,
-      names:   names,
-      scores:  scores
+      h:           h,
+      n:           n,
+      tiles:       tiles,
+      object_grid: object_grid,
+      object_dict: object_dict,
+      nsim:        nsim,
+      names:       names,
+      scores:      scores
     }
   end
 
@@ -1168,7 +1176,7 @@ module Map
     h = info[:h]
     h = h.levels[i] if i
     tiles   = i ? [info[:tiles][i]]   : info[:tiles]
-    objects = i ? [info[:objects][i]] : info[:objects]
+    objects = i ? [info[:object_grid][i]] : info[:object_grid]
 
     # Initialize image and sprites
     image = init_png(palette_idx, ppc, h)
@@ -1271,16 +1279,6 @@ module Map
     off_x = !info[:h].is_level? ? dim : 0
     off_y = off_x
     info[:nsim].each{ |level|
-      #level.length.times.each{ |frame|
-      #  level.count.times.each{ |ninja|
-      #    p1 = level.ninja(ninja, frame, ppc: gif[:ppc])
-      #    p2 = level.ninja(ninja, frame + 1, ppc: gif[:ppc])
-      #    break if !p1 || !p2
-      #    p1 = [off_x + p1[0], off_y + p1[1]]
-      #    p2 = [off_x + p2[0], off_y + p2[1]]
-      #    background.line(p1: p1, p2: p2, color: gif[:colors][:ninja][ninja], weight: info[:h].is_level? ? 2 : 1)
-      #  }
-      #}
       level.coords_raw[0].reverse_each{ |i, c_list|
         (0 ... c_list.size - 1).each{ |f|
           x1 = (c_list[f][0] * scale).round
@@ -1305,8 +1303,8 @@ module Map
   # elements that must be redrawn, to minimize the redrawn area. Returns nil
   # when there's nothing else to redraw, meaning the run has finished.
   def self.render_frame(f, step, gif, info, i, markers)
-    # Find collected gold
-    collided = !info[:trace] ? collide_vs_objects(info[:objects][i], info[:collisions][i], f, step, gif[:ppc]) : []
+    # Adjust map data according to changes for this frame (e.g. remove collected gold)
+    collided = !info[:trace] ? collide_vs_objects(info[:objects][i], info[:nsim][i], f, step, gif[:ppc]) : []
 
     # Find bounding box for this frame
     bbox = find_frame_bbox(f, info[:coords][i], step, markers, info[:demos][i], collided, gif[:object_atlas], trace: info[:trace], ppc: gif[:ppc])
@@ -1349,8 +1347,7 @@ module Map
 
   # Animate all frames in the GIF, return last frame
   def self.animate_gif(gif, info, i, step, memory, last)
-    sizes = info[:coords][i].map(&:size)
-    frames = sizes.max
+    frames = info[:nsim][i].length
     markers = []
     image = nil
     (0 .. frames + step).step(step) do |f|
