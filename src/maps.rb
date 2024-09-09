@@ -351,32 +351,34 @@ module Map
     new_image
   end
 
-  # Generate the image of an object in the specified palette, by painting and combining each layer.
-  # Note: "special" indicates that we take the special version of the layers. In practice,
-  # this is used because we can't rotate images 45 degrees with this library, so we have a
-  # different image for that, which we call special. Some sprites have 2 versions, a toggled
-  # and an untoggled one.
-  def self.generate_object(object_id, palette_id, object = true, special = false, toggled = false)
+  # Generate the sprite of a tile / object, by paiting and compositing each layer
+  # in the desired palette. Since we can't rotate by 45º, we have special diagonal
+  # copies of the sprites. We also have different versions for each possible
+  # state (e.g. toggled vs untoggled mine).
+  def self.generate_object(entity_id, palette_id, is_object = true, diag = false, state = 0)
     # Select necessary layers
-    path = object ? PATH_OBJECTS : PATH_TILES
+    path = is_object ? PATH_OBJECTS : PATH_TILES
     parts = Dir.entries(path).select{ |file|
-      bool1 = file[0..1] == object_id.to_s(16).upcase.rjust(2, "0") # Select only sprites for this object
-      bool2 = file[-5] == 't' # Select only toggled/untoggled sprites
-      bool1 && (!toggled ^ bool2)
+      match_id = file[0..1] == '%02X' % entity_id # Filter sprites by ID
+      next match_id if !is_object
+      match_diag = file[2] == (diag ? 'x': '-')   # Filter by orientation
+      match_state = file[3] == state.to_s         # Filter by entity state
+      match_id && match_diag && match_state
     }.sort
-    parts_normal = parts.select{ |file| file[2] == "-" }
-    parts_special = parts.select{ |file| file[2] == "s" }
-    parts = (!special ? parts_normal : (parts_special.empty? ? parts_normal : parts_special))
 
     # Paint and combine the layers
-    masks = parts.map{ |part| [part[toggled ? -6 : -5], ChunkyPNG::Image.from_file(File.join(path, part))] }
-    images = masks.map{ |mask| mask(mask[1], ChunkyPNG::Color::BLACK, PALETTE[(object ? OBJECTS[object_id][:pal] : 0) + mask[0].to_i, palette_id], fast: true) }
-    dims = [ images.map{ |i| i.width }.max || 1, images.map{ |i| i.height }.max || 1]
+    masks = parts.map{ |part|
+      [part[-5].to_i, ChunkyPNG::Image.from_file(File.join(path, part))]
+    }.to_h
+    images = masks.map{ |color, image|
+      mask(image, ChunkyPNG::Color::BLACK, PALETTE[(is_object ? OBJECTS[entity_id][:pal] : 0) + color, palette_id], fast: true)
+    }
+    dims = [ images.map(&:width).max || 1, images.map(&:height).max || 1]
     output = ChunkyPNG::Image.new(*dims, ChunkyPNG::Color::TRANSPARENT)
     images.each{ |image| output.compose!(image, 0, 0) }
     output
   rescue => e
-    lex(e, "Failed to generate sprite for object #{object_id}.")
+    lex(e, "Failed to generate sprite for #{is_object ? 'object' : 'tile'} #{entity_id}.")
     ChunkyPNG::Image.new(1, 1, ChunkyPNG::Color::TRANSPARENT)
   end
 
