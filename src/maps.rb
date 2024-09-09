@@ -36,7 +36,7 @@ module Map
     0x12 => { name: 'rocket',             pref:  8, att: 2, old: 15, pal: 65 },
     0x13 => { name: 'gauss turret',       pref:  9, att: 2, old: 16, pal: 69 },
     0x14 => { name: 'thwump',             pref:  6, att: 3, old: 17, pal: 74 },
-    0x15 => { name: 'toggle mine',        pref: 23, att: 2, old: 18, pal: 12 },
+    0x15 => { name: 'toggle mine',        pref: 23, att: 2, old: 18, pal: 10 },
     0x16 => { name: 'evil ninja',         pref:  5, att: 2, old: 19, pal: 77 },
     0x17 => { name: 'laser turret',       pref:  7, att: 4, old: 20, pal: 79 },
     0x18 => { name: 'boost pad',          pref:  1, att: 2, old: 21, pal: 81 },
@@ -50,7 +50,7 @@ module Map
   # Objects that admit diagonal rotations
   SPECIAL_OBJECTS = [10, 11, 23]
   # Objects that have a different "toggled" sprite
-  TOGGLABLE_OBJECTS = [1, 3, 4, 6, 7, 8, 9]
+  TOGGLABLE_OBJECTS = [1, 3, 4, 6, 7, 8, 9, 21]
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -483,7 +483,7 @@ module Map
       map.map.objects(version: v).reject{ |o| o[0] > 28 }
     }
 
-    # Perform some additional convenience modifications and sanity checks
+    # Perform convenience modifications and sanity checks
     objects.each{ |map|
       counts = [0] * 40
       map.each{ |o|
@@ -499,17 +499,6 @@ module Map
         # Add 6th field containing the entity index
         o << counts[o[0]]
         counts[o[0]] += 1
-      }
-
-      # Link each door-switch pair within the object data
-      [[3, 4], [6, 7], [8, 9]].each{ |door_id, switch_id|
-        doors    = map.select{ |o| o[0] == door_id   }
-        switches = map.select{ |o| o[0] == switch_id }
-        warn("Unpaired doors/switches found when parsing map data.") if doors.size != switches.size
-        switches.each_with_index{ |switch, i|
-          break if !doors[i]
-          switch << doors[i][1] << doors[i][2]
-        }
       }
     }
 
@@ -607,7 +596,7 @@ module Map
               s = o[3] % 2 == 1 && SPECIAL_OBJECTS.include?(o[0]) # Special variant of sprite (diagonal)
               base = s ? 1 : 0
               if !sprite_list.key?(base)
-                sprite_list[base] = generate_object(o[0], palette_idx, true, s, state == 1)
+                sprite_list[base] = generate_object(o[0], palette_idx, true, s, state)
                 sprite_list[base].resample_nearest_neighbor!(
                   [(scale * sprite_list[base].width).round, 1].max,
                   [(scale * sprite_list[base].height).round, 1].max,
