@@ -10,47 +10,76 @@ require 'matplotlib/pyplot'
 require 'zlib'
 
 module Map
+  # In-game entity IDs
+  ID_NINJA              =  0
+  ID_MINE               =  1
+  ID_GOLD               =  2
+  ID_EXIT               =  3
+  ID_EXIT_SWITCH        =  4
+  ID_DOOR_REGULAR       =  5
+  ID_DOOR_LOCKED        =  6
+  ID_DOOR_LOCKED_SWITCH =  7
+  ID_DOOR_TRAP          =  8
+  ID_DOOR_TRAP_SWITCH   =  9
+  ID_LAUNCHPAD          = 10
+  ID_ONEWAY             = 11
+  ID_DRONE_CHAINGUN     = 12
+  ID_DRONE_LASER        = 13
+  ID_DRONE_ZAP          = 14
+  ID_DRONE_CHASER       = 15
+  ID_FLOORGUARD         = 16
+  ID_BOUNCEBLOCK        = 17
+  ID_ROCKET             = 18
+  ID_GAUSS              = 19
+  ID_THWUMP             = 20
+  ID_TOGGLE_MINE        = 21
+  ID_EVIL_NINJA         = 22
+  ID_LASER_TURRET       = 23
+  ID_BOOST_PAD          = 24
+  ID_DEATHBALL          = 25
+  ID_MICRODRONE         = 26
+  ID_MINI               = 27
+  ID_SHOVE_THWUMP       = 28
+
   # pref - Drawing preference (for overlaps): lower = more to the front
   # att  - Number of object attributes in the old format
   # old  - ID in the old format, '-1' if it didn't exist
   # pal  - Index at which the colors of the object start in the palette image
   OBJECTS = {
-    0x00 => { name: 'ninja',              pref:  4, att: 2, old:  0, pal:  6 },
-    0x01 => { name: 'mine',               pref: 22, att: 2, old:  1, pal: 10 },
-    0x02 => { name: 'gold',               pref: 21, att: 2, old:  2, pal: 14 },
-    0x03 => { name: 'exit',               pref: 25, att: 4, old:  3, pal: 17 },
-    0x04 => { name: 'exit switch',        pref: 20, att: 0, old: -1, pal: 25 },
-    0x05 => { name: 'regular door',       pref: 19, att: 3, old:  4, pal: 30 },
-    0x06 => { name: 'locked door',        pref: 28, att: 5, old:  5, pal: 31 },
-    0x07 => { name: 'locked door switch', pref: 27, att: 0, old: -1, pal: 33 },
-    0x08 => { name: 'trap door',          pref: 29, att: 5, old:  6, pal: 39 },
-    0x09 => { name: 'trap door switch',   pref: 26, att: 0, old: -1, pal: 41 },
-    0x0A => { name: 'launch pad',         pref: 18, att: 3, old:  7, pal: 47 },
-    0x0B => { name: 'one-way platform',   pref: 24, att: 3, old:  8, pal: 49 },
-    0x0C => { name: 'chaingun drone',     pref: 16, att: 4, old:  9, pal: 51 },
-    0x0D => { name: 'laser drone',        pref: 17, att: 4, old: 10, pal: 53 },
-    0x0E => { name: 'zap drone',          pref: 15, att: 4, old: 11, pal: 57 },
-    0x0F => { name: 'chase drone',        pref: 14, att: 4, old: 12, pal: 59 },
-    0x10 => { name: 'floor guard',        pref: 13, att: 2, old: 13, pal: 61 },
-    0x11 => { name: 'bounce block',       pref:  3, att: 2, old: 14, pal: 63 },
-    0x12 => { name: 'rocket',             pref:  8, att: 2, old: 15, pal: 65 },
-    0x13 => { name: 'gauss turret',       pref:  9, att: 2, old: 16, pal: 69 },
-    0x14 => { name: 'thwump',             pref:  6, att: 3, old: 17, pal: 74 },
-    0x15 => { name: 'toggle mine',        pref: 23, att: 2, old: 18, pal: 10 },
-    0x16 => { name: 'evil ninja',         pref:  5, att: 2, old: 19, pal: 77 },
-    0x17 => { name: 'laser turret',       pref:  7, att: 4, old: 20, pal: 79 },
-    0x18 => { name: 'boost pad',          pref:  1, att: 2, old: 21, pal: 81 },
-    0x19 => { name: 'deathball',          pref: 10, att: 2, old: 22, pal: 83 },
-    0x1A => { name: 'micro drone',        pref: 12, att: 4, old: 23, pal: 57 },
-    0x1B => { name: 'alt deathball',      pref: 11, att: 2, old: 24, pal: 86 },
-    0x1C => { name: 'shove thwump',       pref:  2, att: 2, old: 25, pal: 88 }
+    ID_NINJA              => { pref:  4, att: 2, old:  0, pal:  6 },
+    ID_MINE               => { pref: 22, att: 2, old:  1, pal: 10 },
+    ID_GOLD               => { pref: 21, att: 2, old:  2, pal: 14 },
+    ID_EXIT               => { pref: 25, att: 4, old:  3, pal: 17 },
+    ID_EXIT_SWITCH        => { pref: 20, att: 0, old: -1, pal: 25 },
+    ID_DOOR_REGULAR       => { pref: 19, att: 3, old:  4, pal: 30 },
+    ID_DOOR_LOCKED        => { pref: 28, att: 5, old:  5, pal: 31 },
+    ID_DOOR_LOCKED_SWITCH => { pref: 27, att: 0, old: -1, pal: 33 },
+    ID_DOOR_TRAP          => { pref: 29, att: 5, old:  6, pal: 39 },
+    ID_DOOR_TRAP_SWITCH   => { pref: 26, att: 0, old: -1, pal: 41 },
+    ID_LAUNCHPAD          => { pref: 18, att: 3, old:  7, pal: 47 },
+    ID_ONEWAY             => { pref: 24, att: 3, old:  8, pal: 49 },
+    ID_DRONE_CHAINGUN     => { pref: 16, att: 4, old:  9, pal: 51 },
+    ID_DRONE_LASER        => { pref: 17, att: 4, old: 10, pal: 53 },
+    ID_DRONE_ZAP          => { pref: 15, att: 4, old: 11, pal: 57 },
+    ID_DRONE_CHASER       => { pref: 14, att: 4, old: 12, pal: 59 },
+    ID_FLOORGUARD         => { pref: 13, att: 2, old: 13, pal: 61 },
+    ID_BOUNCEBLOCK        => { pref:  3, att: 2, old: 14, pal: 63 },
+    ID_ROCKET             => { pref:  8, att: 2, old: 15, pal: 65 },
+    ID_GAUSS              => { pref:  9, att: 2, old: 16, pal: 69 },
+    ID_THWUMP             => { pref:  6, att: 3, old: 17, pal: 74 },
+    ID_TOGGLE_MINE        => { pref: 23, att: 2, old: 18, pal: 10 },
+    ID_EVIL_NINJA         => { pref:  5, att: 2, old: 19, pal: 77 },
+    ID_LASER_TURRET       => { pref:  7, att: 4, old: 20, pal: 79 },
+    ID_BOOST_PAD          => { pref:  1, att: 2, old: 21, pal: 81 },
+    ID_DEATHBALL          => { pref: 10, att: 2, old: 22, pal: 83 },
+    ID_MICRODRONE         => { pref: 12, att: 4, old: 23, pal: 57 },
+    ID_MINI               => { pref: 11, att: 2, old: 24, pal: 86 },
+    ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88 }
   }
-  # Objects that do not admit rotations
-  FIXED_OBJECTS = [0, 1, 2, 3, 4, 7, 9, 16, 17, 18, 19, 21, 22, 24, 25, 28]
-  # Objects that admit diagonal rotations
-  SPECIAL_OBJECTS = [10, 11, 23]
-  # Objects that have a different "toggled" sprite
-  TOGGLABLE_OBJECTS = [1, 3, 4, 6, 7, 8, 9, 21]
+  ID_LIST_FIXED      = [0, 1, 2, 3, 4, 7, 9, 16, 17, 18, 19, 21, 22, 24, 25, 28] # Objects that do not admit rotations
+  ID_LIST_DIAG       = [10, 11, 23] # Objects that admit diagonal rotations
+  ID_LIST_TOGGLABLE  = [1, 3, 4, 6, 7, 8, 9, 21] # Objects that have multiple sprites
+  ID_LIST_COLLIDABLE = [1, 2, 4, 7, 9, 21] # Objects for which collisions are supported
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -429,46 +458,34 @@ module Map
     end
   end
 
-  # Parse all collided objects in a given frame range by any ninja, and logically
-  # collide with them, by removing / toggling / moving them.
-  def self.collide_vs_objects(objects, nsim, f, step, ppc)
-    # For every frame in the range, find collided objects by any ninja, by matching
-    # the log returned by ntrace with the object dictionary
+  # Parse all object collisions in a given frame range by any ninja, and perform
+  # logical collision effects, such as removing or toggling them.
+  def self.collide_vs_objects(object_dict, nsim, f, step, ppc)
+    # For every frame in the range, gather all objects collided by any ninja,
+    # and update their state
     collided_objects = []
     (0 ... step).each{ |s|
       nsim.collisions(f + s).each{ |col|
-        # Only include a select few collisions
-        next unless [1, 2, 4, 7, 9, 21].include?(col.id)
-
-        # Gather objects matching the collided one
-        x = (obj[1] / 4).floor
-        y = (obj[2] / 4).floor
-        objects[x][y].each{ |o|
-          collided_objects << o if obj[0, 3] == o[0, 3] && o[4] == 0
-        }
+        next unless ID_LIST_COLLIDABLE.include?(col.id)    # Collidable object
+        next unless o = object_dict[col.id]&.[](col.index) # Object found
+        next unless o[4] != -1                             # Object not removed
+        o[4] = col.state
+        collided_objects << o
       }
     }
     collided_objects.uniq!
 
-    # Collide object, by either removing it from object dictionary (so that it
-    # won't get rendered again) or toggling it (so the sprite will change in
-    # the next redrawing).
+    # Additional collision effects (e.g. remove gold, collect doors...)
     collided_objects.each{ |o|
-      list = objects[o[1] / 4][o[2] / 4]
-
-      # Remove or toggle object
-      o[0] == 2 ? list.delete(o) : o[4] = 1
+      # Remove collided gold
+      o[4] = -1 if o[0] == ID_GOLD
 
       # For switches, toggle / remove door too
-      if [4, 7, 9].include?(o[0])
-        other_list = objects[o[6] / 4][o[7] / 4]
-        door = other_list.find{ |d| d[0] == o[0] - 1 && d[5] == o[5] }
-        if door
-          o[0] == 7 ? other_list.delete(door) : door[4] = 1
-          collided_objects << door
-        else
-          warn("Door for collided switch not found.")
-        end
+      if [ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH].include?(o[0])
+        door = object_dict[o[0] - 1]&.[](o[5])
+        next warn("Door for collided switch not found.") if !door
+        door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
+        collided_objects << door
       end
     }
 
@@ -488,7 +505,7 @@ module Map
       counts = [0] * 40
       map.each{ |o|
         # Remove glitched orientations and non-zero orientations for still objects
-        o[3] = 0 if o[3] > 7 || FIXED_OBJECTS.include?(o[0])
+        o[3] = 0 if o[3] > 7 || ID_LIST_FIXED.include?(o[0])
 
         # Use 5th field to store the "state"
         o[4] = 0
@@ -520,10 +537,11 @@ module Map
     }
 
     # Build another object dictionary, this time keyed by id and index
-    object_dict = objects.map{ |list|
-      list.group_by{ |o| o[0] }.map{ |id, objs|
-        [id, objs.group_by{ |o| o[5] }.map{ |idx, o| [idx, o.first] }.to_h]
-      }.to_h
+    object_dict = maps.map{ 40.times.map{ |i| [i, {}] }.to_h }
+    objects.each_with_index{ |map, i|
+      map.each{ |o|
+        object_dict[i][o[0]][o[5]] = o
+      }
     }
 
     # Parse tiles, add frame, and reject glitch tiles
@@ -586,14 +604,14 @@ module Map
             next if o[0] >= 29
             atlas[o[0]] = {} if !atlas.key?(o[0])
 
-            (TOGGLABLE_OBJECTS.include?(o[0]) ? [0, 1] : [0]).each{ |state|
+            (ID_LIST_TOGGLABLE.include?(o[0]) ? [0, 1] : [0]).each{ |state|
               # Skip if this object is already initialized
               atlas[o[0]][state] = {} if !atlas[o[0]].key?(state)
               next if atlas[o[0]][state].key?(o[3])
               sprite_list = atlas[o[0]][state]
 
               # Initialize base object image
-              s = o[3] % 2 == 1 && SPECIAL_OBJECTS.include?(o[0]) # Special variant of sprite (diagonal)
+              s = o[3] % 2 == 1 && ID_LIST_DIAG.include?(o[0]) # Special variant of sprite (diagonal)
               base = s ? 1 : 0
               if !sprite_list.key?(base)
                 sprite_list[base] = generate_object(o[0], palette_idx, true, s, state)
@@ -712,10 +730,11 @@ module Map
     objects.each_with_index do |map, i|
       # Compose images, only for those objects intersecting the bbox
       # We ignore duplicates, and sort by drawing overlap preference
-      gather_objects(map, bbox).uniq.sort_by{ |o| -OBJECTS[o[0]][:pref] }.each do |o|
-        # Skip objects we don't have in the atlas
-        obj = atlas[o[0]][o[4]][o[3]] rescue nil
-        next if !obj
+      gather_objects(map, bbox).uniq{ |o| o[0..4] }
+                               .sort_by{ |o| -OBJECTS[o[0]][:pref] }
+                               .each do |o|
+        # Skip objects removed or not in atlas
+        next if (o[4] == -1) || !(obj = atlas[o[0]]&.[](o[4])&.[](o[3]))
 
         # Draw differently depending on whether we have a PNG or a GIF
         x = off_x + ppc * o[1] - obj.width / 2
@@ -1295,15 +1314,11 @@ module Map
   # when there's nothing else to redraw, meaning the run has finished.
   def self.render_frame(f, step, gif, info, i, markers)
     # Adjust map data according to changes for this frame (e.g. remove collected gold)
-    collided = !info[:trace] ? collide_vs_objects(info[:objects][i], info[:nsim][i], f, step, gif[:ppc]) : []
+    collided = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], f, step, gif[:ppc]) : []
 
     # Find bounding box for this frame
     bbox = find_frame_bbox(f, info[:coords][i], step, markers, info[:demos][i], collided, gif[:object_atlas], trace: info[:trace], ppc: gif[:ppc])
     return if !bbox
-    done = info[:coords][i].map{ |c_list|
-      next false if !info[:h].is_level? && i < 4
-      ninja_just_finished?(c_list, f, step, info[:trace])
-    }
 
     # Write previous frame to disk and create new frame
     image = Gifenc::Image.new(
@@ -1330,6 +1345,10 @@ module Map
       fg:   [nil] * info[:n],
       bg:   gif[:colors][:ninja],
       text: gif[:colors][:inv]
+    }
+    done = info[:coords][i].map{ |c_list|
+      next false if !info[:h].is_level? && i < 4
+      ninja_just_finished?(c_list, f, step, info[:trace])
     }
     render_timebars(image, done, colors, gif: gif, info: info) unless info[:blank]
 
