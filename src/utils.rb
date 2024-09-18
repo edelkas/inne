@@ -1460,6 +1460,7 @@ end
 class NSim
 
   attr_reader :count, :success, :correct, :valid, :valid_flags, :coords_raw
+  attr_accessor :ppc
   Collision = Struct.new(:id, :index, :state)
 
   def initialize(map_data, demo_data)
@@ -1475,6 +1476,7 @@ class NSim
     @valid_flags    = []
     @coords_raw     = 40.times.map{ |id| [id, {}] }.to_h
     @collisions_raw = {}
+    @ppc            = 0 # Determines the default scaling factor for coordinates
   end
 
   # Export input files for nsim
@@ -1572,21 +1574,38 @@ class NSim
   end
 
   # Length of the simulation, in frames
-  def length
-    @splits ? @demos.map(&:size).sum : @coords_raw[0].map{ |index, coords| coords.length }.max
+  def length(index = nil)
+    if @splits
+      index ? @demos[index].size : @demos.map(&:size).sum
+    else
+      index ? @coords_raw[0][index].size : @coords_raw[0].map{ |index, coords| coords.length }.max
+    end
+  end
+
+  # Run is finished for this ninja on this frame
+  def finished?(index, frame, trace: false)
+    @coords_raw[0][index].size < frame + 1 + (trace ? 1 : 0)
+  end
+
+  # Run just finished on the given frame range (of width "step")
+  def just_finished?(index, frame, step, trace: false)
+    @coords_raw[0][index].size.between?(
+      frame +    1 + (trace ? 1 : 0),
+      frame + step + (trace ? 1 : 0)
+    )
   end
 
   # Return coordinates of an entity for the given frame
   # ppc contains the scale (in pixels per coordinate) if the coordinates need
   # to be scaled for drawing
-  def coords(id, index, frame, ppc: nil)
+  def coords(id, index, frame, ppc: @ppc)
     pair = @coords_raw[id][index]&.[](frame)
     return nil if !pair
-    !ppc ? pair : pair.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
+    ppc == 0 ? pair : pair.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
   end
 
   # Return coordinates of a ninja for the given frame
-  def ninja(index, frame, ppc: nil)
+  def ninja(index, frame, ppc: @ppc)
     coords(0, index, frame, ppc: ppc)
   end
 

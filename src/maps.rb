@@ -460,7 +460,7 @@ module Map
 
   # Parse all object collisions in a given frame range by any ninja, and perform
   # logical collision effects, such as removing or toggling them.
-  def self.collide_vs_objects(object_dict, nsim, f, step, ppc)
+  def self.collide_vs_objects(object_dict, nsim, f, step)
     # For every frame in the range, gather all objects collided by any ninja,
     # and update their state
     collided_objects = []
@@ -489,7 +489,7 @@ module Map
       end
     }
 
-    collided_objects
+    collided_objects.uniq
   end
 
   # Parse map(s) data, sanitize it, and return objects and tiles conveniently
@@ -908,18 +908,8 @@ module Map
   # the background.
   def self.redraw_changes(image, changes, objects, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
     changes.each{ |o|
-      # Skip objects we don't have in the atlas
-      next if !object_atlas.key?(o[0])
-
-      # Find max size of sprites corresponding to this object and orientation
-      width = object_atlas[o[0]].map{ |_, list| list[o[3]].width rescue nil }.compact.max
-      height = object_atlas[o[0]].map{ |_, list| list[o[3]].height rescue nil }.compact.max
-      next if !width || !height
-
-      # Redraw bounding box
-      x = ppc * o[1] - width / 2
-      y = ppc * o[2] - height / 2
-      bbox = [x, y, width, height].map{ |c| c * PPC / ppc.to_f / PPU }
+      next if !(bbox = find_object_bbox(o, object_atlas, ppc))
+      bbox.map!{ |c| c * PPC / ppc.to_f / PPU }
       redraw_bbox(image, bbox, objects, tiles, object_atlas, tile_atlas, palette, palette_idx, ppc, frame)
     }
   end
@@ -976,17 +966,34 @@ module Map
     }
   end
 
+  # Calculates the bounding box of an object's sprite based on the object data
+  # and the image's scale. It is returned in image coords, not game coords.
+  def self.find_object_bbox(o, atlas, ppc)
+    # Skip objects we don't have in the atlas
+    return nil if !atlas.key?(o[0])
+
+    # Find max size of sprites corresponding to this object and orientation
+    w = atlas[o[0]].map{ |state, sprites| sprites[o[3]]&.width  }.compact.max
+    h = atlas[o[0]].map{ |state, sprites| sprites[o[3]]&.height }.compact.max
+    return nil if !w || !h
+
+    # Calculate bounding box in pixels
+    x = ppc * o[1] - w / 2
+    y = ppc * o[2] - h / 2
+    [x, y, w, h]
+  end
+
   # Find the bounding box of a specific ninja marker. The marker is the circle
   # that represents the ninja in an animation, and also includes the wedges for
   # the input display.
-  def self.find_marker_bbox(coords, demos, ninja, frame, step)
+  def self.find_marker_bbox(frame, step, ninja, nsim, inputs = false)
     # Marker coords
-    f = [frame + step - 1, coords[ninja].size - 1].min
-    x, y = coords[ninja][f]
+    f = [frame + step - 1, nsim.length(ninja) - 1].min
+    x, y = nsim.ninja(ninja, f)
     j, r, l = 0, 0, 0
 
     # Extend bbox with input display, if available
-    if demos && demos[ninja] && f > 0 && (input = demos[ninja][f - 1])
+    if inputs && f > 0 && (input = nsim.inputs(ninja, f - 1))
       h = ANIMATION_WEDGE_HEIGHT - 1
       s = ANIMATION_WEDGE_SEP
       t = ANIMATION_WEDGE_WEIGHT
@@ -1005,60 +1012,43 @@ module Map
     }
   end
 
-  # Determine whether the ninja finished the run exactly on this GIF frame
-  def self.ninja_just_finished?(coords, f, step, trace)
-    coords.size.between?(f + 1 + (trace ? 1 : 0), f + step + (trace ? 1 : 0))
-  end
-
-  # Determine whether the ninja has already finished by this GIF frame
-  def self.ninja_finished?(coords, f, trace)
-    coords.size < f + 1 + (trace ? 1 : 0)
-  end
-
   # For a given frame, find the minimum region (bounding box) of the image that
   # needs to be redrawn. This region must contain all points that are subject to
   # change on this frame (trace bits, ninja markers, collected objects,
   # timebars, input display...), and must be rectangular.
-  def self.find_frame_bbox(f, coords, step, markers, demos, objects, atlas, trace: false, ppc: PPC)
+  def self.find_frame_bbox(f, step, nsim, markers, objects, atlas, trace: false, inputs: false, ppc: PPC)
     dim = 4 * ppc
     endpoints = []
+    n = nsim.count
 
-    coords.each_with_index{ |c_list, i|
-      next if ninja_finished?(c_list, f, trace)
+    n.times.each do |i|
+      # Nothing to plot for this ninja
+      next if nsim.finished?(i, f, trace: trace)
+
       if trace # Trace chunks
         _step = [step, c_list.size - (f + 1)].min
         (0 .. _step).each{ |s|
-          endpoints << [c_list[f + s][0], c_list[f + s][1]]
+          endpoints << nsim.ninja(i, f + s)
         }
       else     # Ninja markers and input display
-        endpoints.push(*find_marker_bbox(coords, demos, i, f, step)[:points])
+        endpoints.push(*find_marker_bbox(f, step, i, nsim, inputs)[:points])
       end
 
       # Timebars
-      if ninja_just_finished?(c_list, f, step, trace)
-        j = coords.length - 1 - i
+      if nsim.just_finished?(i, f, step, trace: trace)
+        j = n - 1 - i
         dx = (COLUMNS - 2) * dim / 4.0
         x = (dim * 1.25 + j * (dim / 2.0 + dx)).round
         endpoints << [x, 1]
         endpoints << [x + dx.round - 1, dim]
       end
-    }
+    end
 
     # Collected objects
     objects.each{ |o|
-      # Skip objects we don't have in the atlas
-      next if !atlas.key?(o[0])
-
-      # Find max size of sprites corresponding to this object and orientation
-      width = atlas[o[0]].map{ |_, list| list[o[3]].width rescue nil }.compact.max
-      height = atlas[o[0]].map{ |_, list| list[o[3]].height rescue nil }.compact.max
-      next if !width || !height
-
-      # Get bounding box of sprites
-      x = ppc * o[1] - width / 2
-      y = ppc * o[2] - height / 2
+      next if !(x, y, w, h = find_object_bbox(o, atlas, ppc))
       endpoints << [x, y]
-      endpoints << [x + width - 1, y + height - 1]
+      endpoints << [x + w - 1, y + h - 1]
     } if objects
 
     # Also add points from the previous frame's markers (to erase them)
@@ -1088,21 +1078,11 @@ module Map
 
     # Update changed elements (collected gold, toggled mines, ...)
     objects.each{ |o|
-      # Skip objects we don't have in the atlas
-      next if !atlas.key?(o[0])
-
-      # Find max size of sprites corresponding to this object and orientation
-      width = atlas[o[0]].map{ |_, list| list[o[3]].width rescue nil }.compact.max
-      height = atlas[o[0]].map{ |_, list| list[o[3]].height rescue nil }.compact.max
-      next if !width || !height
-
-      # Copy background region
-      x = ppc * o[1] - width / 2
-      y = ppc * o[2] - height / 2
+      next if !(x, y, w, h = find_object_bbox(o, atlas, ppc))
       image.copy(
         src:    background,
         offset: [x, y],
-        dim:    [width, height],
+        dim:    [w, h],
         dest:   Gifenc::Geometry.transform([[x, y]], bbox)[0]
       )
     }
@@ -1314,10 +1294,10 @@ module Map
   # when there's nothing else to redraw, meaning the run has finished.
   def self.render_frame(f, step, gif, info, i, markers)
     # Adjust map data according to changes for this frame (e.g. remove collected gold)
-    collided = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], f, step, gif[:ppc]) : []
+    collided = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], f, step) : []
 
     # Find bounding box for this frame
-    bbox = find_frame_bbox(f, info[:coords][i], step, markers, info[:demos][i], collided, gif[:object_atlas], trace: info[:trace], ppc: gif[:ppc])
+    bbox = find_frame_bbox(f, step, info[:nsim][i], markers, collided, gif[:object_atlas], trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
     return if !bbox
 
     # Write previous frame to disk and create new frame
@@ -1432,6 +1412,7 @@ module Map
       themes = THEMES.map(&:downcase)
       palette_idx = themes.index(theme.downcase) || themes.index(DEFAULT_PALETTE.downcase)
       ppc = find_scale(h, anim)
+      nsim.each{ |ns| ns.ppc = ppc }
 
       # We will encapsulate all necessary info in a few context hashes, for easy management
       context_png  = nil
@@ -1567,11 +1548,11 @@ module Map
           f = nsim.inputs(i, j)
           next if !f
 
-          if !nsim.ninja(i, j)
+          if !nsim.ninja(i, j, ppc: 0)
             mpl.plot(last_coord[0], last_coord[1], color: colors[i], marker: 'x', markersize: 2) if last_coord
             break
           else
-            last_coord = nsim.ninja(i, j)
+            last_coord = nsim.ninja(i, j, ppc: 0)
           end
 
           if markers[:jump] && f[0] == 1 && (j == 0 || nsim.inputs(i, j - 1)[0] == 0)
