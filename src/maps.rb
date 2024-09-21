@@ -906,11 +906,11 @@ module Map
   # Given a list of objects that have changed on this frame (collected gold,
   # toggled mines, etc), redraw each of their corresponding bounding boxes onto
   # the background.
-  def self.redraw_changes(image, changes, objects, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
+  def self.redraw_changes(image, changes, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
     changes.each{ |o|
       next if !(bbox = find_object_bbox(o, object_atlas, ppc))
       bbox.map!{ |c| c * PPC / ppc.to_f / PPU }
-      redraw_bbox(image, bbox, objects, tiles, object_atlas, tile_atlas, palette, palette_idx, ppc, frame)
+      redraw_bbox(image, bbox, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx, ppc, frame)
     }
   end
 
@@ -922,8 +922,7 @@ module Map
     n.times.each{ |i|
       # Only render timebar if it has changed. In practice, this only happens
       # twice: at the start, and when the ninja finishes.
-      j = n - 1 - i
-      next unless update[j]
+      next unless update[i]
 
       # Compute coordinates relative to the image (which need not fill the screen)
       dx = (COLUMNS - 2) * dim / 4.0
@@ -933,36 +932,36 @@ module Map
       p = Gifenc::Geometry.transform([p], image.bbox)[0]
 
       # Rectangle
-      image.rect(p.x, p.y, dx.round, dim, colors[:fg][j], colors[:bg][j], weight: 2, anchor: 0)
+      image.rect(p.x, p.y, dx.round, dim, colors[:fg][i], colors[:bg][i], weight: 2, anchor: 0)
 
       # Vertical bar
       image.line(
-        p1: [p.x + dx - dim / 2 - strlen(info[:scores][j], gif[:font]), p.y],
-        p2: [p.x + dx - dim / 2 - strlen(info[:scores][j], gif[:font]), p.y + dim - 1],
-        color: colors[:fg][j]
-      ) if colors[:fg][j]
+        p1: [p.x + dx - dim / 2 - strlen(info[:scores][i], gif[:font]), p.y],
+        p2: [p.x + dx - dim / 2 - strlen(info[:scores][i], gif[:font]), p.y + dim - 1],
+        color: colors[:fg][i]
+      ) if colors[:fg][i]
 
       # Name
       txt2gif(
-        info[:names][j],
+        info[:names][i],
         image,
         gif[:font],
         p.x + dim / 4,
         p.y + dim - 1 - 2 - 3,
-        colors[:text][j],
-        max_width: (dx - dim - strlen(info[:scores][j], gif[:font])).round
-      ) if colors[:text][j]
+        colors[:text][i],
+        max_width: (dx - dim - strlen(info[:scores][i], gif[:font])).round
+      ) if colors[:text][i]
 
       # Score
       txt2gif(
-        info[:scores][j],
+        info[:scores][i],
         image,
         gif[:font],
         p.x + dx - dim / 4,
         p.y + dim - 1 - 2 - 3,
-        colors[:text][j],
+        colors[:text][i],
         align: :right
-      ) if colors[:text][j]
+      ) if colors[:text][i]
     }
   end
 
@@ -1026,7 +1025,7 @@ module Map
       next if nsim.finished?(i, f, trace: trace)
 
       if trace # Trace chunks
-        _step = [step, c_list.size - (f + 1)].min
+        _step = [step, nsim.length(i) - (f + 1)].min
         (0 .. _step).each{ |s|
           endpoints << nsim.ninja(i, f + s)
         }
@@ -1036,9 +1035,8 @@ module Map
 
       # Timebars
       if nsim.just_finished?(i, f, step, trace: trace)
-        j = n - 1 - i
         dx = (COLUMNS - 2) * dim / 4.0
-        x = (dim * 1.25 + j * (dim / 2.0 + dx)).round
+        x = (dim * 1.25 + i * (dim / 2.0 + dx)).round
         endpoints << [x, 1]
         endpoints << [x + dx.round - 1, dim]
       end
@@ -1091,17 +1089,16 @@ module Map
   # Draw a single frame of an animated GIF. We have two modes:
   # - Tracing the routes by plotting the lines.
   # - Animating the ninjas by drawing moving circles.
-  def self.draw_frame_gif(image, coords, demos, f, step, trace, colors)
+  def self.draw_frame_gif(image, frame, step, nsim, trace, colors, inputs)
     bbox = image.bbox
 
     # Trace route bits for this frame _range_
     if trace
-      colors = colors.reverse
       (0 ... step).each{ |s|
-        coords.reverse.each_with_index{ |c_list, i|
-          next if ninja_finished?(c_list, f + s, trace)
-          p1 = [c_list[f + s][0], c_list[f + s][1]]
-          p2 = [c_list[f + s + 1][0], c_list[f + s + 1][1]]
+        nsim.count.times.each{ |i|
+          next if nsim.finished?(i, frame + s, trace: true)
+          p1 = nsim.ninja(i, frame + s)
+          p2 = nsim.ninja(i, frame + s + 1)
           p1, p2 = Gifenc::Geometry.transform([p1, p2], bbox)
           image.line(p1: p1, p2: p2, color: colors[i], weight: 2)
         }
@@ -1114,11 +1111,11 @@ module Map
     e1 = Gifenc::Geometry::E1
     e2 = Gifenc::Geometry::E2
     markers = []
-    coords.each_with_index{ |c_list, i|
-      next if ninja_finished?(c_list, f, trace)
+    nsim.count.times.reverse_each{ |i|
+      next if nsim.finished?(i, frame, trace: false)
 
       # Save bbox to clear marker next frame
-      marker_bbox = find_marker_bbox(coords, demos, i, f, step)
+      marker_bbox = find_marker_bbox(frame, step, i, nsim, inputs)
       markers << marker_bbox[:points]
 
       # Draw marker
@@ -1141,20 +1138,20 @@ module Map
 
   # Draw a single frame and export to PNG. They will later be joined into an
   # MP4 using FFmpeg.
-  def self.draw_frame_vid(image, coords, f, colors)
+  def self.draw_frame_vid(image, coords, frame, colors)
     coords.each_with_index{ |c_list, i|
       image.line(
-        c_list[f][0],
-        c_list[f][1],
-        c_list[f + 1][0],
-        c_list[f + 1][1],
+        c_list[frame][0],
+        c_list[frame][1],
+        c_list[frame + 1][0],
+        c_list[frame + 1][1],
         colors[i],
         false,
         weight: 2,
         antialiasing: false
-      ) if coords[i].size >= f + 2
+      ) if coords[i].size >= frame + 2
     }
-    image.save("frames/#{'%04d' % f}.png", :fast_rgb)
+    image.save("frames/#{'%04d' % frame}.png", :fast_rgb)
     #`ffmpeg -framerate 60 -pattern_type glob -i 'frames/*.png' 'frames/anim.mp4' > /dev/null 2>&1`
     #res = File.binread('frames/anim.mp4')
     #FileUtils.rm(Dir.glob('frames/*'))
@@ -1292,12 +1289,12 @@ module Map
   # This involves first finding the smallest bounding box containing all the
   # elements that must be redrawn, to minimize the redrawn area. Returns nil
   # when there's nothing else to redraw, meaning the run has finished.
-  def self.render_frame(f, step, gif, info, i, markers)
+  def self.render_frame(frame, step, gif, info, i, markers)
     # Adjust map data according to changes for this frame (e.g. remove collected gold)
-    collided = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], f, step) : []
+    collided = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], frame, step) : []
 
     # Find bounding box for this frame
-    bbox = find_frame_bbox(f, step, info[:nsim][i], markers, collided, gif[:object_atlas], trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
+    bbox = find_frame_bbox(frame, step, info[:nsim][i], markers, collided, gif[:object_atlas], trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
     return if !bbox
 
     # Write previous frame to disk and create new frame
@@ -1311,14 +1308,14 @@ module Map
     # Redraw background regions to erase markers from previous frame and
     # change any objects that have been collected / toggled this frame.
     if !info[:trace]
-      redraw_changes(gif[:background], collided, [info[:objects][i]], [info[:tiles][i]], gif[:object_atlas], gif[:tile_atlas], gif[:palette], gif[:palette_idx], gif[:ppc], false) unless info[:blank]
+      redraw_changes(gif[:background], collided, [info[:object_grid][i]], [info[:tiles][i]], gif[:object_atlas], gif[:tile_atlas], gif[:palette], gif[:palette_idx], gif[:ppc], false) unless info[:blank]
       restore_background(image, gif[:background], markers, collided, gif[:object_atlas], gif[:ppc])
     end
 
     # Draw new elements for this frame (trace, markers, inputs...), and save
     # markers to we can delete them on the next frame
     markers.pop(markers.size)
-    markers.push(*draw_frame_gif(image, info[:coords][i], info[:demos][i], f, step, info[:trace], gif[:colors][:ninja]))
+    markers.push(*draw_frame_gif(image, frame, step, info[:nsim][i], info[:trace], gif[:colors][:ninja], info[:inputs]))
 
     # Other elements
     colors = {
@@ -1326,9 +1323,9 @@ module Map
       bg:   gif[:colors][:ninja],
       text: gif[:colors][:inv]
     }
-    done = info[:coords][i].map{ |c_list|
+    done = info[:nsim][i].count.times.map{ |j|
       next false if !info[:h].is_level? && i < 4
-      ninja_just_finished?(c_list, f, step, info[:trace])
+      info[:nsim][i].just_finished?(j, frame, step, trace: info[:trace])
     }
     render_timebars(image, done, colors, gif: gif, info: info) unless info[:blank]
 
