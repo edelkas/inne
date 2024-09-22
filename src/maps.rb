@@ -1391,19 +1391,15 @@ module Map
     )
 
     return nil if h.nil?
-    bench(:start) if BENCHMARK
+    bench(:start) if BENCHMARK && !BENCH_IMAGES
 
     anim = false if !FEATURE_ANIMATE
     gif = !nsim.empty?
     filename =  "#{spoiler ? 'SPOILER_' : ''}#{sanitize_filename(h.name)}.#{gif ? 'gif' : 'png'}"
     memory = [] if BENCH_IMAGES
-    $time = 0
 
     res = _fork do
-      if BENCH_IMAGES
-        bench(:start)
-        memory << getmem
-      end
+      memory << getmem if BENCH_IMAGES
 
       # Parse palette and scale
       themes = THEMES.map(&:downcase)
@@ -1441,7 +1437,7 @@ module Map
         convert_atlases(context_png, context_gif) if anim
         if BENCH_IMAGES
           bench(:step, 'GIF init', pad_str: 12, pad_num: 9)
-          memory << getmem if BENCH_IMAGES
+          memory << getmem
         end
 
         # No animation -> Done
@@ -1464,14 +1460,13 @@ module Map
         dbg('Image size: ' + res.size.to_s)
         mem_per_frame = memory.size > 3 ? (memory[3..-1].max - memory[3..-1].min) / (memory.size - 3) : 0.0
         dbg("Memory: max #{'%.3f' % memory.max}, avg #{'%.3f' % [memory.sum / memory.size]}, per frame #{'%.3f' % mem_per_frame}")
-        dbg("Time: %.3fms" % [$time * 1000])
       end
 
       # Return binary data for PNG / GIF
       res
     end
 
-    bench(:step) if BENCHMARK
+    bench(:step) if BENCHMARK && !BENCH_IMAGES
 
     return nil if !res
     file ? tmp_file(res, filename, binary: true) : res
@@ -1493,7 +1488,7 @@ module Map
       theme:   DEFAULT_PALETTE, # Palette to generate screenshot in
       bg:      nil,             # Background image (screenshot) file object
       animate: false,           # Animate trace instead of still image
-      nsim:    nil,              # NSim objects (simulation results)
+      nsim:    nil,             # NSim objects (simulation results)
       texts:   [],              # Names for the legend
       markers: { jump: true, left: false, right: false} # Mark changes in replays
     )
@@ -1501,7 +1496,6 @@ module Map
 
     _fork do
       # Parse palette
-      bench(:start) if BENCH_IMAGES
       themes = THEMES.map(&:downcase)
       theme = theme.to_s.downcase
       theme = DEFAULT_PALETTE.downcase if !themes.include?(theme)
@@ -1617,6 +1611,7 @@ module Map
 
   def self.trace(event, anim: false, h: nil)
     # Parse message parameters
+    bench(:start) if BENCH_IMAGES
     TmpMsg.init(event)
     t = Time.now
     h = parse_highscoreable(event, mappack: true) if !h
@@ -1669,6 +1664,7 @@ module Map
         Demo.decode(score.demo.demo, true).map{ |d| Demo.encode(d) }
       end
     }.transpose
+    bench(:step, 'Setup', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 
     # Execute simulation and parse result
     TmpMsg.update('Running simulation...')

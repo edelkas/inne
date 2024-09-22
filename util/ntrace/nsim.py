@@ -826,7 +826,7 @@ class Entity:
 
     def log_collision(self, state=1):
         """Log an interaction with this entity"""
-        if self.log_collisions:
+        if self.log_collisions and self.sim.frame > 0:
             self.sim.collisionlog.append((self.sim.frame, self.type, self.index, state))
 
     def log_position(self):
