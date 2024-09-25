@@ -1521,7 +1521,7 @@ class NSim
       entity_count, = fparse(f, 'S<')
       entity_count.times do
         id, index, frames = fparse(f, 'CS<S<')
-        next if @coords_raw[id][index]
+        next f.seek(16 * frames, :CUR) if @coords_raw[id][index]
         @coords_raw[id][index] = fparse(f, "E#{2 * frames}").each_slice(2).to_a
       end
 
