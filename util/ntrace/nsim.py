@@ -4,10 +4,7 @@ import os.path
 import struct
 import copy
 import random
-import sys
 
-# Export drone position logs
-INCLUDE_DRONES = '-drones' not in sys.argv
 
 NINJA_ANIM_MODE = True
 if os.path.isfile("anim_data_line_new.txt.bin"):
@@ -19,7 +16,9 @@ else:
 
 
 class Ninja:
-    """This class is responsible for updating and storing the positions and velocities of each ninja."""
+    """This class is responsible for updating and storing the positions and velocities of each ninja.
+    self.xposlog and self.yposlog contain all the coordinates used to generate the traces of the replays.
+    """
 
     #Physics constants for the ninja.
     GRAVITY_FALL = 0.06666666666666665 
@@ -44,13 +43,12 @@ class Ninja:
     #12:Side to side, 13:Clutch to the sky, 14:Frontflip, 15:Waving, 16:On one leg, 17:Backflip,
     #18:Kneeling, 19:Fall to the floor, 20:Russian squat dance (classic version), 21:Kick
     DANCE_RANDOM = True #Choose whether the victory dance is picked randomly.
-    DANCE_ID_DEFAULT = 10 #Choose the id of the dance that will always play if DANCE_RANDOM is false.
+    DANCE_ID_DEFAULT = 0 #Choose the id of the dance that will always play if DANCE_RANDOM is false.
     DANCE_DIC = {0:(104, 104), 1:(106, 225), 2:(226, 345), 3:(346, 465), 4:(466, 585), 5:(586, 705),
                  6:(706, 825), 7:(826, 945), 8:(946, 1065), 9:(1066, 1185), 10:(1186, 1305),
                  11:(1306, 1485), 12:(1486, 1605), 13:(1606, 1664), 14:(1665, 1731), 15:(1732, 1810),
                  16:(1811, 1852), 17:(1853, 1946), 18:(1947, 2004), 19:(2005, 2156), 20:(2157, 2241),
                  21:(2242, 2295)}
-                 
 
     def __init__(self, sim):
         """Initiate ninja position at spawn point, and initiate other values to their initial state"""
@@ -64,6 +62,7 @@ class Ninja:
         self.applied_friction = self.FRICTION_GROUND
         self.state = 0 #0:Immobile, 1:Running, 2:Ground sliding, 3:Jumping, 4:Falling, 5:Wall sliding
         self.airborn = False
+        self.airborn_old = False
         self.walled = False
         self.jump_input_old = 0
         self.jump_duration = 0
@@ -84,9 +83,10 @@ class Ninja:
         self.bones = [[0, 0] for _ in range(13)]
         self.update_graphics()
         self.ragdoll = Ragdoll()
-        self.poslog = []
-        self.speedlog = []
-        self.log()
+        self.poslog = [(0, self.xpos, self.ypos)] #Used for debug
+        self.speedlog = [(0,0,0)]
+        self.xposlog = [self.xpos] #Used to produce trace
+        self.yposlog = [self.ypos]
         
     def integrate(self):
         """Update position and speed by applying drag and gravity before collision phase."""
@@ -241,6 +241,7 @@ class Ninja:
                 wall_normal += dx/dist
 
         #Check if airborn or walled.
+        self.airborn_old = self.airborn
         self.airborn = True
         self.walled = False
         if wall_normal:
@@ -257,7 +258,7 @@ class Ninja:
             else:
                 self.floor_normalized_x = self.floor_normal_x/floor_scalar
                 self.floor_normalized_y = self.floor_normal_y/floor_scalar
-            if self.state != 8: #Check if died from floor impact
+            if self.state != 8 and self.airborn_old: #Check if died from floor impact
                 impact_vel = -(self.floor_normalized_x*self.xspeed_old + self.floor_normalized_y*self.yspeed_old)
                 if impact_vel > self.MAX_SURVIVABLE_IMPACT - 4/3 * abs(self.floor_normalized_y):
                     self.xspeed = self.xspeed_old
@@ -357,7 +358,7 @@ class Ninja:
         self.yspeed += self.ylp_boost_normalized * boost_scalar * 2/3
         
     def think(self):
-        """This function handle all the ninja's actions depending of the inputs and its environment."""
+        """This function handles all the ninja's actions depending of the inputs and its environment."""
         #Logic to determine if you're starting a new jump.
         if not self.jump_input:
             new_jump_check = False
@@ -397,7 +398,7 @@ class Ninja:
         if not self.airborn:
             self.floor_buffer = 0
 
-        #This part deals with the special states: awaiting death or celebrating.
+        #This part deals with the special states: dead, awaiting death, celebrating, disabled.
         if self.state in (6, 9):
             return
         if self.state == 7:
@@ -638,11 +639,6 @@ class Ninja:
         """Return whether the ninja is a valid target for various interactions."""
         return not self.state in (6, 8, 9)
 
-    def log(self):
-        """Log position and velocity vectors of the ninja for the current frame"""
-        self.poslog.append((self.sim.frame, round(self.xpos, 6), round(self.ypos, 6)))
-        self.speedlog.append((self.sim.frame, round(self.xspeed, 6), round(self.yspeed, 6)))
-
 
 class Ragdoll:
     """None of this is working yet. Might never will."""
@@ -732,9 +728,9 @@ class GridSegmentLinear:
         return is_back_facing, a, b
     
     def intersect_with_ray(self, xpos, ypos, dx, dy, radius):
-        """Return the time of intersection (as a fraction of a frame) for the
-        closest point in the ninja's path. Return 0 if the ninja is already 
-        intersecting or 1 if won't intersect within the frame.
+        """Return the time of intersection (as a fraction of a frame) for the collision
+        between the segment and a circle moving along a given direction. Return 0 if the circle 
+        is already intersecting or 1 if it won't intersect within the frame.
         """
         time1 = get_time_of_intersection_circle_vs_circle(xpos, ypos, dx, dy, self.x1, self.y1, radius)
         time2 = get_time_of_intersection_circle_vs_circle(xpos, ypos, dx, dy, self.x2, self.y2, radius)
@@ -782,8 +778,9 @@ class GridSegmentCircular:
         return is_back_facing, a, b
     
     def intersect_with_ray(self, xpos, ypos, dx, dy, radius):
-        """Return the time of intersection (as a fraction of a frame) for the closest point in the ninja's path.
-        Return 0 if the ninja is already intersection or 1 if won't intersect within the frame.
+        """Return the time of intersection (as a fraction of a frame) for the collision
+        between the segment and a circle moving along a given direction. Return 0 if the circle 
+        is already intersecting or 1 if it won't intersect within the frame.
         """
         time1 = get_time_of_intersection_circle_vs_circle(xpos, ypos, dx, dy, self.p_hor[0], self.p_hor[1], radius)
         time2 = get_time_of_intersection_circle_vs_circle(xpos, ypos, dx, dy, self.p_ver[0], self.p_ver[1], radius)
@@ -793,26 +790,19 @@ class GridSegmentCircular:
 
 
 class Entity:
-    entity_counts = [0] * 40
-
     """Class that all entity types (gold, bounce blocks, thwumps, etc.) inherit from."""
     def __init__(self, type, sim, xcoord, ycoord):
         """Inititate a member from map data"""
         self.type = type
-        self.index = self.entity_counts[self.type]
-        self.entity_counts[self.type] += 1
         self.sim = sim
         self.xpos = xcoord*6
         self.ypos = ycoord*6
-        self.poslog = []
         self.active = True
         self.is_logical_collidable = False
         self.is_physical_collidable = False
         self.is_movable = False
         self.is_thinkable = False
-        self.log_positions = False
-        self.log_collisions = True
-        self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
+        self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))        
     
     def grid_move(self):
         """As the entity is moving, if its center goes from one grid cell to another,
@@ -820,21 +810,16 @@ class Entity:
         """
         cell_new = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
         if cell_new != self.cell:
-            self.sim.entity_dic[self.cell].remove(self)
+            self.sim.grid_entity[self.cell].remove(self)
             self.cell = cell_new
-            self.sim.entity_dic[self.cell].append(self)
+            self.sim.grid_entity[self.cell].append(self)
 
-    def log_collision(self, state=1):
-        """Log an interaction with this entity"""
-        if self.log_collisions and self.sim.frame > 0:
-            self.sim.collisionlog.append((self.sim.frame, self.type, self.index, state))
-
-    def log_position(self):
-        """Log position of entity on current frame"""
-        self.poslog.append((self.xpos, self.ypos))
+    def log(self, state=1):
+        self.sim.entitylog.append((self.sim.frame, self.type, self.xpos, self.ypos, state))
 
 
 class EntityToggleMine(Entity):
+    """This class handles both toggle mines (untoggled state) and regular mines (toggled state)."""
     RADII = {0:4, 1:3.5, 2:4.5} #0:toggled, 1:untoggled, 2:toggling
 
     def __init__(self, type, sim, xcoord, ycoord, state):
@@ -844,21 +829,24 @@ class EntityToggleMine(Entity):
         self.set_state(state)
 
     def think(self):
+        """Handle interactions between the ninja and the untoggled mine"""
         ninja = self.sim.ninja
         if ninja.is_valid_target():
-            if self.state == 1:
+            if self.state == 1: #Set state to toggling if ninja touches untoggled mine
                 if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                             ninja.xpos, ninja.ypos, ninja.RADIUS):
                     self.set_state(2)
-            elif self.state == 2:
+            elif self.state == 2: #Set state to toggled if ninja stops touching toggling mine
                 if not overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                                 ninja.xpos, ninja.ypos, ninja.RADIUS):
                     self.set_state(0)
-        else:
+                    self.log(2)
+        else: #Set state to untoggled if ninja dies while toggling a mine
             if self.state == 2 and ninja.state == 6:
                 self.set_state(1)
 
     def logical_collision(self):
+        """Kill the ninja if it touches a toggled mine"""
         ninja = self.sim.ninja
         if ninja.is_valid_target() and self.state == 0: 
             if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
@@ -871,7 +859,6 @@ class EntityToggleMine(Entity):
         if state in (0, 1, 2):
             self.state = state
             self.RADIUS = self.RADII[state]
-            self.log_collision(state)
 
 
 class EntityGold(Entity):
@@ -883,14 +870,14 @@ class EntityGold(Entity):
         self.collected = False
         
     def logical_collision(self):
-        """If the ninja is colliding with the piece of gold, store the collection frame."""
+        """The gold is collected if touches by a ninja that is not in winning state."""
         ninja = self.sim.ninja
         if ninja.state != 8:
             if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                         ninja.xpos, ninja.ypos, ninja.RADIUS):
-                self.collected = True
+                self.sim.gold_collected += 1
                 self.active = False
-                self.log_collision()
+                self.log()
 
 
 class EntityExit(Entity):
@@ -899,14 +886,14 @@ class EntityExit(Entity):
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
         self.is_logical_collidable = True
-        self.ninja_exit = []
 
     def logical_collision(self):
-        """If the ninja is colliding with the open door, store the collision frame."""
+        """The ninja wins if it touches the exit door. The door is not interactable from the entity
+        grid before the exit switch is collected.
+        """
         ninja = self.sim.ninja
         if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
-            self.ninja_exit.append(self.sim.frame)
             ninja.win()
 
 
@@ -920,17 +907,19 @@ class EntityExitSwitch(Entity):
         self.parent = parent
 
     def logical_collision(self):
-        """If the ninja is colliding with the switch, flag it as being collected, and open its associated door."""
+        """If the ninja is colliding with the switch, open its associated door. This is done in practice
+        by adding the parent door entity to the entity grid.
+        """
         ninja = self.sim.ninja
         if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
-            self.collected = True
             self.active = False
-            self.sim.entity_dic[self.parent.cell].append(self.parent) #Add door to the entity grid so the ninja can touch it
-            self.log_collision()
+            self.sim.grid_entity[self.parent.cell].append(self.parent) #Add door to the entity grid so the ninja can touch it
+            self.log()
 
 
 class EntityDoorBase(Entity):
+    """Parent class that all door type entities inherit from : regular doors, locked doors, trap doors."""
     def __init__(self, type, sim, xcoord, ycoord, orientation, sw_xcoord, sw_ycoord):
         super().__init__(type, sim, xcoord, ycoord)
         self.is_logical_collidable = True
@@ -989,14 +978,17 @@ class EntityDoorRegular(EntityDoorBase):
         self.open_timer = 0
 
     def think(self):
-        """If the door has been opened for more than 5 frames without being touched by the ninja, close it."""
+        """If the door has been opened for more than 5 frames without being touched by the ninja, 
+        close it.
+        """
         if not self.closed:
             self.open_timer += 1
             if self.open_timer > 5:
                 self.change_state(closed = True)
 
     def logical_collision(self):
-        """If the ninja touches the activation region of the door, open it."""
+        """If the ninja touches the activation region of the door (circle with a radius of 10 at the
+        door's center), open it."""
         ninja = self.sim.ninja
         if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
@@ -1017,7 +1009,7 @@ class EntityDoorLocked(EntityDoorBase):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.change_state(closed = False)
             self.active = False
-            self.log_collision()
+            self.log()
 
 
 class EntityDoorTrap(EntityDoorBase):
@@ -1034,7 +1026,7 @@ class EntityDoorTrap(EntityDoorBase):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.change_state(closed = True)
             self.active = False
-            self.log_collision()
+            self.log()
 
 
 class EntityLaunchPad(Entity):
@@ -1074,6 +1066,9 @@ class EntityOneWayPlatform(Entity):
         self.normal_x, self.normal_y = map_orientation_to_vector(orientation)
 
     def calculate_depenetration(self, ninja):
+        """Return the depenetration vector between the ninja and the one way. Return nothing if no
+        penetration.
+        """
         dx = ninja.xpos - self.xpos
         dy = ninja.ypos - self.ypos
         lateral_dist = dy * self.normal_x - dx * self.normal_y
@@ -1091,9 +1086,11 @@ class EntityOneWayPlatform(Entity):
                         return (self.normal_x, self.normal_y), (ninja.RADIUS - normal_dist, 0)
 
     def physical_collision(self):
+        """Return depenetration between ninja and one way (None if no penetration)."""
         return self.calculate_depenetration(self.sim.ninja)
 
     def logical_collision(self):
+        """Return wall normal if the ninja enters walled state from entity, else return None."""
         collision_result = self.calculate_depenetration(self.sim.ninja)
         if collision_result:
             if abs(self.normal_x) == 1:
@@ -1101,9 +1098,13 @@ class EntityOneWayPlatform(Entity):
 
 
 class EntityDroneBase(Entity):
+    """Parent class that all drone type entities inherit from."""
     RADIUS = 7.5
     GRID_WIDTH = 24
     DIR_TO_VEC = {0:[1, 0], 1:[0, 1], 2:[-1, 0], 3:[0, -1]}
+    #Dictionary to choose the next direction from the patrolling mode of the drone.
+    #Patrolling modes : {0:follow wall CW, 1:follow wall CCW, 2:wander CW, 3:wander CCW}
+    #Directions : {0:keep forward, 1:turn right, 2:go backward, 3:turn left}
     DIR_LIST = {0:[1, 0, 3, 2], 1:[3, 0, 1, 2], 2:[0, 1, 3, 2], 3:[0, 3, 1, 2]}
 
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode, speed):
@@ -1117,11 +1118,16 @@ class EntityDroneBase(Entity):
         self.xpos2, self.ypos2 = self.xpos, self.ypos
 
     def move(self):
+        """Make the drone move along the grid. The drone will try to move towards the center of an
+        adjacent cell. When at the center of that cell, it will then choose the next cell to move
+        towards.
+        """
         xspeed = self.speed * self.DIR_TO_VEC[self.dir][0]
         yspeed = self.speed * self.DIR_TO_VEC[self.dir][1]
         dx = self.xtarget - self.xpos
         dy = self.ytarget - self.ypos
         dist = math.sqrt(dx**2 + dy**2)
+        #If the drone has reached or passed the center of the cell, choose the next cell to go to.
         if dist < 0.000001 or (dx * (self.xtarget - (self.xpos + xspeed)) + dy * (self.ytarget - (self.ypos + yspeed))) < 0:
             self.xpos, self.ypos = self.xtarget, self.ytarget
             can_move = self.choose_next_direction_and_goal()
@@ -1129,6 +1135,7 @@ class EntityDroneBase(Entity):
                 disp = self.speed - dist
                 self.xpos += disp * self.DIR_TO_VEC[self.dir][0]
                 self.ypos += disp * self.DIR_TO_VEC[self.dir][1]
+        #Otherwise, make the drone keep moving along its current direction.
         else:
             xspeed = self.speed * self.DIR_TO_VEC[self.dir][0]
             yspeed = self.speed * self.DIR_TO_VEC[self.dir][1]
@@ -1137,6 +1144,9 @@ class EntityDroneBase(Entity):
             self.grid_move()
         
     def choose_next_direction_and_goal(self):
+        """Return true if the drone can move in at least one of four directions.
+        The directions are tested in the order according to the drone's preference depending of its mode.
+        """
         for i in range(4):
             new_dir = (self.dir + self.DIR_LIST[self.mode][i]) % 4
             valid_dir = self.test_next_direction_and_goal(new_dir)
@@ -1147,6 +1157,9 @@ class EntityDroneBase(Entity):
         return False
 
     def test_next_direction_and_goal(self, dir):
+        """Return true if the drone can move to the adjacent cell along the given direction.
+        This is true if there are no walls impeding the drone's movement.
+        If true, set the center of the adjacent cell as the drone's next target."""
         xdir, ydir = self.DIR_TO_VEC[dir]
         xtarget = self.xpos + self.GRID_WIDTH*xdir
         ytarget = self.ypos + self.GRID_WIDTH*ydir
@@ -1176,9 +1189,9 @@ class EntityDroneZap(EntityDroneBase):
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
         super().__init__(type, sim, xcoord, ycoord, orientation, mode, 8/7)
         self.is_logical_collidable = True
-        self.log_positions = INCLUDE_DRONES
     
     def logical_collision(self):
+        """Kill the ninja if it touches the regular drone."""
         ninja = self.sim.ninja
         if ninja.is_valid_target():
             if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
@@ -1190,12 +1203,12 @@ class EntityDroneChaser(EntityDroneZap):
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
         super().__init__(type, sim, xcoord, ycoord, orientation, mode)
         self.is_thinkable = True
-        self.log_positions = INCLUDE_DRONES
         self.speed_slow = self.speed
         self.speed_chase = 2 * self.speed
         self.chasing = False
 
     def think(self):
+        #TODO
         if not self.chasing:
             ninja = self.sim.ninja
             if ninja.is_valid_target():
@@ -1207,6 +1220,7 @@ class EntityDroneChaser(EntityDroneZap):
                             pass
 
     def choose_next_direction_and_goal(self):
+        #TODO
         super().choose_next_direction_and_goal()
         
 
@@ -1279,6 +1293,9 @@ class EntityThwump(Entity):
         self.state = 0 #0:immobile, 1:forward, -1:backward
 
     def move(self):
+        """Update the position of the thwump only if it is already moving. If the thwump retracts past
+        its origin, it will stop moving.
+        """
         if self.state: #If not immobile.
             speed = self.FORWARD_SPEED if self.state == 1 else self.BACKWARD_SPEED
             speed_dir = self.direction * self.state
@@ -1353,11 +1370,15 @@ class EntityThwump(Entity):
                             self.state = 1
 
     def physical_collision(self):
+        """Return the depenetration vector for the ninja if it collides with the thwump."""
         ninja = self.sim.ninja
         return penetration_square_vs_point(self.xpos, self.ypos, ninja.xpos, ninja.ypos,
                                            self.SEMI_SIDE + ninja.RADIUS)
     
     def logical_collision(self):
+        """Return the wall normal if the ninja can interact with a thwump's side.
+        Kill the ninja if it touches the lethal region on the thwump's charging face.
+        """
         ninja = self.sim.ninja
         if ninja.is_valid_target():
             depen = penetration_square_vs_point(self.xpos, self.ypos, ninja.xpos, ninja.ypos,
@@ -1376,6 +1397,103 @@ class EntityThwump(Entity):
                 if overlap_circle_vs_segment(ninja.xpos, ninja.ypos, ninja.RADIUS + 2, px1, py1, px2, py2):
                     ninja.kill(0, 0, 0, 0, 0)
                 return depen[0][0]
+
+
+class EntityLaser(Entity):
+    RADIUS = 5.9
+    SPIN_SPEED = 0.010471975 #roughly 2pi/600
+    SURFACE_FLAT_SPEED = 0.1
+    SURFACE_CORNER_SPEED = 0.005524805665672641 #roughly 0.1/(5.9*pi)
+
+    def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
+        super().__init__(type, sim, xcoord, ycoord)
+        self.is_thinkable = True
+        #Find out what is the laser mode : spinner or surface. Surface mode if segment close enough.
+        result, closest_point = get_single_closest_point(self.sim, self.xpos, self.ypos, 12)
+        if result == -1:
+            self.mode = 1
+        else:
+            dist = math.sqrt((closest_point[0] - self.xpos)**2 + (closest_point[1] - self.ypos)**2)
+            self.mode = 1 if dist < 7 else 0
+        if self.mode == 0: #Spinner mode
+            self.xend, self.yend = self.xpos, self.ypos
+            dx, dy = map_orientation_to_vector(orientation)
+            self.angle = math.atan2(dy, dx)
+            self.dir = -1 if mode == 1 else 1
+        elif self.mode == 1: #Surface mode
+            self.xvec, self.yvec = 0, 0
+            self.angle = 0
+            self.dir = -1 if mode == 1 else 1
+            self.sx, self.sy = 0, 0
+            
+
+    def think(self):
+        #TODO
+        if self.mode == 0:
+            self.think_spinner()
+
+    def think_spinner(self):
+        #TODO
+        angle_new = (self.angle + self.SPIN_SPEED*self.dir) % (2*math.pi)
+        dx = math.cos(self.angle)
+        dy = math.sin(self.angle)
+        self.len = get_raycast_distance(self.sim, self.xpos, self.ypos, dx, dy)
+        if self.len:
+            self.xend = self.xpos + dx*self.len
+            self.yend = self.ypos + dy*self.len
+        else:
+            self.xend = self.xpos
+            self.yend = self.ypos
+        ninja = self.sim.ninja
+        if ninja.is_valid_target():
+            if raycast_vs_player(self.sim, self.xpos, self.ypos, ninja.xpos, ninja.ypos, ninja.RADIUS):
+                ninja_angle = math.atan2(ninja.ypos-self.ypos, ninja.xpos-self.xpos)
+                angle_diff = abs(self.angle - ninja_angle) % (2*math.pi)
+                if angle_diff <= 0.0052359875:
+                    ninja.kill(0, 0, 0, 0, 0)
+                else:
+                    if check_lineseg_vs_ninja(self.xpos, self.ypos, self.xend, self.yend, ninja):
+                        ninja.kill(0, 0, 0, 0, 0)
+        self.angle = angle_new
+
+    def think_surface(self):
+        segments = gather_segments_from_region(self.sim, self.xpos-12, self.ypos-12,
+                                               self.xpos+12, self.ypos+12)
+        if not segments:
+            return
+        while True:
+            xspeed = -self.dir*self.yvec*self.SURFACE_FLAT_SPEED
+            yspeed = self.dir*self.xvec*self.SURFACE_FLAT_SPEED
+            xpos_new = self.xpos + xspeed
+            ypos_new = self.ypos + yspeed
+            shortest_distance = 9999999
+            result = 0
+            closest_point = (0, 0)
+            for segment in segments:
+                is_back_facing, a, b = segment.get_closest_point(xpos_new, ypos_new)
+                distance_sq = (xpos_new - a)**2 + (ypos_new - b)**2
+                if distance_sq < shortest_distance:
+                    shortest_distance = distance_sq
+                    closest_point = (a, b)
+                    result = -1 if is_back_facing else 1
+            dx = xpos_new - closest_point[0]
+            dy = ypos_new - closest_point[1]
+            if ((self.xpos - self.sx)*dx + (self.ypos - self.sy)*dy) > 0.01 and segment.oriented:
+                dist = math.sqrt((closest_point[0] - self.sx)**2 + (closest_point[1] - self.sy)**2)
+                if dist >= 0.0000001:
+                    pass
+                else:
+                    angle = math.atan2(self.yvec, self.xvec)
+                    angle += self.dir*self.SURFACE_CORNER_SPEED
+                    self.xvec = math.cos(angle)
+                    self.yvec = math.sin(angle)
+
+
+            
+            
+            
+
+        
 
 
 class EntityBoostPad(Entity):
@@ -1406,15 +1524,129 @@ class EntityBoostPad(Entity):
             self.is_touching_ninja = False
 
 
+class EntityDeathBall(Entity):
+    RADIUS = 5 #radius for collisions against ninjas
+    RADIUS2 = 8 #radius for collisions against other balls and tiles
+    ACCELERATION = 0.04
+    MAX_SPEED = 0.85
+    DRAG_MAX_SPEED = 0.9
+    DRAG_NO_TARGET = 0.95
+
+    def __init__(self, type, sim, xcoord, ycoord, id):
+        super().__init__(type, sim, xcoord, ycoord)
+        self.is_thinkable = True
+        self.is_logical_collidable = True
+        self.id = id
+        self.xspeed, self.yspeed = 0, 0
+
+    def think(self):
+        """Make the ball move towards the closest ninja. Handle collision with tiles and bounces
+        against other balls and ninjas."""
+        ninja = self.sim.ninja
+        if not ninja.is_valid_target(): #If no valid targets, decelerate ball to a stop
+            self.xspeed *= self.DRAG_NO_TARGET
+            self.yspeed *= self.DRAG_NO_TARGET
+        else: #Otherwise, apply acceleration towards closest ninja. Apply drag if speed exceeds 0.85.
+            dx = ninja.xpos - self.xpos
+            dy = ninja.ypos - self.ypos
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0:
+                dx /= dist
+                dy /= dist
+            self.xspeed += dx * self.ACCELERATION
+            self.yspeed += dy * self.ACCELERATION
+            speed = math.sqrt(self.xspeed**2 + self.yspeed**2)
+            if speed > self.MAX_SPEED:
+                new_speed = (speed - self.MAX_SPEED)*self.DRAG_MAX_SPEED
+                if new_speed <= 0.01: #If speed exceed the cap by a tiny amount, remove the excedent
+                    new_speed = 0
+                new_speed += self.MAX_SPEED
+                self.xspeed = self.xspeed / speed * new_speed
+                self.yspeed = self.yspeed / speed * new_speed
+        xpos_old = self.xpos
+        ypos_old = self.ypos
+        self.xpos += self.xspeed
+        self.ypos += self.yspeed
+
+        #Interpolation routine for high-speed wall collisions.
+        time = sweep_circle_vs_tiles(self.sim, xpos_old, ypos_old, self.xspeed, self.yspeed, self.RADIUS2 * 0.5)
+        self.xpos = xpos_old + time*self.xspeed
+        self.ypos = ypos_old + time*self.yspeed
+        
+        #Depenetration routine for collision against tiles.
+        xnormal, ynormal = 0, 0
+        for _ in range(16):
+            result, closest_point = get_single_closest_point(self.sim, self.xpos, self.ypos, self.RADIUS2)
+            if result == 0:
+                break
+            a, b = closest_point
+            dx = self.xpos - a
+            dy = self.ypos - b
+            dist = math.sqrt(dx**2 + dy**2)
+            depen_len = self.RADIUS2 - dist*result
+            if depen_len < 0.0000001:
+                break
+            if dist == 0: 
+                return
+            xnorm = dx / dist
+            ynorm = dy / dist
+            self.xpos += xnorm * depen_len
+            self.ypos += ynorm * depen_len
+            xnormal += xnorm
+            ynormal += ynorm
+
+        #If there has been tile colision, project speed of deathball onto surface and add bounce if applicable.
+        normal_len = math.sqrt(xnormal**2 + ynormal**2)
+        if normal_len > 0:
+            dx = xnormal / normal_len
+            dy = ynormal / normal_len
+            dot_product = self.xspeed*dx + self.yspeed*dy
+            if dot_product < 0: #Project velocity onto surface only if moving towards surface
+                speed = math.sqrt(self.xspeed**2 + self.yspeed**2)
+                bounce_strength = 1 if speed <= 1.35 else 2
+                self.xspeed -= dx * dot_product * bounce_strength
+                self.yspeed -= dy * dot_product * bounce_strength
+
+        #Handle bounces with other deathballs
+        db_count = self.sim.map_data[1200]
+        if self.id + 1 < db_count:
+            db_targets = self.sim.entity_dic[25][self.id+1:]
+            for db_target in db_targets:
+                dx = self.xpos - db_target.xpos
+                dy = self.ypos - db_target.ypos
+                dist = math.sqrt(dx**2 + dy**2)
+                if dist < 16:
+                    dx = dx / dist * 4
+                    dy = dy / dist * 4
+                    self.xspeed += dx
+                    self.yspeed += dy
+                    db_target.xspeed -= dx
+                    db_target.yspeed -= dy
+        self.grid_move()
+        
+    def logical_collision(self):
+        """If the ninja touches the ball, kill it and make the ball bounce from it."""
+        ninja = self.sim.ninja
+        if ninja.is_valid_target():
+            if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
+                                        ninja.xpos, ninja.ypos, ninja.RADIUS):
+                dx = self.xpos - ninja.xpos
+                dy = self.ypos - ninja.ypos
+                dist = math.sqrt(dx**2 + dy**2)
+                self.xspeed += dx / dist * 10
+                self.yspeed += dy / dist * 10
+                ninja.kill(0, 0, 0, 0, 0)
+
+
 class EntityMiniDrone(EntityDroneBase):
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode):
         super().__init__(type, sim, xcoord, ycoord, orientation, mode, 1.3)
         self.is_logical_collidable = True
-        self.log_positions = INCLUDE_DRONES
         self.RADIUS = 4
         self.GRID_WIDTH = 12
     
     def logical_collision(self):
+        """Kill the ninja if it touches the mini drone."""
         ninja = self.sim.ninja
         if ninja.is_valid_target():
             if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
@@ -1483,6 +1715,9 @@ class EntityShoveThwump(Entity):
         self.grid_move()
             
     def physical_collision(self):
+        """Return the depenetration vector for the ninja if it collides with the shwump.
+        Note that if the shwump is in activated state, only one of its sides is collidable.
+        """
         ninja = self.sim.ninja
         if self.state <= 1:
             depen = penetration_square_vs_point(self.xpos, self.ypos, ninja.xpos, ninja.ypos,
@@ -1493,6 +1728,9 @@ class EntityShoveThwump(Entity):
                     return depen
 
     def logical_collision(self):
+        """Return the wall normal if the ninja interacts with an active vertical side.
+        Kill the ninja if it touches the lethal core of the shwump.
+        """
         ninja = self.sim.ninja
         depen = penetration_square_vs_point(self.xpos, self.ypos, ninja.xpos, ninja.ypos,
                                             self.SEMI_SIDE + ninja.RADIUS + 0.1)
@@ -1588,7 +1826,8 @@ class Simulator:
     def load(self, map_data):
         """From the given map data, initiate the level geometry, the entities and the ninja."""
         self.frame = 0
-        self.collisionlog = []
+        self.entitylog = []
+        self.gold_collected = 0
 
         #initiate a dictionary mapping each tile id to its cell. Start by filling it with full tiles (id of 1).
         self.tile_dic = {}
@@ -1601,11 +1840,11 @@ class Simulator:
         for x in range(45):
             for y in range(26):
                 self.segment_dic[(x, y)] = []
-        self.entity_dic = {}
+        self.grid_entity = {}
         for x in range(44):
             for y in range(25):
-                self.entity_dic[(x, y)] = []
-        self.entity_list = []
+                self.grid_entity[(x, y)] = []
+        self.entity_dic = dict([(i, []) for i in range(1, 29)])
 
         #Initiate dictionaries of grid edges and segments. They are all set to zero initialy,
         #except for the edges of the frame, which are solid.
@@ -1703,8 +1942,8 @@ class Simulator:
 
         #Initiate each entity (other than ninjas)
         index = 1230
+        db_index = 0
         exit_door_count = self.map_data[1156]
-        Entity.entity_counts = [0] * 40
         while (index < len(map_data)):
             type = self.map_data[index]
             xcoord = self.map_data[index+1]
@@ -1717,7 +1956,7 @@ class Simulator:
                 entity = EntityGold(type, self, xcoord, ycoord)
             elif type == 3:
                 parent = EntityExit(type, self, xcoord, ycoord)
-                self.entity_list.append(parent)
+                self.entity_dic[type].append(parent)
                 child_xcoord = self.map_data[index + 5*exit_door_count + 1]
                 child_ycoord = self.map_data[index + 5*exit_door_count + 2]
                 entity = EntityExitSwitch(4, self, child_xcoord, child_ycoord, parent)
@@ -1745,8 +1984,13 @@ class Simulator:
                 entity = EntityThwump(type, self, xcoord, ycoord, orientation)
             elif type == 21:
                 entity = EntityToggleMine(type, self, xcoord, ycoord, 1)
+            elif type == 23:
+                entity = EntityLaser(type, self, xcoord, ycoord, orientation, mode)
             elif type == 24:
                 entity = EntityBoostPad(type, self, xcoord, ycoord)
+            elif type == 25:
+                entity = EntityDeathBall(type, self, xcoord, ycoord, db_index)
+                db_index += 1
             elif type == 26:
                 entity = EntityMiniDrone(type, self, xcoord, ycoord, orientation, mode)
             elif type == 28:
@@ -1754,13 +1998,9 @@ class Simulator:
             else:
                 entity = None
             if entity:
-                self.entity_list.append(entity)
-                self.entity_dic[entity.cell].append(entity)
+                self.entity_dic[type].append(entity)
+                self.grid_entity[entity.cell].append(entity)
             index += 5
-
-        for entity in self.entity_list:
-            if entity.log_positions and entity.active:
-                entity.log_position()
 
     def tick(self, hor_input, jump_input):
         """Gets called every frame to update the whole physics simulation."""
@@ -1772,11 +2012,11 @@ class Simulator:
         self.ninja.jump_input = jump_input
 
         #Move all movable entities
-        for entity in self.entity_list:
+        for entity in sum(self.entity_dic.values(), []):
             if entity.is_movable and entity.active:
                 entity.move()
         #Make all thinkable entities think
-        for entity in self.entity_list:
+        for entity in sum(self.entity_dic.values(), []):
             if entity.is_thinkable and entity.active:
                 entity.think()
         
@@ -1797,10 +2037,10 @@ class Simulator:
             self.ninja.calc_ninja_position()
 
         #Update all the logs for debugging purposes and for tracing the route.
-        self.ninja.log()
-        for entity in self.entity_list:
-            if entity.log_positions and entity.active:
-                entity.log_position()
+        self.ninja.poslog.append((self.frame, round(self.ninja.xpos, 6), round(self.ninja.ypos, 6)))
+        self.ninja.speedlog.append((self.frame, round(self.ninja.xspeed, 6), round(self.ninja.yspeed, 6)))
+        self.ninja.xposlog.append(self.ninja.xpos)
+        self.ninja.yposlog.append(self.ninja.ypos)
 
 
 def gather_segments_from_region(sim, x1, y1, x2, y2):
@@ -1822,7 +2062,7 @@ def gather_entities_from_neighbourhood(sim, xpos, ypos):
                     range(max(cy - 1, 0), min(cy + 1, 24) + 1))
     entity_list = []
     for cell in cells:
-        entity_list += [entity for entity in sim.entity_dic[cell] if entity.active]
+        entity_list += [entity for entity in sim.grid_entity[cell] if entity.active]
     return entity_list
     
 def sweep_circle_vs_tiles(sim, xpos_old, ypos_old, dx, dy, radius):
@@ -1842,7 +2082,9 @@ def sweep_circle_vs_tiles(sim, xpos_old, ypos_old, dx, dy, radius):
     return shortest_time
 
 def get_time_of_intersection_circle_vs_circle(xpos, ypos, vx, vy, a, b, radius):
-    """Return time of intersection by interpolation by sweeping a circle onto an other circle, given a combined radius."""
+    """Return time of intersection by interpolation by sweeping a circle onto an other circle, 
+    given a combined radius.
+    """
     dx = xpos - a
     dy = ypos - b
     dist_sq = dx**2 + dy**2
@@ -1922,6 +2164,110 @@ def get_single_closest_point(sim, xpos, ypos, radius):
             closest_point = (a, b)
             result = -1 if is_back_facing else 1
     return result, closest_point
+
+def get_raycast_distance(sim, xpos, ypos, dx, dy):
+    """Return the length of a ray given its start point and direction. The ray stops when it hits a
+    tile. Return None if the ray hits nothing after travelling for 2000 units. The algorithm works by
+    finding the cells the ray traverses and testing it against the tile segments for each cell.
+    """
+    xcell = math.floor(xpos/24)
+    ycell = math.floor(ypos/24)
+    if dx > 0:
+        step_x = 1
+        delta_x = 24 / dx
+        tmax_x = ((xcell + 1)*24 - xpos) / dx
+    elif dx < 0:
+        step_x = -1
+        delta_x = -24 / dx
+        tmax_x = (xcell*24 - xpos) / dx
+    else:
+        step_x = 0
+        delta_x = 0
+        tmax_x = 999999
+    if dy > 0:
+        step_y = 1
+        delta_y = 24 / dy
+        tmax_y = ((ycell + 1)*24 - ypos) / dy
+    elif dy < 0:
+        step_y = -1
+        delta_y = -24 / dy
+        tmax_y = (ycell*24 - ypos) / dy
+    else:
+        step_y = 0
+        delta_y = 0
+        tmax_y = 999999
+    while True:
+        result = intersect_ray_vs_cell_contents(sim, xcell, ycell, xpos, ypos, 2000*dx, 2000*dy)
+        if result < 1:
+            return 2000 * result
+        if tmax_x < tmax_y:
+            xcell += step_x
+            if xcell < 0 or xcell >= 44:
+                return
+            tmax_x += delta_x
+        else:
+            ycell += step_y
+            if ycell < 0 or ycell >= 25:
+                return
+            tmax_y += delta_y
+            
+def intersect_ray_vs_cell_contents(sim, xcell, ycell, xpos, ypos, dx, dy):
+    """Given a cell and a ray, return the shortest time of intersection between the ray and one of
+    the cell's tile segments. Return 1 if the ray hits nothing.
+    """
+    segments = sim.segment_dic[clamp_cell(xcell, ycell)]
+    shortest_time = 1
+    for segment in segments:
+        time = segment.intersect_with_ray(xpos, ypos, dx, dy, 0)
+        shortest_time = min(time, shortest_time)
+    return shortest_time
+
+def raycast_vs_player(sim, xstart, ystart, ninja_xpos, ninja_ypos, ninja_radius):
+    """Draw a segment that starts at a given position and goes towards the center of the ninja.
+    Return true if the segment touches the ninja, meaning there were no tile segments in its path.
+    """
+    dx = ninja_xpos - xstart
+    dy = ninja_ypos - ystart
+    dist = math.sqrt(dx**2 + dy**2)
+    if ninja_radius <= dist and dist > 0:
+        dx /= dist
+        dy /= dist
+        length = get_raycast_distance(sim, xstart, ystart, dx, dy)
+        return length > dist - ninja_radius
+    return True
+
+def check_lineseg_vs_ninja(x1, y1, x2, y2, ninja):
+    #TODO
+    dx = x2 - x1
+    dy = y2 - y1
+    len = math.sqrt(dx**2 + dy**2)
+    if len == 0:
+        return False
+    #This part returns false if the segment does not interscet the ninja's circular hitbox, to speed things up.
+    dx /= len
+    dy /= len
+    proj = (ninja.xpos - x1)*dx + (ninja.ypos - y1)*dy
+    x = x1
+    y = y1
+    if proj > 0:
+        x += dx*proj
+        y += dy*proj
+    if ninja.RADIUS**2 <= (ninja.xpos - x)**2 + (ninja.ypos - y)**2:
+        return False
+    #Now test the segment against each of ninja's 11 segments. Return true if it intersects any.
+    NINJA_SEGS = ((0, 12), (1, 12), (2, 8), (3, 9), (4, 10), (5, 11), (6, 7), (8, 0), (9, 0), (10, 1), (11, 1))
+    for seg in NINJA_SEGS:
+        x3 = ninja.xpos + 24*ninja.bones[seg[0]][0]
+        y3 = ninja.ypos + 24*ninja.bones[seg[0]][1]
+        x4 = ninja.xpos + 24*ninja.bones[seg[1]][0]
+        y4 = ninja.ypos + 24*ninja.bones[seg[1]][1]
+        det1 = (x1 - x3)*(y2 - y3) - (y1 - y3)*(x2 - x3)
+        det2 = (x1 - x4)*(y2 - y4) - (y1 - y4)*(x2 - x4)
+        det3 = (x3 - x1)*(y4 - y1) - (y3 - y1)*(x4 - x1)
+        det4 = (x3 - x2)*(y4 - y2) - (y3 - y2)*(x4 - x2)
+        if det1*det2 < 0 and det3*det4 < 0:
+            return True
+    return False
 
 def overlap_circle_vs_circle(xpos1, ypos1, radius1, xpos2, ypos2, radius2):
     """Given two cirles definied by their center and radius, return true if they overlap."""

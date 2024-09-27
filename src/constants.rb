@@ -104,7 +104,7 @@ SERVER_WHITELIST = [
 BOT_STATUS   = 'online'             # Discord status for the bot
 BOT_ACTIVITY = "inne's evil cousin" # Discord activity for the bot
 EMOJIS_TO_DELETE = [                # Emojis to delete msgs via reactions
-  '❌', '✖️', '🇽', '⛔', '🚫'
+  '❌', '✖️', '🇽', '⛔', '🚫', '❎'
 ]
 EMOJIS_FOR_PLAY = [
   'Ninja', 'ninjajump', 'ninjavictory', 'nAight'
