@@ -4,7 +4,13 @@ import os.path
 import struct
 import copy
 import random
+import sys
 
+#Only simulate entities required for proper simulation (i.e. no drones/lasers/etc)
+BASIC_SIMULATION = 'basic_sim' in sys.argv
+
+#Only export coordinates of simple objects (i.e. no bounceblocks/thwumps/etc)
+BASIC_RENDERING = 'basic_render' in sys.argv
 
 NINJA_ANIM_MODE = True
 if os.path.isfile("anim_data_line_new.txt.bin"):
@@ -83,10 +89,11 @@ class Ninja:
         self.bones = [[0, 0] for _ in range(13)]
         self.update_graphics()
         self.ragdoll = Ragdoll()
-        self.poslog = [(0, self.xpos, self.ypos)] #Used for debug
-        self.speedlog = [(0,0,0)]
-        self.xposlog = [self.xpos] #Used to produce trace
-        self.yposlog = [self.ypos]
+        self.poslog = [] #Used for debug
+        self.speedlog = []
+        self.xposlog = [] #Used to produce trace
+        self.yposlog = []
+        self.log()
         
     def integrate(self):
         """Update position and speed by applying drag and gravity before collision phase."""
@@ -638,6 +645,13 @@ class Ninja:
     def is_valid_target(self):
         """Return whether the ninja is a valid target for various interactions."""
         return not self.state in (6, 8, 9)
+    
+    def log(self):
+        """Log position and velocity vectors of the ninja for the current frame"""
+        self.poslog.append((self.sim.frame, round(self.xpos, 6), round(self.ypos, 6)))
+        self.speedlog.append((self.sim.frame, round(self.xspeed, 6), round(self.yspeed, 6)))
+        self.xposlog.append(self.xpos)
+        self.yposlog.append(self.ypos)
 
 
 class Ragdoll:
@@ -791,18 +805,25 @@ class GridSegmentCircular:
 
 class Entity:
     """Class that all entity types (gold, bounce blocks, thwumps, etc.) inherit from."""
+    entity_counts = [0] * 40
+
     def __init__(self, type, sim, xcoord, ycoord):
         """Inititate a member from map data"""
         self.type = type
+        self.index = self.entity_counts[self.type]
+        self.entity_counts[self.type] += 1
         self.sim = sim
         self.xpos = xcoord*6
         self.ypos = ycoord*6
+        self.poslog = []
         self.active = True
         self.is_logical_collidable = False
         self.is_physical_collidable = False
         self.is_movable = False
         self.is_thinkable = False
-        self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))        
+        self.log_positions = False
+        self.log_collisions = True
+        self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
     
     def grid_move(self):
         """As the entity is moving, if its center goes from one grid cell to another,
@@ -814,8 +835,15 @@ class Entity:
             self.cell = cell_new
             self.sim.grid_entity[self.cell].append(self)
 
-    def log(self, state=1):
-        self.sim.entitylog.append((self.sim.frame, self.type, self.xpos, self.ypos, state))
+    def log_collision(self, state=1):
+        """Log an interaction with this entity"""
+        if self.log_collisions and self.sim.frame > 0:
+            self.sim.collisionlog.append((self.sim.frame, self.type, self.index, state))
+
+    def log_position(self):
+        """Log position of entity on current frame"""
+        if self.log_positions and self.active:
+            self.poslog.append((self.xpos, self.ypos))
 
 
 class EntityToggleMine(Entity):
@@ -840,7 +868,6 @@ class EntityToggleMine(Entity):
                 if not overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                                 ninja.xpos, ninja.ypos, ninja.RADIUS):
                     self.set_state(0)
-                    self.log(2)
         else: #Set state to untoggled if ninja dies while toggling a mine
             if self.state == 2 and ninja.state == 6:
                 self.set_state(1)
@@ -859,6 +886,7 @@ class EntityToggleMine(Entity):
         if state in (0, 1, 2):
             self.state = state
             self.RADIUS = self.RADII[state]
+            self.log_collision(state)
 
 
 class EntityGold(Entity):
@@ -867,7 +895,6 @@ class EntityGold(Entity):
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
         self.is_logical_collidable = True
-        self.collected = False
         
     def logical_collision(self):
         """The gold is collected if touches by a ninja that is not in winning state."""
@@ -877,7 +904,7 @@ class EntityGold(Entity):
                                         ninja.xpos, ninja.ypos, ninja.RADIUS):
                 self.sim.gold_collected += 1
                 self.active = False
-                self.log()
+                self.log_collision()
 
 
 class EntityExit(Entity):
@@ -903,7 +930,6 @@ class EntityExitSwitch(Entity):
     def __init__(self, type, sim, xcoord, ycoord, parent):
         super().__init__(type, sim, xcoord, ycoord)
         self.is_logical_collidable = True
-        self.collected = False
         self.parent = parent
 
     def logical_collision(self):
@@ -915,7 +941,7 @@ class EntityExitSwitch(Entity):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.active = False
             self.sim.grid_entity[self.parent.cell].append(self.parent) #Add door to the entity grid so the ninja can touch it
-            self.log()
+            self.log_collision()
 
 
 class EntityDoorBase(Entity):
@@ -962,6 +988,7 @@ class EntityDoorBase(Entity):
         """Change the state of the door from closed to open or from open to closed."""
         self.closed = closed
         self.segment.active = closed
+        self.log_collision(0 if closed else 1)
         for grid_edge in self.grid_edges:
             if self.is_vertical:
                 self.sim.ver_grid_edge_dic[grid_edge] += 1 if closed else -1
@@ -1009,7 +1036,6 @@ class EntityDoorLocked(EntityDoorBase):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.change_state(closed = False)
             self.active = False
-            self.log()
 
 
 class EntityDoorTrap(EntityDoorBase):
@@ -1026,7 +1052,6 @@ class EntityDoorTrap(EntityDoorBase):
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             self.change_state(closed = True)
             self.active = False
-            self.log()
 
 
 class EntityLaunchPad(Entity):
@@ -1109,6 +1134,7 @@ class EntityDroneBase(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode, speed):
         super().__init__(type, sim, xcoord, ycoord)
+        self.log_positions = not BASIC_RENDERING
         self.is_movable = True
         self.speed = speed
         self.dir = orientation // 2
@@ -1232,6 +1258,7 @@ class EntityBounceBlock(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
+        self.log_positions = not BASIC_RENDERING
         self.is_physical_collidable = True
         self.is_logical_collidable = True
         self.is_movable = True
@@ -1282,6 +1309,7 @@ class EntityThwump(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord, orientation):
         super().__init__(type, sim, xcoord, ycoord)
+        self.log_positions = not BASIC_RENDERING
         self.is_movable = True
         self.is_thinkable = True
         self.is_logical_collidable = True
@@ -1412,6 +1440,8 @@ class EntityLaser(Entity):
         result, closest_point = get_single_closest_point(self.sim, self.xpos, self.ypos, 12)
         if result == -1:
             self.mode = 1
+        elif result == 0:
+            self.mode = 0
         else:
             dist = math.sqrt((closest_point[0] - self.xpos)**2 + (closest_point[1] - self.ypos)**2)
             self.mode = 1 if dist < 7 else 0
@@ -1532,11 +1562,11 @@ class EntityDeathBall(Entity):
     DRAG_MAX_SPEED = 0.9
     DRAG_NO_TARGET = 0.95
 
-    def __init__(self, type, sim, xcoord, ycoord, id):
+    def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
+        self.log_positions = not BASIC_RENDERING
         self.is_thinkable = True
         self.is_logical_collidable = True
-        self.id = id
         self.xspeed, self.yspeed = 0, 0
 
     def think(self):
@@ -1609,8 +1639,8 @@ class EntityDeathBall(Entity):
 
         #Handle bounces with other deathballs
         db_count = self.sim.map_data[1200]
-        if self.id + 1 < db_count:
-            db_targets = self.sim.entity_dic[25][self.id+1:]
+        if self.index + 1 < db_count:
+            db_targets = self.sim.entity_dic[self.type][self.index+1:]
             for db_target in db_targets:
                 dx = self.xpos - db_target.xpos
                 dy = self.ypos - db_target.ypos
@@ -1660,6 +1690,7 @@ class EntityShoveThwump(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
+        self.log_positions = not BASIC_RENDERING
         self.is_thinkable = True
         self.is_logical_collidable = True
         self.is_physical_collidable = True
@@ -1826,7 +1857,7 @@ class Simulator:
     def load(self, map_data):
         """From the given map data, initiate the level geometry, the entities and the ninja."""
         self.frame = 0
-        self.entitylog = []
+        self.collisionlog = []
         self.gold_collected = 0
 
         #initiate a dictionary mapping each tile id to its cell. Start by filling it with full tiles (id of 1).
@@ -1942,8 +1973,8 @@ class Simulator:
 
         #Initiate each entity (other than ninjas)
         index = 1230
-        db_index = 0
         exit_door_count = self.map_data[1156]
+        Entity.entity_counts = [0] * 40
         while (index < len(map_data)):
             type = self.map_data[index]
             xcoord = self.map_data[index+1]
@@ -1974,9 +2005,9 @@ class Simulator:
                 entity = EntityLaunchPad(type, self, xcoord, ycoord, orientation)
             elif type == 11:
                 entity = EntityOneWayPlatform(type, self, xcoord, ycoord, orientation)
-            elif type == 14:
+            elif type == 14 and not BASIC_SIMULATION:
                 entity = EntityDroneZap(type, self, xcoord, ycoord, orientation, mode)
-            #elif type == 15:
+            #elif type == 15 and not BASIC_SIMULATION:
             #    entity = EntityDroneChaser(type, self, xcoord, ycoord, orientation, mode)
             elif type == 17:
                 entity = EntityBounceBlock(type, self, xcoord, ycoord)
@@ -1984,14 +2015,13 @@ class Simulator:
                 entity = EntityThwump(type, self, xcoord, ycoord, orientation)
             elif type == 21:
                 entity = EntityToggleMine(type, self, xcoord, ycoord, 1)
-            elif type == 23:
+            elif type == 23 and not BASIC_SIMULATION:
                 entity = EntityLaser(type, self, xcoord, ycoord, orientation, mode)
             elif type == 24:
                 entity = EntityBoostPad(type, self, xcoord, ycoord)
-            elif type == 25:
-                entity = EntityDeathBall(type, self, xcoord, ycoord, db_index)
-                db_index += 1
-            elif type == 26:
+            elif type == 25 and not BASIC_SIMULATION:
+                entity = EntityDeathBall(type, self, xcoord, ycoord)
+            elif type == 26 and not BASIC_SIMULATION:
                 entity = EntityMiniDrone(type, self, xcoord, ycoord, orientation, mode)
             elif type == 28:
                 entity = EntityShoveThwump(type, self, xcoord, ycoord)
@@ -2001,6 +2031,10 @@ class Simulator:
                 self.entity_dic[type].append(entity)
                 self.grid_entity[entity.cell].append(entity)
             index += 5
+
+        for list in self.entity_dic.values():
+            for entity in list:
+                entity.log_position()
 
     def tick(self, hor_input, jump_input):
         """Gets called every frame to update the whole physics simulation."""
@@ -2012,13 +2046,15 @@ class Simulator:
         self.ninja.jump_input = jump_input
 
         #Move all movable entities
-        for entity in sum(self.entity_dic.values(), []):
-            if entity.is_movable and entity.active:
-                entity.move()
+        for list in self.entity_dic.values():
+            for entity in list:
+                if entity.is_movable and entity.active:
+                    entity.move()
         #Make all thinkable entities think
-        for entity in sum(self.entity_dic.values(), []):
-            if entity.is_thinkable and entity.active:
-                entity.think()
+        for list in self.entity_dic.values():
+            for entity in list:
+                if entity.is_thinkable and entity.active:
+                    entity.think()
         
         if self.ninja.state != 9:
             ninja = self.ninja if self.ninja.state != 6 else self.ninja.ragdoll #if dead, apply physics to ragdoll instead.
@@ -2037,10 +2073,10 @@ class Simulator:
             self.ninja.calc_ninja_position()
 
         #Update all the logs for debugging purposes and for tracing the route.
-        self.ninja.poslog.append((self.frame, round(self.ninja.xpos, 6), round(self.ninja.ypos, 6)))
-        self.ninja.speedlog.append((self.frame, round(self.ninja.xspeed, 6), round(self.ninja.yspeed, 6)))
-        self.ninja.xposlog.append(self.ninja.xpos)
-        self.ninja.yposlog.append(self.ninja.ypos)
+        self.ninja.log()
+        for list in self.entity_dic.values():
+            for entity in list:
+                entity.log_position()
 
 
 def gather_segments_from_region(sim, x1, y1, x2, y2):

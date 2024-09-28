@@ -41,45 +41,45 @@ module Map
   ID_MINI               = 27
   ID_SHOVE_THWUMP       = 28
 
-  # pref - Drawing preference (for overlaps): lower = more to the front
-  # att  - Number of object attributes in the old format
-  # old  - ID in the old format, '-1' if it didn't exist
-  # pal  - Index at which the colors of the object start in the palette image
+  # pref   - Drawing preference (for overlaps): lower = more to the front
+  # att    - Number of object attributes in the old format
+  # old    - ID in the old format, '-1' if it didn't exist
+  # pal    - Index at which the colors of the object start in the palette image
+  # states - Number of different sprites
   OBJECTS = {
-    ID_NINJA              => { pref:  4, att: 2, old:  0, pal:  6 },
-    ID_MINE               => { pref: 22, att: 2, old:  1, pal: 10 },
-    ID_GOLD               => { pref: 21, att: 2, old:  2, pal: 14 },
-    ID_EXIT               => { pref: 25, att: 4, old:  3, pal: 17 },
-    ID_EXIT_SWITCH        => { pref: 20, att: 0, old: -1, pal: 25 },
-    ID_DOOR_REGULAR       => { pref: 19, att: 3, old:  4, pal: 30 },
-    ID_DOOR_LOCKED        => { pref: 28, att: 5, old:  5, pal: 31 },
-    ID_DOOR_LOCKED_SWITCH => { pref: 27, att: 0, old: -1, pal: 33 },
-    ID_DOOR_TRAP          => { pref: 29, att: 5, old:  6, pal: 39 },
-    ID_DOOR_TRAP_SWITCH   => { pref: 26, att: 0, old: -1, pal: 41 },
-    ID_LAUNCHPAD          => { pref: 18, att: 3, old:  7, pal: 47 },
-    ID_ONEWAY             => { pref: 24, att: 3, old:  8, pal: 49 },
-    ID_DRONE_CHAINGUN     => { pref: 16, att: 4, old:  9, pal: 51 },
-    ID_DRONE_LASER        => { pref: 17, att: 4, old: 10, pal: 53 },
-    ID_DRONE_ZAP          => { pref: 15, att: 4, old: 11, pal: 57 },
-    ID_DRONE_CHASER       => { pref: 14, att: 4, old: 12, pal: 59 },
-    ID_FLOORGUARD         => { pref: 13, att: 2, old: 13, pal: 61 },
-    ID_BOUNCEBLOCK        => { pref:  3, att: 2, old: 14, pal: 63 },
-    ID_ROCKET             => { pref:  8, att: 2, old: 15, pal: 65 },
-    ID_GAUSS              => { pref:  9, att: 2, old: 16, pal: 69 },
-    ID_THWUMP             => { pref:  6, att: 3, old: 17, pal: 74 },
-    ID_TOGGLE_MINE        => { pref: 23, att: 2, old: 18, pal: 10 },
-    ID_EVIL_NINJA         => { pref:  5, att: 2, old: 19, pal: 77 },
-    ID_LASER_TURRET       => { pref:  7, att: 4, old: 20, pal: 79 },
-    ID_BOOST_PAD          => { pref:  1, att: 2, old: 21, pal: 81 },
-    ID_DEATHBALL          => { pref: 10, att: 2, old: 22, pal: 83 },
-    ID_MICRODRONE         => { pref: 12, att: 4, old: 23, pal: 57 },
-    ID_MINI               => { pref: 11, att: 2, old: 24, pal: 86 },
-    ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88 }
+    ID_NINJA              => { pref:  4, att: 2, old:  0, pal:  6, states: 1 },
+    ID_MINE               => { pref: 22, att: 2, old:  1, pal: 10, states: 3 },
+    ID_GOLD               => { pref: 21, att: 2, old:  2, pal: 14, states: 1 },
+    ID_EXIT               => { pref: 25, att: 4, old:  3, pal: 17, states: 2 },
+    ID_EXIT_SWITCH        => { pref: 20, att: 0, old: -1, pal: 25, states: 2 },
+    ID_DOOR_REGULAR       => { pref: 19, att: 3, old:  4, pal: 30, states: 2 },
+    ID_DOOR_LOCKED        => { pref: 28, att: 5, old:  5, pal: 31, states: 2 },
+    ID_DOOR_LOCKED_SWITCH => { pref: 27, att: 0, old: -1, pal: 33, states: 2 },
+    ID_DOOR_TRAP          => { pref: 29, att: 5, old:  6, pal: 39, states: 2 },
+    ID_DOOR_TRAP_SWITCH   => { pref: 26, att: 0, old: -1, pal: 41, states: 2 },
+    ID_LAUNCHPAD          => { pref: 18, att: 3, old:  7, pal: 47, states: 1 },
+    ID_ONEWAY             => { pref: 24, att: 3, old:  8, pal: 49, states: 1 },
+    ID_DRONE_CHAINGUN     => { pref: 16, att: 4, old:  9, pal: 51, states: 1 },
+    ID_DRONE_LASER        => { pref: 17, att: 4, old: 10, pal: 53, states: 1 },
+    ID_DRONE_ZAP          => { pref: 15, att: 4, old: 11, pal: 57, states: 1 },
+    ID_DRONE_CHASER       => { pref: 14, att: 4, old: 12, pal: 59, states: 1 },
+    ID_FLOORGUARD         => { pref: 13, att: 2, old: 13, pal: 61, states: 1 },
+    ID_BOUNCEBLOCK        => { pref:  3, att: 2, old: 14, pal: 63, states: 1 },
+    ID_ROCKET             => { pref:  8, att: 2, old: 15, pal: 65, states: 1 },
+    ID_GAUSS              => { pref:  9, att: 2, old: 16, pal: 69, states: 1 },
+    ID_THWUMP             => { pref:  6, att: 3, old: 17, pal: 74, states: 1 },
+    ID_TOGGLE_MINE        => { pref: 23, att: 2, old: 18, pal: 10, states: 3 },
+    ID_EVIL_NINJA         => { pref:  5, att: 2, old: 19, pal: 77, states: 1 },
+    ID_LASER_TURRET       => { pref:  7, att: 4, old: 20, pal: 79, states: 1 },
+    ID_BOOST_PAD          => { pref:  1, att: 2, old: 21, pal: 81, states: 1 },
+    ID_DEATHBALL          => { pref: 10, att: 2, old: 22, pal: 83, states: 1 },
+    ID_MICRODRONE         => { pref: 12, att: 4, old: 23, pal: 57, states: 1 },
+    ID_MINI               => { pref: 11, att: 2, old: 24, pal: 86, states: 1 },
+    ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88, states: 1 }
   }
   ID_LIST_FIXED      = [0, 1, 2, 3, 4, 7, 9, 16, 17, 18, 19, 21, 22, 24, 25, 28] # Objects that do not admit rotations
   ID_LIST_DIAG       = [10, 11, 23] # Objects that admit diagonal rotations
-  ID_LIST_TOGGLABLE  = [1, 3, 4, 6, 7, 8, 9, 21] # Objects that have multiple sprites
-  ID_LIST_COLLIDABLE = [1, 2, 4, 7, 9, 21] # Objects for which collisions are supported
+  ID_LIST_COLLIDABLE = [1, 2, 4, 5, 7, 9, 21] # Objects for which collisions are supported
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -510,8 +510,8 @@ module Map
         # Use 5th field to store the "state"
         o[4] = 0
 
-        # Change state of toggle mines to "untoggled"
-        o[4] = 1 if o[0] == 21
+        # Change initial state of trap doors and toggle mines to "untoggled"
+        o[4] = 1 if [8, 9, 21].include?(o[0])
 
         # Add 6th field containing the entity index
         o << counts[o[0]]
@@ -604,7 +604,7 @@ module Map
             next if o[0] >= 29
             atlas[o[0]] = {} if !atlas.key?(o[0])
 
-            (ID_LIST_TOGGLABLE.include?(o[0]) ? [0, 1] : [0]).each{ |state|
+            OBJECTS[o[0]][:states].times.each{ |state|
               # Skip if this object is already initialized
               atlas[o[0]][state] = {} if !atlas[o[0]].key?(state)
               next if atlas[o[0]][state].key?(o[3])

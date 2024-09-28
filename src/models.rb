@@ -849,13 +849,17 @@ module Highscoreable
     self.is_a?(Storyish)
   end
 
+  # Protected levels have secret replays
   def is_protected?
+    return false if self.class == Userlevel
     code = map.mappack.code
     name = map.name[4..-1]
     PROTECTED_BOARDS.key?(code) && PROTECTED_BOARDS[code].include?(name)
   end
 
+  # Private levels have secret scores (and replays)
   def is_private?
+    return false if self.class == Userlevel
     return true if is_protected?
     code = map.mappack.code
     name = map.name[4..-1]

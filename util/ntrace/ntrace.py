@@ -10,6 +10,8 @@ RAW_INPUTS = ["inputs_0", "inputs_1", "inputs_2", "inputs_3"]
 RAW_MAP_DATA = "map_data"
 RAW_INPUTS_EPISODE = "inputs_episode"
 RAW_MAP_DATA_EPISODE = ["map_data_0", "map_data_1", "map_data_2", "map_data_3", "map_data_4"]
+OUTPUT_TRACE = "output.bin"
+OUTPUT_SPLITS = "output.txt"
 
 #Import inputs.
 inputs_list = []
@@ -49,6 +51,7 @@ yposlog = []
 goldlog = []
 frameslog = []
 validlog = []
+collisionlog = []
 entitylog = []
 
 #Repeat this loop for each individual replay
@@ -83,38 +86,44 @@ for i in range(len(inputs_list)):
     #Append to the logs for each replay.
     xposlog.append(sim.ninja.xposlog)
     yposlog.append(sim.ninja.yposlog)
-    entitylog.append(sim.entitylog)
     goldlog.append(sim.gold_collected)
     frameslog.append(inp_len)
     validlog.append(valid)
+    collisionlog.append(sim.collisionlog)
+    entities = [(0, i, list(zip(sim.ninja.xposlog, sim.ninja.yposlog)))]
+    entities += [(e.type, e.index, e.poslog) for l in sim.entity_dic.values() for e in l if e.log_positions]
+    entitylog.append(entities)
 
             
-#For each replay, write to file whether it is valid or not, then write the series 
-#of coordinates for each frame. Only ran in trace mode.
+#Export simulation result for outte (coordinates, collisions, ...)
 if tool_mode == "trace":
-    with open("output.bin", "wb") as f:
+    with open(OUTPUT_TRACE, "wb") as f:
         # Write run count, and then valid log (1 byte per run)
         n = len(inputs_list)
         f.write(struct.pack('B', n))
         f.write(struct.pack(f'{n}B', *validlog))
         for i in range(n):
-            # Entity log: Write collided entities count and then dump log
-            objs = len(entitylog[i])
-            f.write(struct.pack('<H', objs))
-            for obj in range(objs):
-                f.write(struct.pack('<HBddB', *entitylog[i][obj]))
-            # Position log: Write frame count and then dump log
-            frames = len(xposlog[i])
-            f.write(struct.pack('<H', frames))
-            for frame in range(frames):
-                f.write(struct.pack('<2d', xposlog[i][frame], yposlog[i][frame]))
+            # Entity section: Positions of logged entities, including ninja
+            entities = len(entitylog[i])
+            f.write(struct.pack('<H', entities))
+            for j in range(entities):
+                entity = entitylog[i][j]
+                frames = len(entity[2])
+                f.write(struct.pack('<BHH', *(entity[:2] + (frames,))))
+                for frame in range(frames):
+                    f.write(struct.pack('<2d', *entity[2][frame]))
+            # Collision section
+            collisions = len(collisionlog[i])
+            f.write(struct.pack('<H', collisions))
+            for col in range(collisions):
+                f.write(struct.pack('<HBHB', *collisionlog[i][col]))
     print("%.3f" % ((90 * 60 - frameslog[0] + 1 + goldlog[0] * 120) / 60))
 
 #For each level of the episode, write to file whether the replay is valid, then write the score split. 
 #Only ran in splits mode.
 if tool_mode == "splits":
     split = 90*60
-    with open("output.txt", "w") as f:
+    with open(OUTPUT_SPLITS, "w") as f:
         for i in range(5):
             print(validlog[i], file=f)
             split = split - frameslog[i] + 1 + goldlog[i]*120
