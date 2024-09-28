@@ -12,13 +12,14 @@ BASIC_SIMULATION = 'basic_sim' in sys.argv
 #Only export coordinates of simple objects (i.e. no bounceblocks/thwumps/etc)
 BASIC_RENDERING = 'basic_render' in sys.argv
 
-NINJA_ANIM_MODE = True
-if os.path.isfile("anim_data_line_new.txt.bin"):
-    with open("anim_data_line_new.txt.bin", mode="rb") as f:
+#Simulate ragdoll physics
+ANIM_DATA = "anim_data_line_new.txt.bin"
+NINJA_ANIM_MODE = not BASIC_SIMULATION and os.path.isfile(ANIM_DATA)
+
+if NINJA_ANIM_MODE:
+    with open(ANIM_DATA, mode="rb") as f:
         frames = struct.unpack('<L', f.read(4))[0]
         ninja_animation = [[list(struct.unpack('<2d', f.read(16))) for _ in range(13)] for _ in range(frames)]
-else:
-    NINJA_ANIM_MODE = False
 
 
 class Ninja:
@@ -526,6 +527,9 @@ class Ninja:
 
     def update_graphics(self):
         """Update parameters necessary to draw the limbs of the ninja."""
+        if not NINJA_ANIM_MODE:
+            return
+
         anim_state_old = self.anim_state
         if self.state == 5:
             self.anim_state = 4
@@ -1137,11 +1141,17 @@ class EntityDroneBase(Entity):
         self.log_positions = not BASIC_RENDERING
         self.is_movable = True
         self.speed = speed
-        self.dir = orientation // 2
-        self.dir_old = orientation // 2
+        self.dir = None
+        self.turn(orientation // 2)
         self.mode = mode
         self.xtarget, self.ytarget = self.xpos, self.ypos
         self.xpos2, self.ypos2 = self.xpos, self.ypos
+
+    def turn(self, dir):
+        """Change the drone's direction and log it."""
+        self.dir_old = self.dir or dir
+        self.dir = dir
+        self.log_collision(dir)
 
     def move(self):
         """Make the drone move along the grid. The drone will try to move towards the center of an
@@ -1177,8 +1187,7 @@ class EntityDroneBase(Entity):
             new_dir = (self.dir + self.DIR_LIST[self.mode][i]) % 4
             valid_dir = self.test_next_direction_and_goal(new_dir)
             if valid_dir:
-                self.dir_old = self.dir
-                self.dir = new_dir
+                self.turn(new_dir)
                 return True
         return False
 
@@ -1318,7 +1327,12 @@ class EntityThwump(Entity):
         self.is_horizontal = orientation in (0, 4)
         self.direction = 1 if orientation in (0, 2) else -1
         self.xorigin, self.yorigin = self.xpos, self.ypos
-        self.state = 0 #0:immobile, 1:forward, -1:backward
+        self.set_state(0) #0:immobile, 1:forward, -1:backward
+
+    def set_state(self, state):
+        """Set the thwump's state and log it. 0:immobile, 1:forward, -1:backward"""
+        self.state = state
+        self.log_collision(state % 3) #The logged value goes from 0 to 2
 
     def move(self):
         """Update the position of the thwump only if it is already moving. If the thwump retracts past
@@ -1332,7 +1346,7 @@ class EntityThwump(Entity):
                 #If the thwump as retreated past its starting point, set its position to the origin.
                 if self.state == -1 and (ypos_new - self.yorigin) * (self.ypos - self.yorigin) < 0:
                     self.ypos = self.yorigin
-                    self.state = 0
+                    self.set_state(0)
                     return
                 cell_y = math.floor((self.ypos + speed_dir * 11) / 12)
                 cell_y_new = math.floor((ypos_new + speed_dir * 11) / 12)
@@ -1340,7 +1354,7 @@ class EntityThwump(Entity):
                     cell_x1 = math.floor((self.xpos - 11) / 12)
                     cell_x2 = math.floor((self.xpos + 11) / 12)
                     if not is_empty_row(self.sim, cell_x1, cell_x2, cell_y, speed_dir):
-                        self.state = -1
+                        self.set_state(-1)
                         return
                 self.ypos = ypos_new
             else:
@@ -1348,7 +1362,7 @@ class EntityThwump(Entity):
                 #If the thwump as retreated past its starting point, set its position to the origin.
                 if self.state == -1 and (xpos_new - self.xorigin) * (self.xpos - self.xorigin) < 0:
                     self.xpos = self.xorigin
-                    self.state = 0
+                    self.set_state(0)
                     return
                 cell_x = math.floor((self.xpos + speed_dir * 11) / 12)
                 cell_x_new = math.floor((xpos_new + speed_dir * 11) / 12)
@@ -1356,7 +1370,7 @@ class EntityThwump(Entity):
                     cell_y1 = math.floor((self.ypos - 11) / 12)
                     cell_y2 = math.floor((self.ypos + 11) / 12)
                     if not is_empty_column(self.sim, cell_x, cell_y1, cell_y2, speed_dir):
-                        self.state = -1
+                        self.set_state(-1)
                         return
                 self.xpos = xpos_new
             self.grid_move()
@@ -1380,7 +1394,7 @@ class EntityThwump(Entity):
                                 break
                             thwump_ycell += self.direction
                         if i > 0 and dy * self.direction <= 0:
-                            self.state = 1
+                            self.set_state(1)
             else:
                 if abs(self.ypos - ninja.ypos) < activation_range: #If the ninja is in the activation range
                     ninja_xcell = math.floor(ninja.xpos / 12)
@@ -1395,7 +1409,7 @@ class EntityThwump(Entity):
                                 break
                             thwump_xcell += self.direction
                         if i > 0 and dx * self.direction <= 0:
-                            self.state = 1
+                            self.set_state(1)
 
     def physical_collision(self):
         """Return the depenetration vector for the ninja if it collides with the thwump."""
@@ -1440,8 +1454,6 @@ class EntityLaser(Entity):
         result, closest_point = get_single_closest_point(self.sim, self.xpos, self.ypos, 12)
         if result == -1:
             self.mode = 1
-        elif result == 0:
-            self.mode = 0
         else:
             dist = math.sqrt((closest_point[0] - self.xpos)**2 + (closest_point[1] - self.ypos)**2)
             self.mode = 1 if dist < 7 else 0
@@ -1696,8 +1708,15 @@ class EntityShoveThwump(Entity):
         self.is_physical_collidable = True
         self.xorigin, self.yorigin = self.xpos, self.ypos
         self.xdir, self.ydir = 0, 0
-        self.state = 0 #0:immobile, 1:activated, 2:launching, 3:retreating
+        self.set_state(0) #0:immobile, 1:activated, 2:launching, 3:retreating
         self.activated = False
+
+    def set_state(self, state):
+        """Changes the state of the shwump. 0:immobile, 1:activated, 2:launching, 3:retreating
+        Also logs it, combined with the direction information into a single integer."""
+        self.state = state
+        dir = map_vector_to_orientation(self.xdir, self.ydir)
+        self.log_collision(4 * state + dir // 2)
 
     def think(self):
         """Update the state of the shwump and move it if possible."""
@@ -1705,7 +1724,7 @@ class EntityShoveThwump(Entity):
             if self.activated:
                 self.activated = False
                 return
-            self.state = 2
+            self.set_state(2)
         if self.state == 3:
             origin_dist = abs(self.xpos - self.xorigin) + abs(self.ypos - self.yorigin)
             if origin_dist >= 1:
@@ -1713,7 +1732,7 @@ class EntityShoveThwump(Entity):
             else:
                 self.xpos = self.xorigin
                 self.ypos = self.yorigin
-                self.state = 0
+                self.set_state(0)
         elif self.state == 2:
             self.move_if_possible(-self.xdir, -self.ydir, 4)
 
@@ -1729,7 +1748,7 @@ class EntityShoveThwump(Entity):
                 cell_y1 = math.floor((self.ypos - 8) / 12)
                 cell_y2 = math.floor((self.ypos + 8) / 12)
                 if not is_empty_column(self.sim, cell_x, cell_y1, cell_y2, xdir):
-                    self.state = 3
+                    self.set_state(3)
                     return
             self.xpos = xpos_new
         else:
@@ -1740,7 +1759,7 @@ class EntityShoveThwump(Entity):
                 cell_x1 = math.floor((self.xpos - 8) / 12)
                 cell_x2 = math.floor((self.xpos + 8) / 12)
                 if not is_empty_row(self.sim, cell_x1, cell_x2, cell_y, ydir):
-                    self.state = 3
+                    self.set_state(3)
                     return
             self.ypos = ypos_new
         self.grid_move()
@@ -1772,7 +1791,7 @@ class EntityShoveThwump(Entity):
                 if depen[1][1] > 0.2:
                     self.xdir = depen_x
                     self.ydir = depen_y
-                    self.state = 1
+                    self.set_state(1)
             elif self.state == 1:
                 if self.xdir * depen_x + self.ydir * depen_y >= 0.01:
                     self.activated = True
@@ -2015,8 +2034,8 @@ class Simulator:
                 entity = EntityThwump(type, self, xcoord, ycoord, orientation)
             elif type == 21:
                 entity = EntityToggleMine(type, self, xcoord, ycoord, 1)
-            elif type == 23 and not BASIC_SIMULATION:
-                entity = EntityLaser(type, self, xcoord, ycoord, orientation, mode)
+            #elif type == 23 and not BASIC_SIMULATION:
+            #    entity = EntityLaser(type, self, xcoord, ycoord, orientation, mode)
             elif type == 24:
                 entity = EntityBoostPad(type, self, xcoord, ycoord)
             elif type == 25 and not BASIC_SIMULATION:
@@ -2354,6 +2373,13 @@ def map_orientation_to_vector(orientation):
     orientation_dic = {0:(1, 0), 1:(diag, diag), 2:(0, 1), 3:(-diag, diag), 
                        4:(-1, 0), 5:(-diag, -diag), 6:(0, -1), 7:(diag, -diag)}
     return orientation_dic[orientation]
+
+def map_vector_to_orientation(xdir, ydir):
+    """Returns an orientation value (0-7) from a vector. The vector can be
+    arbitrary, as rounding to these 8 directions is performed."""
+    angle = math.atan2(ydir, xdir)
+    if angle < 0: angle += 2 * math.pi
+    return round(8 * angle / (2 * math.pi)) % 8
 
 def clamp_cell(xcell, ycell):
     """If necessary, adjust coordinates of cell so it is in bounds."""
