@@ -531,7 +531,7 @@ def send_screenshot(event, map = nil, ret = false)
   # Retrieve screenshot
   h = h.map
   max_v = h.version
-  spoiler = event.channel.type != 1 && (h.mappack.code == 'asc' || h.mappack.code == 'ctp' && event.channel.id != CHANNEL_CTP_SECRETS)
+  spoiler = false # event.channel.type != 1 && (h.mappack.code == 'asc' || h.mappack.code == 'ctp' && event.channel.id != CHANNEL_CTP_SECRETS)
   version = version ? [max_v, [1, version.to_i].max].min : max_v
   screenshot = Map.screenshot(hash[:palette], file: true, h: h, spoiler: spoiler, v: version)
   perror("Failed to generate screenshot!") if screenshot.nil?

@@ -769,6 +769,7 @@ HACKERS = {
   128613 => ["cock unsucker"],
   135161 => ["Apjue"],
   146275 => ["Puce"],
+  160134 => ["Mavlou"],
   163573 => ["gronk"],
   173617 => ["You have been banned."],
   201322 => ["dimitry008"],
@@ -781,7 +782,9 @@ HACKERS = {
   307030 => ["The_Mega_Force"],
   325245 => ["Staticwork"],
   326339 => ["Psina"],
-  336069 => ["Progressively idle"]
+  336069 => ["Progressively idle"],
+  353512 => ["Dragon_V.V"],
+  357282 => ["MX_Er3P"]
 }
 
 CHEATERS = {
