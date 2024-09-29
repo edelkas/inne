@@ -1526,7 +1526,7 @@ class NSim
       end
 
       # Entity collision section
-      collision_count, = fparse(f, 'S<')
+      collision_count, = fparse(f, 'L<')
       collision_count.times do
         frame, id, index, state = fparse(f, 'S<CS<C')
         @collisions_raw[frame] ||= []

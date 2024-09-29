@@ -527,9 +527,6 @@ class Ninja:
 
     def update_graphics(self):
         """Update parameters necessary to draw the limbs of the ninja."""
-        if not NINJA_ANIM_MODE:
-            return
-
         anim_state_old = self.anim_state
         if self.state == 5:
             self.anim_state = 4
@@ -828,6 +825,7 @@ class Entity:
         self.log_positions = False
         self.log_collisions = True
         self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
+        self.last_exported_state = None
     
     def grid_move(self):
         """As the entity is moving, if its center goes from one grid cell to another,
@@ -841,8 +839,9 @@ class Entity:
 
     def log_collision(self, state=1):
         """Log an interaction with this entity"""
-        if self.log_collisions and self.sim.frame > 0:
+        if self.log_collisions and self.sim.frame > 0 and state != self.last_exported_state:
             self.sim.collisionlog.append((self.sim.frame, self.type, self.index, state))
+            self.last_exported_state = state
 
     def log_position(self):
         """Log position of entity on current frame"""

@@ -75,11 +75,27 @@ module Map
     ID_DEATHBALL          => { pref: 10, att: 2, old: 22, pal: 83, states: 1 },
     ID_MICRODRONE         => { pref: 12, att: 4, old: 23, pal: 57, states: 1 },
     ID_MINI               => { pref: 11, att: 2, old: 24, pal: 86, states: 1 },
-    ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88, states: 1 }
+    ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88, states: 3 }
   }
-  ID_LIST_FIXED      = [0, 1, 2, 3, 4, 7, 9, 16, 17, 18, 19, 21, 22, 24, 25, 28] # Objects that do not admit rotations
-  ID_LIST_DIAG       = [10, 11, 23] # Objects that admit diagonal rotations
-  ID_LIST_COLLIDABLE = [1, 2, 4, 5, 7, 9, 21] # Objects for which collisions are supported
+
+  # Objects that do not admit sprite rotations
+  ID_LIST_FIXED = [
+    ID_NINJA,       ID_MINE,               ID_GOLD,             ID_EXIT,
+    ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_FLOORGUARD,
+    ID_BOUNCEBLOCK, ID_ROCKET,             ID_GAUSS,            ID_TOGGLE_MINE,
+    ID_EVIL_NINJA,  ID_BOOST_PAD,          ID_DEATHBALL,        ID_MINI,
+    ID_SHOVE_THWUMP
+  ]
+
+  # Objects that admit diagonal rotations
+  ID_LIST_DIAG  = [ID_LAUNCHPAD, ID_ONEWAY, ID_LASER_TURRET]
+
+  # Objects for which collisions are supported
+  ID_LIST_COLLIDABLE = [
+    ID_MINE,               ID_GOLD,             ID_EXIT_SWITCH, ID_DOOR_REGULAR,
+    ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_TOGGLE_MINE
+  ]
+
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -1757,10 +1773,11 @@ module Map
     return :other if scores.empty?
     demos = scores.map{ |s| s.demo.demo }
     return :other if demos.count(nil) > 0
-
-    res = ntrace(dump_level, demos, silent: true)
-    return :error if !res[:success]
-    return res[:valid].count(false) == 0 ? :good : :bad
+    nsim = NSim.new(dump_level, demos)
+    nsim.run
+    return :error if !nsim.success
+    return :other if !nsim.correct
+    return nsim.valid ? :good : :bad
   rescue => e
     lex(e, 'ntrace testing failed')
     nil

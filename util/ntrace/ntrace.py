@@ -114,7 +114,7 @@ if tool_mode == "trace":
                     f.write(struct.pack('<2d', *entity[2][frame]))
             # Collision section
             collisions = len(collisionlog[i])
-            f.write(struct.pack('<H', collisions))
+            f.write(struct.pack('<L', collisions))
             for col in range(collisions):
                 f.write(struct.pack('<HBHB', *collisionlog[i][col]))
     print("%.3f" % ((90 * 60 - frameslog[0] + 1 + goldlog[0] * 120) / 60))
