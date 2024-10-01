@@ -475,37 +475,41 @@ module Map
   end
 
   # Parse all object collisions in a given frame range by any ninja, and perform
-  # logical collision effects, such as removing or toggling them.
-  def self.collide_vs_objects(object_dict, nsim, f, step)
-    # For every frame in the range, gather all objects collided by any ninja,
-    # and update their state
-    collided_objects = []
+  # logical collision effects, such as removing or toggling them, by editing
+  # the map data that will be rendered on the next GIF frame. Returns the list
+  # of bounding boxes that need to be redrawn to update the image.
+  # TODO: For optimization purposes, try to remove as much redundancy as possible
+  # (e.g. joining overlapping boxes into one).
+  def self.collide_vs_objects(object_dict, nsim, f, step, gif)
+    bboxes = []
+
+    # For every frame in the range, iterate all objects collided by all ninjas
     (0 ... step).each{ |s|
       nsim.collisions(f + s).each{ |col|
+        # Filter collisions
         next unless ID_LIST_COLLIDABLE.include?(col.id)    # Collidable object
         next unless o = object_dict[col.id]&.[](col.index) # Object found
         next unless o[4] != -1                             # Object not removed
+
+        # Update object and store redrawn areas before and after
+        bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
         o[4] = col.state
-        collided_objects << o
+        #bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+
+        # Remove collided gold
+        o[4] = -1 if o[0] == ID_GOLD
+
+        # For switches, toggle / remove door too
+        if [ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH].include?(o[0])
+          door = object_dict[o[0] - 1]&.[](o[5])
+          next warn("Door for collided switch not found.") if !door
+          door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
+          bboxes << find_object_bbox(door, gif[:object_atlas], gif[:ppc])
+        end
       }
     }
-    collided_objects.uniq!
 
-    # Additional collision effects (e.g. remove gold, collect doors...)
-    collided_objects.each{ |o|
-      # Remove collided gold
-      o[4] = -1 if o[0] == ID_GOLD
-
-      # For switches, toggle / remove door too
-      if [ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH].include?(o[0])
-        door = object_dict[o[0] - 1]&.[](o[5])
-        next warn("Door for collided switch not found.") if !door
-        door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
-        collided_objects << door
-      end
-    }
-
-    collided_objects.uniq
+    bboxes.uniq
   end
 
   # Parse map(s) data, sanitize it, and return objects and tiles conveniently
@@ -922,10 +926,10 @@ module Map
   # Given a list of objects that have changed on this frame (collected gold,
   # toggled mines, etc), redraw each of their corresponding bounding boxes onto
   # the background.
-  def self.redraw_changes(image, changes, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
-    changes.each{ |o|
-      next if !(bbox = find_object_bbox(o, object_atlas, ppc))
-      bbox.map!{ |c| c * PPC / ppc.to_f / PPU }
+  def self.redraw_changes(image, regions, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
+    regions.each{ |bbox|
+      next if !bbox
+      bbox = bbox.map{ |c| c * PPC / ppc.to_f / PPU }
       redraw_bbox(image, bbox, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx, ppc, frame)
     }
   end
@@ -1031,7 +1035,7 @@ module Map
   # needs to be redrawn. This region must contain all points that are subject to
   # change on this frame (trace bits, ninja markers, collected objects,
   # timebars, input display...), and must be rectangular.
-  def self.find_frame_bbox(f, step, nsim, markers, objects, atlas, trace: false, inputs: false, ppc: PPC)
+  def self.find_frame_bbox(f, step, nsim, markers, regions, trace: false, inputs: false, ppc: PPC)
     dim = 4 * ppc
     endpoints = []
     n = nsim.count
@@ -1059,11 +1063,11 @@ module Map
     end
 
     # Collected objects
-    objects.each{ |o|
-      next if !(x, y, w, h = find_object_bbox(o, atlas, ppc))
+    regions.each{ |obj_bbox|
+      next if !(x, y, w, h = obj_bbox)
       endpoints << [x, y]
       endpoints << [x + w - 1, y + h - 1]
-    } if objects
+    }
 
     # Also add points from the previous frame's markers (to erase them)
     endpoints.push(*markers.flatten(1))
@@ -1077,7 +1081,7 @@ module Map
 
   # Redraw the background over the last frame to erase or change the
   # elements that have been updated
-  def self.restore_background(image, background, markers, objects, atlas, ppc = PPC)
+  def self.restore_background(image, background, markers, regions)
     bbox = image.bbox
 
     # Remove ninja markers and input display from previous frame
@@ -1091,8 +1095,8 @@ module Map
     }
 
     # Update changed elements (collected gold, toggled mines, ...)
-    objects.each{ |o|
-      next if !(x, y, w, h = find_object_bbox(o, atlas, ppc))
+    regions.each{ |obj_bbox|
+      next if !(x, y, w, h = obj_bbox)
       image.copy(
         src:    background,
         offset: [x, y],
@@ -1307,10 +1311,10 @@ module Map
   # when there's nothing else to redraw, meaning the run has finished.
   def self.render_frame(frame, step, gif, info, i, markers)
     # Adjust map data according to changes for this frame (e.g. remove collected gold)
-    collided = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], frame, step) : []
+    regions = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], frame, step, gif) : []
 
     # Find bounding box for this frame
-    bbox = find_frame_bbox(frame, step, info[:nsim][i], markers, collided, gif[:object_atlas], trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
+    bbox = find_frame_bbox(frame, step, info[:nsim][i], markers, regions, trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
     return if !bbox
 
     # Write previous frame to disk and create new frame
@@ -1324,8 +1328,8 @@ module Map
     # Redraw background regions to erase markers from previous frame and
     # change any objects that have been collected / toggled this frame.
     if !info[:trace]
-      redraw_changes(gif[:background], collided, [info[:object_grid][i]], [info[:tiles][i]], gif[:object_atlas], gif[:tile_atlas], gif[:palette], gif[:palette_idx], gif[:ppc], false) unless info[:blank]
-      restore_background(image, gif[:background], markers, collided, gif[:object_atlas], gif[:ppc])
+      redraw_changes(gif[:background], regions, [info[:object_grid][i]], [info[:tiles][i]], gif[:object_atlas], gif[:tile_atlas], gif[:palette], gif[:palette_idx], gif[:ppc], false) unless info[:blank]
+      restore_background(image, gif[:background], markers, regions)
     end
 
     # Draw new elements for this frame (trace, markers, inputs...), and save
