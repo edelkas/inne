@@ -1403,11 +1403,9 @@ class MappackScore < ActiveRecord::Base
   # Calculate the score using ntrace
   def ntrace_score
     return false if !highscoreable || !demo || !demo.demo
-    res = ntrace(highscoreable.dump_level, [demo.demo], silent: true)
-    return false if !res[:success] || res[:valid] != [true]
-    score = res[:msg].split("\n").last
-    return false if !score || score.strip.empty?
-    round_score(score.strip.to_f)
+    nsim = NSim.new(highscoreable.dump_level, [demo.demo])
+    nsim.run
+    nsim.score || false
   rescue => e
     lex(e, 'ntrace testing failed')
     nil

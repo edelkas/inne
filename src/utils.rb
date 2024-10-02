@@ -1582,6 +1582,14 @@ class NSim
     end
   end
 
+  # Run score taken from nclone's terminal output
+  def score
+    return if !@valid || !@output || @output.empty?
+    score = @output.split("\n").last
+    return if !score || score.strip.empty?
+    round_score(score.strip.to_f)
+  end
+
   # Run is finished for this ninja on this frame
   def finished?(index, frame, trace: false)
     @coords_raw[0][index].size < frame + 1 + (trace ? 1 : 0)
