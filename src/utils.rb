@@ -1603,13 +1603,18 @@ class NSim
     )
   end
 
+  # Rescale coordinates (which are given in game units) for drawing
+  def rescale(pos, ppc = @ppc)
+    ppc == 0 ? pos : pos.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
+  end
+
   # Return coordinates of an entity for the given frame
   # ppc contains the scale (in pixels per coordinate) if the coordinates need
   # to be scaled for drawing
   def coords(id, index, frame, ppc: @ppc)
-    pair = @coords_raw[id][index]&.[](frame)
-    return nil if !pair
-    ppc == 0 ? pair : pair.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
+    pos = @coords_raw[id][index]&.[](frame)
+    return nil if !pos
+    rescale(pos, ppc)
   end
 
   # Return coordinates of a ninja for the given frame
@@ -1626,6 +1631,19 @@ class NSim
   def collisions(frame)
     return [] if !@collisions_raw[frame]
     @collisions_raw[frame]
+  end
+
+  # Return entity movements for the given frame range
+  def movements(frame, step, ppc: @ppc)
+    res = []
+    @coords_raw.each{ |id, list|
+      list.each{ |idx, c_list|
+        pos = c_list[frame ... frame + step].to_a.last
+        next if !pos
+        res << { id: id, index: idx, coords: rescale(pos, ppc) }
+      }
+    }
+    res
   end
 end
 

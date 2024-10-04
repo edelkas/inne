@@ -96,6 +96,11 @@ module Map
     ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_TOGGLE_MINE
   ]
 
+  # Objects whose movement is supported in animations
+  ID_LIST_MOVABLE = [
+    ID_DRONE_ZAP
+  ]
+
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -474,39 +479,88 @@ module Map
     end
   end
 
-  # Parse all object collisions in a given frame range by any ninja, and perform
-  # logical collision effects, such as removing or toggling them, by editing
-  # the map data that will be rendered on the next GIF frame. Returns the list
-  # of bounding boxes that need to be redrawn to update the image.
-  # TODO: For optimization purposes, try to remove as much redundancy as possible
-  # (e.g. joining overlapping boxes into one).
-  def self.collide_vs_objects(object_dict, nsim, f, step, gif)
-    bboxes = []
+  # TODO: It seems fitting to create an Object/Entity class that handles all the
+  # basic collision and drawing routines below.
 
-    # For every frame in the range, iterate all objects collided by all ninjas
+  # Change an object's position in the map data to a new one given in game units
+  def self.move_object(o, x, y)
+    o[1] = 4 * x / UNITS
+    o[2] = 4 * y / UNITS
+  end
+
+  # Change an object's orientation in the map data
+  def self.turn_object(o, angle)
+    o[3] = angle
+  end
+
+  # Changes an object's state
+  def self.mutate_object(o, state)
+    o[4] = state
+  end
+
+  # Disables an object so that it can no longer be collided with or be drawn
+  def self.disable_object(o)
+    mutate_object(o, -1)
+  end
+
+  # Resets an object to its initial state (in particular, this will re-enable it)
+  def self.reset_object(o)
+    mutate_object(o, 0)
+  end
+
+  # Checks if an object is enabled
+  def self.check_object(o)
+    o[4] != -1
+  end
+
+  # Perform entity movements and logical collision effects in a given frame range.
+  # This is done by editing the map data accordingly. Returns the list of regions
+  # (bounding boxes) that need to be redrawn.
+  def self.think(object_dict, nsim, f, step, gif)
+    bboxes = []
+    saved_bboxes = 40.times.map{ |id| [id, []] }.to_h
+
+    # For every frame in the range, fetch all collisions by all ninjas
     (0 ... step).each{ |s|
       nsim.collisions(f + s).each{ |col|
         # Filter collisions
         next unless ID_LIST_COLLIDABLE.include?(col.id)    # Collidable object
         next unless o = object_dict[col.id]&.[](col.index) # Object found
-        next unless o[4] != -1                             # Object not removed
+        next unless check_object(o)                        # Object not removed
 
-        # Update object and store redrawn areas before and after
+        # Update object and store redraw area
         bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
-        o[4] = col.state
-        #bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+        saved_bboxes[col.id] << col.index
+        mutate_object(o, col.state)
 
-        # Remove collided gold
-        o[4] = -1 if o[0] == ID_GOLD
-
-        # For switches, toggle / remove door too
-        if [ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH].include?(o[0])
+        # Additional collision effects
+        case col.id
+        when ID_GOLD
+          # Remove collected gold
+          disable_object(o)
+        when ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH
+          # For switches, toggle / remove door too
           door = object_dict[o[0] - 1]&.[](o[5])
           next warn("Door for collided switch not found.") if !door
           door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
           bboxes << find_object_bbox(door, gif[:object_atlas], gif[:ppc])
         end
       }
+    }
+
+    # For the _last_ frame in the range, move entities to new position
+    # TODO: For optimization purposes, try to remove as much redundancy as possible
+    # (e.g. joining overlapping boxes into one).
+    nsim.movements(f, step, ppc: 0).each{ |mov|
+      # Filter movements
+      next unless ID_LIST_MOVABLE.include?(mov[:id])         # Movable object
+      next unless o = object_dict[mov[:id]]&.[](mov[:index]) # Object found
+      next unless check_object(o)                            # Object not removed
+
+      # Move object and store redraw area before and after
+      bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[mov[:id]].include?(mov[:index])
+      move_object(o, *mov[:coords])
+      bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
     }
 
     bboxes.uniq
@@ -1311,7 +1365,7 @@ module Map
   # when there's nothing else to redraw, meaning the run has finished.
   def self.render_frame(frame, step, gif, info, i, markers)
     # Adjust map data according to changes for this frame (e.g. remove collected gold)
-    regions = !info[:trace] ? collide_vs_objects(info[:object_dict][i], info[:nsim][i], frame, step, gif) : []
+    regions = !info[:trace] ? think(info[:object_dict][i], info[:nsim][i], frame, step, gif) : []
 
     # Find bounding box for this frame
     bbox = find_frame_bbox(frame, step, info[:nsim][i], markers, regions, trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
