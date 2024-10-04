@@ -93,7 +93,8 @@ module Map
   # Objects for which collisions are supported
   ID_LIST_COLLIDABLE = [
     ID_MINE,               ID_GOLD,             ID_EXIT_SWITCH, ID_DOOR_REGULAR,
-    ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_TOGGLE_MINE
+    ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_DRONE_ZAP,   ID_DRONE_CHASER,
+    ID_TOGGLE_MINE,        ID_MICRODRONE
   ]
 
   # Objects whose movement is supported in animations
@@ -544,6 +545,9 @@ module Map
           next warn("Door for collided switch not found.") if !door
           door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
           bboxes << find_object_bbox(door, gif[:object_atlas], gif[:ppc])
+        when ID_DRONE_ZAP, ID_DRONE_CHASER, ID_MICRODRONE
+          # Perform drone rotation
+          turn_object(o, 2 * col.state)
         end
       }
     }
@@ -675,7 +679,7 @@ module Map
         hash.each{ |row, objs|
           objs.each{ |o|
             # Skip if this object doesn't exist
-            next if o[0] >= 29
+            next if o[0] >= OBJECTS.size
             atlas[o[0]] = {} if !atlas.key?(o[0])
 
             OBJECTS[o[0]][:states].times.each{ |state|
