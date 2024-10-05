@@ -78,7 +78,7 @@ module Map
     ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88, states: 3 }
   }
 
-  # Objects that do not admit sprite rotations
+  # Objects that do not admit sprite rotations at all
   ID_LIST_FIXED = [
     ID_NINJA,       ID_MINE,               ID_GOLD,             ID_EXIT,
     ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_FLOORGUARD,
@@ -87,7 +87,7 @@ module Map
     ID_SHOVE_THWUMP
   ]
 
-  # Objects that admit diagonal rotations
+  # Objects that admit diagonal sprite rotations
   ID_LIST_DIAG  = [ID_LAUNCHPAD, ID_ONEWAY, ID_LASER_TURRET]
 
   # Objects for which collisions are supported
@@ -97,9 +97,16 @@ module Map
     ID_TOGGLE_MINE,        ID_MICRODRONE
   ]
 
-  # Objects whose movement is supported in animations
+  # Objects that admit multiple sprite states
+  ID_LIST_MUTABLE = [
+    ID_MINE,        ID_EXIT,               ID_EXIT_SWITCH, ID_DOOR_REGULAR,
+    ID_DOOR_LOCKED, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP,   ID_DOOR_TRAP_SWITCH,
+    ID_TOGGLE_MINE
+  ]
+
+  # Objects whose sprite movement is supported in animations
   ID_LIST_MOVABLE = [
-    ID_DRONE_ZAP
+    ID_DRONE_ZAP, ID_DRONE_CHASER, ID_MICRODRONE
   ]
 
   THEMES = [
@@ -484,9 +491,25 @@ module Map
   # basic collision and drawing routines below.
 
   # Change an object's position in the map data to a new one given in game units
-  def self.move_object(o, x, y)
-    o[1] = 4 * x / UNITS
-    o[2] = 4 * y / UNITS
+  def self.move_object(grid, o, x, y)
+    new_x = 4.0 * x / UNITS
+    new_y = 4.0 * y / UNITS
+    new_cell_x = (new_x / 4.0).floor
+    new_cell_y = (new_y / 4.0).floor
+    new_list = grid[new_cell_x][new_cell_y]
+
+    # Update cell
+    if !new_list.include?(o)
+      cell_x = (o[1] / 4.0).floor
+      cell_y = (o[2] / 4.0).floor
+      list = grid[cell_x][cell_y]
+      list.delete(o)
+      new_list.append(o)
+    end
+
+    # Update coordinates
+    o[1] = new_x
+    o[2] = new_y
   end
 
   # Change an object's orientation in the map data
@@ -517,7 +540,7 @@ module Map
   # Perform entity movements and logical collision effects in a given frame range.
   # This is done by editing the map data accordingly. Returns the list of regions
   # (bounding boxes) that need to be redrawn.
-  def self.think(object_dict, nsim, f, step, gif)
+  def self.think(object_dict, object_grid, nsim, f, step, gif)
     bboxes = []
     saved_bboxes = 40.times.map{ |id| [id, []] }.to_h
 
@@ -532,7 +555,7 @@ module Map
         # Update object and store redraw area
         bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
         saved_bboxes[col.id] << col.index
-        mutate_object(o, col.state)
+        mutate_object(o, col.state) if ID_LIST_MUTABLE.include?(col.id)
 
         # Additional collision effects
         case col.id
@@ -563,7 +586,7 @@ module Map
 
       # Move object and store redraw area before and after
       bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[mov[:id]].include?(mov[:index])
-      move_object(o, *mov[:coords])
+      move_object(object_grid, o, *mov[:coords])
       bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
     }
 
@@ -677,38 +700,31 @@ module Map
     objects.each{ |map|
       map.each{ |col, hash|
         hash.each{ |row, objs|
-          objs.each{ |o|
+          objs.map(&:first).uniq.each{ |id|
             # Skip if this object doesn't exist
-            next if o[0] >= OBJECTS.size
-            atlas[o[0]] = {} if !atlas.key?(o[0])
+            next if !OBJECTS.key?(id) || atlas.key?(id)
+            atlas[id] = {}
 
-            OBJECTS[o[0]][:states].times.each{ |state|
-              # Skip if this object is already initialized
-              atlas[o[0]][state] = {} if !atlas[o[0]].key?(state)
-              next if atlas[o[0]][state].key?(o[3])
-              sprite_list = atlas[o[0]][state]
+            # Initialize sprites for all states
+            OBJECTS[id][:states].times.each{ |state|
+              sprites = atlas[id][state] = {}
+              orientations = ID_LIST_DIAG.include?(id) ? [0, 1] : [0]
 
-              # Initialize base object image
-              s = o[3] % 2 == 1 && ID_LIST_DIAG.include?(o[0]) # Special variant of sprite (diagonal)
-              base = s ? 1 : 0
-              if !sprite_list.key?(base)
-                sprite_list[base] = generate_object(o[0], palette_idx, true, s, state)
-                sprite_list[base].resample_nearest_neighbor!(
-                  [(scale * sprite_list[base].width).round, 1].max,
-                  [(scale * sprite_list[base].height).round, 1].max,
+              # Initialize sprites for all orientations
+              orientations.each{ |base|
+                # Base sprite
+                sprites[base] = generate_object(id, palette_idx, true, base == 1, state)
+                sprites[base].resample_nearest_neighbor!(
+                  [(scale * sprites[base].width).round,  1].max,
+                  [(scale * sprites[base].height).round, 1].max,
                 ) if ppc != PPC
-              end
-              next if o[3] <= 1
+                next if ID_LIST_FIXED.include?(id)
 
-              # Initialize rotated copies
-              case o[3] / 2
-              when 1
-                sprite_list[o[3]] = sprite_list[base].rotate_right
-              when 2
-                sprite_list[o[3]] = sprite_list[base].rotate_180
-              when 3
-                sprite_list[o[3]] = sprite_list[base].rotate_left
-              end
+                # Rotated copies
+                sprites[base + 2] = sprites[base].rotate_right
+                sprites[base + 4] = sprites[base].rotate_180
+                sprites[base + 6] = sprites[base].rotate_left
+              }
             }
           }
         }
@@ -1240,7 +1256,7 @@ module Map
     # Prepare highscoreable and map data
     h = info[:h]
     h = h.levels[i] if i
-    tiles   = i ? [info[:tiles][i]]   : info[:tiles]
+    tiles   = i ? [info[:tiles][i]]       : info[:tiles]
     objects = i ? [info[:object_grid][i]] : info[:object_grid]
 
     # Initialize image and sprites
@@ -1369,7 +1385,7 @@ module Map
   # when there's nothing else to redraw, meaning the run has finished.
   def self.render_frame(frame, step, gif, info, i, markers)
     # Adjust map data according to changes for this frame (e.g. remove collected gold)
-    regions = !info[:trace] ? think(info[:object_dict][i], info[:nsim][i], frame, step, gif) : []
+    regions = !info[:trace] ? think(info[:object_dict][i], info[:object_grid][i], info[:nsim][i], frame, step, gif) : []
 
     # Find bounding box for this frame
     bbox = find_frame_bbox(frame, step, info[:nsim][i], markers, regions, trace: info[:trace], inputs: info[:inputs], ppc: gif[:ppc])
@@ -1416,7 +1432,8 @@ module Map
     markers = []
     image = nil
     (0 .. frames + step).step(step) do |f|
-      dbg("Generating frame #{'%4d' % [f + 1]} / #{frames - 1}", newline: false) if BENCH_IMAGES
+      $frame = f
+      dbg("Generating frame #{'%4d' % [f + 1]} / #{frames}", newline: false) if BENCH_IMAGES
       frame = render_frame(f, step, gif, info, i, markers)
       memory << getmem if BENCH_IMAGES
       GC.start if ANIM_GC && (f / step + 1) % ANIM_GC_STEP == 0

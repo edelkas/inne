@@ -1456,7 +1456,7 @@ end
 # map data and demo data, the resulting position and collision information, etc.
 # It may contain multiple simulations for the same level, since they're all traced
 # together.
-# TODO: Make splits use this as well. Also ntrace_test and all others.
+# TODO: Make splits use this as well.
 class NSim
 
   attr_reader :count, :success, :correct, :valid, :valid_flags, :coords_raw
