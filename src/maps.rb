@@ -106,7 +106,7 @@ module Map
 
   # Objects whose sprite movement is supported in animations
   ID_LIST_MOVABLE = [
-    ID_DRONE_ZAP, ID_DRONE_CHASER, ID_MICRODRONE
+    ID_DRONE_ZAP, ID_DRONE_CHASER, ID_DEATHBALL, ID_MICRODRONE
   ]
 
   THEMES = [
