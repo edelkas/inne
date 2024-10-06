@@ -210,8 +210,9 @@ TRANSPARENT_COLOR = 0x00FF00FF
 FONT_TIMEBAR = 'retro'
 
 # Other
-ANIM_GC      = false # Garbage collect periodically when generating frames
-ANIM_GC_STEP = 100   # How many frames to render before running the GC
+ANIM_GC             = false # Garbage collect periodically when generating frames
+ANIM_GC_STEP        = 100   # How many frames to render before running the GC
+ANIM_MOVE_THRESHOLD = 1     # Minimum 1-distance (in game units) to redraw an entity
 
 # <---------------------------------------------------------------------------->
 # <------                       NTRACE VARIABLES                         ------>

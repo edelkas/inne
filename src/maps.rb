@@ -106,7 +106,8 @@ module Map
 
   # Objects whose sprite movement is supported in animations
   ID_LIST_MOVABLE = [
-    ID_DRONE_ZAP, ID_DRONE_CHASER, ID_DEATHBALL, ID_MICRODRONE
+    ID_DRONE_ZAP, ID_DRONE_CHASER, ID_BOUNCEBLOCK, ID_THWUMP, ID_DEATHBALL,
+    ID_MICRODRONE
   ]
 
   THEMES = [
@@ -492,6 +493,11 @@ module Map
 
   # Change an object's position in the map data to a new one given in game units
   def self.move_object(grid, o, x, y)
+    # Only move if enough distance has been traveled (reduce CPU stress)
+    distance = (x - UNITS * o[1] / 4.0).abs + (y - UNITS * o[2] / 4.0).abs
+    return false if distance < ANIM_MOVE_THRESHOLD
+
+    # New parameters
     new_x = 4.0 * x / UNITS
     new_y = 4.0 * y / UNITS
     new_cell_x = (new_x / 4.0).floor
@@ -510,6 +516,7 @@ module Map
     # Update coordinates
     o[1] = new_x
     o[2] = new_y
+    true
   end
 
   # Change an object's orientation in the map data
@@ -585,9 +592,10 @@ module Map
       next unless check_object(o)                            # Object not removed
 
       # Move object and store redraw area before and after
-      bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[mov[:id]].include?(mov[:index])
-      move_object(object_grid, o, *mov[:coords])
-      bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+      old_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[mov[:id]].include?(mov[:index])
+      moved = move_object(object_grid, o, *mov[:coords])
+      new_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+      bboxes << old_bbox << new_bbox if moved
     }
 
     bboxes.uniq
