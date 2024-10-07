@@ -547,9 +547,34 @@ module Map
   # Perform entity movements and logical collision effects in a given frame range.
   # This is done by editing the map data accordingly. Returns the list of regions
   # (bounding boxes) that need to be redrawn.
+  # TODO: For optimization purposes, try to remove as much redundancy as possible
+  # (e.g. joining overlapping boxes into one).
   def self.think(object_dict, object_grid, nsim, f, step, gif)
     bboxes = []
     saved_bboxes = 40.times.map{ |id| [id, []] }.to_h
+
+    # For the last frame in the range, move entities to new position
+    nsim.movements(f, step, ppc: 0).each{ |mov|
+      # Filter movements
+      next unless ID_LIST_MOVABLE.include?(mov[:id])         # Movable object
+      next unless o = object_dict[mov[:id]]&.[](mov[:index]) # Object found
+      next unless check_object(o)                            # Object not removed
+
+      # Move object
+      old_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+      moved = move_object(object_grid, o, *mov[:coords])
+      next if !moved
+      saved_bboxes[mov[:id]] << mov[:index]
+
+      # Figure out which area must be redrawn (trying to be efficient)
+      new_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+      full_bbox = bbox_hull([old_bbox, new_bbox])
+      if bbox_area(full_bbox) <= bbox_area(old_bbox) + bbox_area(new_bbox)
+        bboxes << full_bbox
+      else
+        bboxes << old_bbox << new_bbox
+      end
+    }
 
     # For every frame in the range, fetch all collisions by all ninjas
     (0 ... step).each{ |s|
@@ -560,8 +585,7 @@ module Map
         next unless check_object(o)                        # Object not removed
 
         # Update object and store redraw area
-        bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
-        saved_bboxes[col.id] << col.index
+        bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[col.id].include?(col.index)
         mutate_object(o, col.state) if ID_LIST_MUTABLE.include?(col.id)
 
         # Additional collision effects
@@ -580,22 +604,6 @@ module Map
           turn_object(o, 2 * col.state)
         end
       }
-    }
-
-    # For the _last_ frame in the range, move entities to new position
-    # TODO: For optimization purposes, try to remove as much redundancy as possible
-    # (e.g. joining overlapping boxes into one).
-    nsim.movements(f, step, ppc: 0).each{ |mov|
-      # Filter movements
-      next unless ID_LIST_MOVABLE.include?(mov[:id])         # Movable object
-      next unless o = object_dict[mov[:id]]&.[](mov[:index]) # Object found
-      next unless check_object(o)                            # Object not removed
-
-      # Move object and store redraw area before and after
-      old_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[mov[:id]].include?(mov[:index])
-      moved = move_object(object_grid, o, *mov[:coords])
-      new_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc])
-      bboxes << old_bbox << new_bbox if moved
     }
 
     bboxes.uniq

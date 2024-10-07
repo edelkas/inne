@@ -2132,6 +2132,11 @@ def bbox_hull(bboxes)
   [w, h].min > 0.01 ? [x1, y1, w, h] : nil
 end
 
+# Computes the area of a bbox.
+def bbox_area(bbox)
+  bbox[2] * bbox[3]
+end
+
 # Weighed average
 def wavg(arr, w)
   return -1 if arr.size != w.size
