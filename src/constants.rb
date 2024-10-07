@@ -23,7 +23,7 @@ TEST_LOTD      = false # Post lotd on startup
 TEST_CTP_LOTD  = false # Post CTP lotd on startup
 TEST_UL_REPORT = false # Post userlevel report on startup
 TEST_SCORES    = false # Download all scores on startup
-BENCH_IMAGES   = false # Benchmark image manipulation steps
+BENCH_IMAGES   = true  # Benchmark image manipulation steps
 
 # Internal
 WAIT            = 1       # Seconds between iterations of infinite loops

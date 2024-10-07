@@ -83,8 +83,7 @@ module Map
     ID_NINJA,       ID_MINE,               ID_GOLD,             ID_EXIT,
     ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_FLOORGUARD,
     ID_BOUNCEBLOCK, ID_ROCKET,             ID_GAUSS,            ID_TOGGLE_MINE,
-    ID_EVIL_NINJA,  ID_BOOST_PAD,          ID_DEATHBALL,        ID_MINI,
-    ID_SHOVE_THWUMP
+    ID_EVIL_NINJA,  ID_BOOST_PAD,          ID_DEATHBALL,        ID_MINI
   ]
 
   # Objects that admit diagonal sprite rotations
@@ -94,20 +93,20 @@ module Map
   ID_LIST_COLLIDABLE = [
     ID_MINE,               ID_GOLD,             ID_EXIT_SWITCH, ID_DOOR_REGULAR,
     ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_DRONE_ZAP,   ID_DRONE_CHASER,
-    ID_TOGGLE_MINE,        ID_MICRODRONE
+    ID_TOGGLE_MINE,        ID_MICRODRONE,       ID_SHOVE_THWUMP
   ]
 
   # Objects that admit multiple sprite states
   ID_LIST_MUTABLE = [
     ID_MINE,        ID_EXIT,               ID_EXIT_SWITCH, ID_DOOR_REGULAR,
     ID_DOOR_LOCKED, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP,   ID_DOOR_TRAP_SWITCH,
-    ID_TOGGLE_MINE
+    ID_TOGGLE_MINE, ID_SHOVE_THWUMP
   ]
 
   # Objects whose sprite movement is supported in animations
   ID_LIST_MOVABLE = [
-    ID_DRONE_ZAP, ID_DRONE_CHASER, ID_BOUNCEBLOCK, ID_THWUMP, ID_DEATHBALL,
-    ID_MICRODRONE
+    ID_DRONE_ZAP,  ID_DRONE_CHASER, ID_BOUNCEBLOCK, ID_THWUMP, ID_DEATHBALL,
+    ID_MICRODRONE, ID_SHOVE_THWUMP
   ]
 
   THEMES = [
@@ -584,9 +583,21 @@ module Map
         next unless o = object_dict[col.id]&.[](col.index) # Object found
         next unless check_object(o)                        # Object not removed
 
-        # Update object and store redraw area
-        bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc]) unless saved_bboxes[col.id].include?(col.index)
-        mutate_object(o, col.state) if ID_LIST_MUTABLE.include?(col.id)
+        # Mark region to be redrawn
+        if !saved_bboxes[col.id].include?(col.index)
+          bboxes << find_object_bbox(o, gif[:object_atlas], gif[:ppc])
+        end
+
+        # Update object's state
+        if ID_LIST_MUTABLE.include?(col.id)
+          case col.id
+          when ID_SHOVE_THWUMP
+            new_state = [col.state / 4, 2].min
+          else
+            new_state = col.state
+          end
+          mutate_object(o, new_state)
+        end
 
         # Additional collision effects
         case col.id
@@ -599,9 +610,10 @@ module Map
           next warn("Door for collided switch not found.") if !door
           door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
           bboxes << find_object_bbox(door, gif[:object_atlas], gif[:ppc])
-        when ID_DRONE_ZAP, ID_DRONE_CHASER, ID_MICRODRONE
-          # Perform drone rotation
-          turn_object(o, 2 * col.state)
+        when ID_DRONE_ZAP, ID_DRONE_CHASER, ID_MICRODRONE, ID_SHOVE_THWUMP
+          # Rotate drones and shwumps
+          dir = col.id == ID_SHOVE_THWUMP ? col.state % 4 : col.state
+          turn_object(o, 2 * dir)
         end
       }
     }
