@@ -623,7 +623,7 @@ module Map
 
   # Parse map(s) data, sanitize it, and return objects and tiles conveniently
   # organized for screenshot generation.
-  def self.parse_maps(maps, v = 1)
+  def self.parse_maps(maps, v = 1, anim = true, trace = false)
     # Read objects, remove glitch ones
     objects = maps.map{ |map|
       map.map.objects(version: v).reject{ |o| o[0] > 28 }
@@ -641,6 +641,9 @@ module Map
 
         # Change initial state of trap doors and toggle mines to "untoggled"
         o[4] = 1 if [8, 9, 21].include?(o[0])
+
+        # Don't include ninja for animations
+        o[4] = -1 if o[0] == 0 && anim && !trace
 
         # Add 6th field containing the entity index
         o << counts[o[0]]
@@ -686,7 +689,7 @@ module Map
   end
 
   # Parse all elements we'll need to screenshot and trace / animate the routes
-  def self.parse_trace(nsim, texts, h, ppc: PPC, v: nil)
+  def self.parse_trace(nsim, texts, h, ppc: PPC, v: nil, anim: true, trace: false)
     # Filter parameters
     n = [nsim.map(&:count).max || 0, MAX_TRACES].min
     names = texts.take(n).map{ |t| t[/\d+:(.*)-/, 1].strip }
@@ -694,7 +697,7 @@ module Map
 
     # Parse map data
     maps = h.is_level? ? [h] : h.levels
-    tiles, object_grid, object_dict = parse_maps(maps, v)
+    tiles, object_grid, object_dict = parse_maps(maps, v, anim, trace)
 
     # Return full context as a hash for easy management
     {
@@ -705,7 +708,9 @@ module Map
       object_dict: object_dict,
       nsim:        nsim,
       names:       names,
-      scores:      scores
+      scores:      scores,
+      anim:        anim,
+      trace:       trace
     }
   end
 
@@ -1533,7 +1538,7 @@ module Map
       # We will encapsulate all necessary info in a few context hashes, for easy management
       context_png  = nil
       context_gif  = nil
-      context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v).merge(inputs: inputs, trace: trace, blank: blank)
+      context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v, anim: anim, trace: trace).merge(inputs: inputs, blank: blank)
       res = nil
 
       # Render each highscoreable
