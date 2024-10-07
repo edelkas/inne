@@ -1254,7 +1254,7 @@ def send_message(
   )
   # Save stuff already appended to message, and remove it to prevent autosend
   if dest.is_a?(Discordrb::Events::Respondable)  # Grab message
-    content = dest.saved_message.dup if content.empty?
+    content = dest.saved_message.dup if content.empty? rescue ''
     dest.drain
   end
 
