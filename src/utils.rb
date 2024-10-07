@@ -2105,6 +2105,33 @@ def update_sql_status
   $sql_conns  = sql("SHOW FULL PROCESSLIST").to_a
 end
 
+# From now on, a bbox (short for bounding box) is a rectangle given in the form
+# [X, Y, W, H], where [X, Y] are the coordinates of its upper left corner, and
+# [W, H] are its dimensions.
+
+# Compute the intersection of a list of bboxes. Returns a bbox if it exists, or
+# nil otherwise.
+def bbox_intersect(bboxes)
+  x1 = bboxes.map{ |bbox| bbox[0] }.max
+  y1 = bboxes.map{ |bbox| bbox[1] }.max
+  x2 = bboxes.map{ |bbox| bbox[0] + bbox[2] }.min
+  y2 = bboxes.map{ |bbox| bbox[1] + bbox[3] }.min
+  w = x2 - x1
+  h = y2 - y1
+  [w, h].min > 0.01 ? [x1, y1, w, h] : nil
+end
+
+# Compute the rectangular hull of a list of bboxes.
+def bbox_hull(bboxes)
+  x1 = bboxes.map{ |bbox| bbox[0] }.min
+  y1 = bboxes.map{ |bbox| bbox[1] }.min
+  x2 = bboxes.map{ |bbox| bbox[0] + bbox[2] }.max
+  y2 = bboxes.map{ |bbox| bbox[1] + bbox[3] }.max
+  w = x2 - x1
+  h = y2 - y1
+  [w, h].min > 0.01 ? [x1, y1, w, h] : nil
+end
+
 # Weighed average
 def wavg(arr, w)
   return -1 if arr.size != w.size
