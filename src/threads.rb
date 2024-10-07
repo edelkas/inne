@@ -451,7 +451,7 @@ def send_summary
   time  = [now - SUMMARY_UPDATE_SIZE, base].max
   total = { "Level" => [0, 0, 0, 0, 0], "Episode" => [0, 0, 0, 0, 0], "Story" => [0, 0, 0, 0, 0] }
 
-  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time}", cheated: false)
+  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time} AND `cheated` = 0")
                    .order('`date` DESC')
                    .map{ |ar|
                      total[ar.highscoreable.class.to_s][2] += 1
