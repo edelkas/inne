@@ -1782,6 +1782,7 @@ module Map
       step = ANIMATION_STEP_NORMAL
     end
     debug = !!msg[/\bdebug\b/i] && check_permission(event, 'ntracer')
+    full = !!msg[/\bfull\b/i] || !!msg[/\bcomplete\b/i]
     gif = anim || !h.is_level?
 
     # Prepare demos
@@ -1799,7 +1800,7 @@ module Map
     levels = h.is_level? ? [h] : h.levels
     res = levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
     res.each{ |nsim|
-      nsim.run
+      nsim.run(basic_sim: !full, basic_render: !full)
       bench(:step, 'Simulation', pad_str: 12, pad_num: 9) if BENCH_IMAGES
     }
 
@@ -1886,7 +1887,7 @@ module Map
     demos = scores.map{ |s| s.demo.demo }
     return :other if demos.count(nil) > 0
     nsim = NSim.new(dump_level, demos)
-    nsim.run
+    nsim.run(basic_sim: false)
     return :error if !nsim.success
     return :other if !nsim.correct
     return nsim.valid ? :good : :bad

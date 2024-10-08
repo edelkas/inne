@@ -1491,8 +1491,9 @@ class NSim
   end
 
   # Execute simulation
-  def execute
-    stdout, stderr, status = python(PATH_NTRACE, output: true)
+  def execute(basic_sim: true, basic_render: true)
+    path = PATH_NTRACE + (basic_sim ? ' basic_sim' : '') + (basic_render ? ' basic_render' : '')
+    stdout, stderr, status = python(path, output: true)
     @output = [stdout, stderr].join("\n\n")
     @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
   end
@@ -1564,9 +1565,9 @@ class NSim
   end
 
   # Run simulation and parse result
-  def run
+  def run(basic_sim: true, basic_render: true)
     export
-    execute
+    execute(basic_sim: basic_sim, basic_render: basic_render)
     parse if @success
     validate
   ensure
