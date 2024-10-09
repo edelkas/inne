@@ -1464,9 +1464,14 @@ module Map
     frames = info[:nsim][i].length
     markers = []
     image = nil
+    t = Time.now
     (0 .. frames + step).step(step) do |f|
       $frame = f
       dbg("Generating frame #{'%4d' % [f + 1]} / #{frames}", newline: false) if BENCH_IMAGES
+      if Time.now - t > ANIM_PROGRESS_UPDATE
+        TmpMsg.update("-# " + progress_bar(f, frames, size: 20) + " (Rendering frame #{f + 1} / #{frames})")
+        t = Time.now
+      end
       frame = render_frame(f, step, gif, info, i, markers)
       memory << getmem if BENCH_IMAGES
       GC.start if ANIM_GC && (f / step + 1) % ANIM_GC_STEP == 0
@@ -1756,7 +1761,7 @@ module Map
     perror("Non-highscore modes (e.g. speedrun) are only available for mappacks.") if !h.is_mappack? && board != 'hs'
     perror("Traces are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
     if userlevel
-      TmpMsg.update("Updating scores and downloading replays...")
+      TmpMsg.update("-# Updating scores and downloading replays...")
       h.update_scores(fast: true)
     end
     leaderboard = h.leaderboard(board, pluck: false)
@@ -1796,7 +1801,7 @@ module Map
     bench(:step, 'Setup', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 
     # Execute simulation and parse result
-    TmpMsg.update('Running simulation...')
+    TmpMsg.update('-# Running simulation...')
     levels = h.is_level? ? [h] : h.levels
     res = levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
     res.each{ |nsim|
@@ -1837,8 +1842,8 @@ module Map
     end
 
     # Render trace or animation
-    TmpMsg.update('Generating screenshot...')
     if gif
+      TmpMsg.update('-# Animating...')
       trace = screenshot(
         palette,
         h:      h,
@@ -1853,9 +1858,9 @@ module Map
       )
       perror('Failed to generate screenshot') if trace.nil?
     else
+      TmpMsg.update('-# Plotting routes...')
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
       perror('Failed to generate screenshot') if screenshot.nil?
-      TmpMsg.update('Plotting routes...')
       $trace_context = {
         theme:   palette,
         bg:      screenshot,

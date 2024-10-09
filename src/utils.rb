@@ -1148,7 +1148,9 @@ module TmpMsg extend self
 
   def update_now(content)
     @@sent = true
-    @@msg = !@@msg ? send_message(@@event, content: content) : @@msg.edit(content) rescue nil
+    $mutex[:tmp_msg].synchronize do
+      @@msg = !@@msg ? send_message(@@event, content: content) : @@msg.edit(content) rescue nil
+    end
   end
 
   def update(content)
@@ -1170,10 +1172,10 @@ module TmpMsg extend self
   end
 
   def reset
-    @@event  = nil
-    @@msg    = nil
-    @@sent   = false
-    @@is_tmp = true
+    @@event  = nil    # Discord event to which the msgs will be sent
+    @@msg    = nil    # Last msg sent
+    @@sent   = false  # Whether at least 1 msg has been sent
+    @@is_tmp = true   # Whether the msg should be deleted at the end (ephemeral)
   end
 end
 
@@ -2177,6 +2179,32 @@ def create_enum(name, values, opts = {})
   else
     opts[name] = values
     enum(opts)
+  end
+end
+
+# A nice looking progress bar. The style can be split of filled.
+def progress_bar(cur, tot, size: 20, style: :split, single: true)
+  return '' if tot < 0
+  size += 1 if single
+  cur = cur.clamp(0, tot)
+  full = (cur * size / tot).to_i
+
+  case style
+  when :split
+    full_char = '🔘'
+    empty_char = '▬'
+  when :filled
+    full_char = '■'
+    empty_char = '□'
+  else
+    full_char = '#'
+    empty_char = '-'
+  end
+
+  if single
+    bar = empty_char * [full, size - 1].min + full_char + empty_char * [(size - full - 1), 0].max
+  else
+    bar = full_char * full + empty_char * (size - full)
   end
 end
 

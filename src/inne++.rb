@@ -149,7 +149,7 @@ def initialize_vars
   $memory_warned   = false
   $memory_warned_c = false
   $linux           = RbConfig::CONFIG['host_os'] =~ /linux/i
-  $mutex           = { ntrace: Mutex.new }
+  $mutex           = { ntrace: Mutex.new, tmp_msg: Mutex.new }
   $threads         = []
   $main_queue      = Queue.new
   $sql_vars        = {}
