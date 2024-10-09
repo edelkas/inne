@@ -1460,7 +1460,7 @@ module Map
   end
 
   # Animate all frames in the GIF, return last frame
-  def self.animate_gif(gif, info, i, step, memory, last)
+  def self.animate_gif(gif, info, i, step, memory, last, event)
     frames = info[:nsim][i].length
     markers = []
     image = nil
@@ -1469,7 +1469,7 @@ module Map
       $frame = f
       dbg("Generating frame #{'%4d' % [f + 1]} / #{frames}", newline: false) if BENCH_IMAGES
       if Time.now - t > ANIM_PROGRESS_UPDATE
-        TmpMsg.update("-# " + progress_bar(f, frames, size: 20) + " (Rendering frame #{f + 1} / #{frames})")
+        TmpMsg.update(event, "-# " + progress_bar(f, frames, size: 10) + " (Rendering frame #{f + 1} / #{frames})")
         t = Time.now
       end
       frame = render_frame(f, step, gif, info, i, markers)
@@ -1520,7 +1520,8 @@ module Map
       delay:      ANIMATION_DELAY_NORMAL, # Time between frames, in 1/100ths sec
       texts:      [],                     # Texts for the legend
       spoiler:    false,                  # Whether the screenshot should be spoilered in Discord
-      v:          nil                     # Version of the map data to use (nil = latest)
+      v:          nil,                    # Version of the map data to use (nil = latest)
+      event:      nil                     # Originating event for this request
     )
 
     return nil if h.nil?
@@ -1577,7 +1578,7 @@ module Map
         break if !anim
 
         # Animation -> Render frames
-        animate_gif(context_gif, context_info, i, step, memory, i == h_list.size - 1)
+        animate_gif(context_gif, context_info, i, step, memory, i == h_list.size - 1, event)
         bench(:step, 'Routes', pad_str: 12, pad_num: 9) if BENCH_IMAGES
       }
 
@@ -1745,7 +1746,6 @@ module Map
   def self.trace(event, anim: false, h: nil)
     # Parse message parameters
     bench(:start) if BENCH_IMAGES
-    TmpMsg.init(event)
     t = Time.now
     h = parse_highscoreable(event, mappack: true) if !h
     perror("Failed to parse highscoreable.") if !h
@@ -1761,7 +1761,7 @@ module Map
     perror("Non-highscore modes (e.g. speedrun) are only available for mappacks.") if !h.is_mappack? && board != 'hs'
     perror("Traces are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
     if userlevel
-      TmpMsg.update("-# Updating scores and downloading replays...")
+      TmpMsg.update(event, "-# Updating scores and downloading replays...")
       h.update_scores(fast: true)
     end
     leaderboard = h.leaderboard(board, pluck: false)
@@ -1801,7 +1801,7 @@ module Map
     bench(:step, 'Setup', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 
     # Execute simulation and parse result
-    TmpMsg.update('-# Running simulation...')
+    TmpMsg.update(event, '-# Running simulation...')
     levels = h.is_level? ? [h] : h.levels
     res = levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
     res.each{ |nsim|
@@ -1843,7 +1843,7 @@ module Map
 
     # Render trace or animation
     if gif
-      TmpMsg.update('-# Animating...')
+      TmpMsg.update(event, '-# Animating...')
       trace = screenshot(
         palette,
         h:      h,
@@ -1854,11 +1854,12 @@ module Map
         blank:  blank,
         inputs: ANIMATION_DEFAULT_INPUT || !!msg[/\binputs?\b/i],
         step:   step,
-        delay:  delay
+        delay:  delay,
+        event:  event
       )
       perror('Failed to generate screenshot') if trace.nil?
     else
-      TmpMsg.update('-# Plotting routes...')
+      TmpMsg.update(event, '-# Plotting routes...')
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
       perror('Failed to generate screenshot') if screenshot.nil?
       $trace_context = {

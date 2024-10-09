@@ -1127,55 +1127,84 @@ end
 # Class to hold a temporary message sent to Discord, whose content may be updated
 # and eventually deleted. Intended for easy manipulation of things like progress
 # indicators for long processes.
-module TmpMsg extend self
+class TmpMsg
 
-  def init?
-    !!@@event
+  @@msgs = {}
+
+  def self.fetch(event)
+    @@msgs[event]
   end
 
-  def empty?
-    !init? || !@@sent
-  end
-
-  def tmp?
-    @@is_tmp
-  end
-
-  def init(event)
-    reset
-    @@event = event
-  end
-
-  def update_now(content)
-    @@sent = true
-    $mutex[:tmp_msg].synchronize do
-      @@msg = !@@msg ? send_message(@@event, content: content) : @@msg.edit(content) rescue nil
+  def self.update(event, content, temp: true)
+    if !@@msgs.key?(event)
+      @@msgs[event] = new(event, content, temp: temp)
+    else
+      @@msgs[event].edit(content, temp: temp)
     end
   end
 
-  def update(content)
-    return if content&.empty?
-    raise "Uninitialized TmpMsg" if !init?
-    _thread do update_now(content) end
+  def self.delete(event)
+    return false if !@@msgs.key?(event)
+    @@msgs[event].delete
+    @@msgs.delete(event)
+    true
   end
 
-  def final(content)
-    @@is_tmp = false
-    update_now(content)
+  def initialize(event, content, temp: true)
+    @event   = event
+    @content = content
+    @temp    = temp
+    @mutex   = Mutex.new
+    @msg     = nil
+    @index   = @@msgs.size
+    @edits   = 0
+
+    @@msgs[event] = self
+    send
+  end
+
+  def send
+    _thread do
+      @mutex.synchronize do
+        content = @content
+        @content = nil
+        @msg = send_message(@event, content: content) rescue nil
+      end
+    end
+  end
+
+  def edit_now
+    puts "#{@index}:#{@edits} SYNC  #{!!@msg}"
+    return if !@content || !@msg
+    puts "#{@index}:#{@edits} EDIT  #{!!@msg}"
+    content = @content
+    @content = nil
+    @msg.edit(content) rescue nil
+    puts "#{@index}:#{@edits} DONE  #{!!@msg}"
+    @edits = @edits + 1
+  end
+
+  def edit(content, temp: true)
+    puts "#{@index}:#{@edits} ENTRY #{!!@msg}"
+    @content = content
+    @temp = false if !temp
+    _thread do
+      @mutex.synchronize do
+        edit_now
+      end
+    end
   end
 
   def delete
-    return if !@@msg
-    @@msg.delete rescue nil
-    @@msg = nil
-    @@sent = false
-  end
-
-  def reset
-    @@event  = nil    # Discord event to which the msgs will be sent
-    @@msg    = nil    # Last msg sent
-    @@sent   = false  # Whether at least 1 msg has been sent
-    @@is_tmp = true   # Whether the msg should be deleted at the end (ephemeral)
+    if @temp
+      @mutex.synchronize do
+        @msg.delete rescue nil
+      end
+    end
+    @msg     = nil
+    @event   = nil
+    @content = nil
+    @mutex   = nil
   end
 end
 

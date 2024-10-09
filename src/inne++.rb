@@ -162,7 +162,6 @@ def initialize_vars
     markers: [],
     texts:   []
   }
-  TmpMsg.reset
 
   # Set environment variables
   ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
@@ -247,8 +246,8 @@ rescue OutteError => e
   err(msg) if e.log
   return if !e.discord
   is_auto = event.is_a?(Discordrb::Events::Respondable)
-  if !TmpMsg.empty?
-    TmpMsg.final(msg)
+  if tmp_msg = TmpMsg.fetch(event)
+    tmp_msg.edit(msg)
     event.drain if is_auto
   elsif is_auto
     event << msg
@@ -261,8 +260,7 @@ rescue => e
 
   lex(e, "Error parsing message.", event: event)
 ensure
-  TmpMsg.delete if TmpMsg.tmp?
-  TmpMsg.reset
+  TmpMsg.delete(event)
 end
 
 # Handle a new command, by crafting a response and sending it appropriately
