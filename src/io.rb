@@ -96,7 +96,7 @@ end
 
 # Parses a string looking for a score in the usual N++ 3-decimal floating point format
 def parse_score(str)
-  score = str[/(\s|^)([1-9]\d*|0)(\.\d{1,3})?(\s|$)/]
+  score = str.tr('_', '-')[/(\s|^)-?([1-9]\d*|0)(\.\d{1,3})?(\s|$)/]
   perror("Couldn't find / understand the score") if score.nil?
   perror("The score is incorrect") if !verify_score(score.to_f)
   score.to_f
