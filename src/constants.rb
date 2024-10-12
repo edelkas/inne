@@ -780,6 +780,7 @@ HACKERS = {
   253072 => ["test8378"],
   253161 => ["Chara"],
   276273 => ["DBYT3"],
+  282291 => ["ill spiritual"],
   298531 => ["Boringfish"],
   307030 => ["The_Mega_Force"],
   325245 => ["Staticwork"],
