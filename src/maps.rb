@@ -1844,6 +1844,7 @@ module Map
     # Render trace or animation
     if gif
       TmpMsg.update(event, '-# Animating...')
+      sleep(0.05) while !TmpMsg.fetch(event).sent? # Wait till first msg is sent before forking, otherwise problems!
       trace = screenshot(
         palette,
         h:      h,

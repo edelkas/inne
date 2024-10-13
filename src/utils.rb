@@ -1156,8 +1156,6 @@ class TmpMsg
     @temp    = temp
     @mutex   = Mutex.new
     @msg     = nil
-    @index   = @@msgs.size
-    @edits   = 0
 
     @@msgs[event] = self
     send
@@ -1171,28 +1169,21 @@ class TmpMsg
         @msg = send_message(@event, content: content) rescue nil
       end
     end
-  end
-
-  def edit_now
-    puts "#{@index}:#{@edits} SYNC  #{!!@msg}"
-    return if !@content || !@msg
-    puts "#{@index}:#{@edits} EDIT  #{!!@msg}"
-    content = @content
-    @content = nil
-    @msg.edit(content) rescue nil
-    puts "#{@index}:#{@edits} DONE  #{!!@msg}"
-    @edits = @edits + 1
+    self
   end
 
   def edit(content, temp: true)
-    puts "#{@index}:#{@edits} ENTRY #{!!@msg}"
     @content = content
     @temp = false if !temp
     _thread do
       @mutex.synchronize do
-        edit_now
+        next if !@content || !@msg
+        content = @content
+        @content = nil
+        @msg.edit(content) rescue nil
       end
     end
+    self
   end
 
   def delete
@@ -1201,10 +1192,19 @@ class TmpMsg
         @msg.delete rescue nil
       end
     end
+    @@msgs.delete(@event)
     @msg     = nil
     @event   = nil
     @content = nil
     @mutex   = nil
+  end
+
+  def ready?
+    !!@content
+  end
+
+  def sent?
+    !!@msg
   end
 end
 
