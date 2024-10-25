@@ -378,6 +378,7 @@ def send_report
   time  = [now - REPORT_UPDATE_SIZE,  base].max
   pad   = [2, DEFAULT_PADDING, 6, 6, 6, 5, 4]
   log   = [] if LOG_REPORT
+  sep   = '│'
 
   changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time} AND `cheated` = 0")
                    .order('`date` DESC')
@@ -410,7 +411,7 @@ def send_report
                          values = p.values.prepend(i)
                          values.each_with_index.map{ |v, j|
                            s = v.to_s.rjust(pad[j], " ")[0..pad[j]-1]
-                           s += " |" if [0, 1, 2].include?(j)
+                           s += ' ' + sep if [0, 1, 2].include?(j)
                            s
                          }.join(" ")
                        }
@@ -421,13 +422,14 @@ def send_report
              .each_with_index
              .map{ |h, i|
                    s = h.ljust(pad[i], " ")
-                   s += " |" if [0, 1, 2].include?(i)
+                   s += '  ' if [0, 1, 2].include?(i)
                    s
                  }
              .join(" ")
+  header = ANSI.under + ANSI.bold + header + ANSI.clear
   sep = "-" * (pad.sum + pad.size + 5)
 
-  send_message($channel, content: "**Weekly highscoring report**:#{format_block([header, sep, changes].join("\n"))}")
+  send_message($channel, content: "**Weekly highscoring report**:#{format_block([header, changes].join("\n"))}")
 
   if LOG_REPORT
     log_text = log.sort_by{ |name, scores| name }.map{ |name, scores|
