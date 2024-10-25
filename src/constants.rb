@@ -203,6 +203,12 @@ ANIMATION_WEDGE_HEIGHT = 4      # Full height of the wedge
 ANIMATION_WEDGE_SEP    = 2      # Separation between wedge and ninja marker
 ANIMATION_WEDGE_WEIGHT = 2      # Thickness of the wedge
 
+# Search results
+IMAGESEARCH_AUTO  = true # Automatically perform image search
+IMAGESEARCH_SCALE = 2    # Screenshot size of image search
+IMAGESEARCH_LIMIT = 10   # Max search results to render
+IMAGESEARCH_COLS  = 5    # Number of columns when sorting results in a grid
+
 # Colors
 TRANSPARENT_COLOR = 0x00FF00FF
 

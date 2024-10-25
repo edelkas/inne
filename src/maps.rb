@@ -476,6 +476,7 @@ module Map
   # whether it's an animation or not
   def self.find_scale(h, anim)
     return ANIMATION_SCALE if anim
+    return IMAGESEARCH_SCALE if h.is_a?(Array)
 
     case h
     when Episodish
@@ -696,7 +697,7 @@ module Map
     scores = texts.take(n).map{ |t| t[/\d+:(.*)-(.*)/, 2].strip }
 
     # Parse map data
-    maps = h.is_level? ? [h] : h.levels
+    maps = h.is_a?(Array) ? h : h.is_level? ? [h] : h.levels
     tiles, object_grid, object_dict = parse_maps(maps, v, anim, trace)
 
     # Return full context as a hash for easy management
@@ -716,13 +717,15 @@ module Map
 
   # Create an initial PNG image with the right dimensions and color to hold a screenshot
   def self.init_png(palette_idx, ppc, h)
-    cols = h.is_level? ? 1 : 5
-    rows = h.is_story? ? 5 : 1
+    list = h.is_a?(Array)
+    cols = list ? [IMAGESEARCH_COLS, h.size].min : h.is_level? ? 1 : 5
+    rows = list ? (h.size.to_f / IMAGESEARCH_COLS).ceil : h.is_story? ? 5 : 1
+    frame = list || !h.is_level?
     dim = 4 * ppc
-    width = dim * (COLUMNS + 2)
-    height = dim * (ROWS + 2)
-    full_width = cols * width  + (cols - 1) * dim + (!h.is_level? ? 2 : 0) * dim
-    full_height = rows * height + (rows - 1) * dim + (!h.is_level? ? 2 : 0) * dim
+    width  = dim * (COLUMNS + 2)
+    height = dim * (ROWS    + 2)
+    full_width  = cols * width  + (cols - 1) * dim + (frame ? 2 : 0) * dim
+    full_height = rows * height + (rows - 1) * dim + (frame ? 2 : 0) * dim
     ChunkyPNG::Image.new(full_width, full_height, PALETTE[2, palette_idx])
   end
 
@@ -1288,7 +1291,8 @@ module Map
   def self.render_screenshot(info, palette_idx, ppc, i: nil)
     # Prepare highscoreable and map data
     h = info[:h]
-    h = h.levels[i] if i
+    list = h.is_a?(Array)
+    h = h.levels[i] if i && !list
     tiles   = i ? [info[:tiles][i]]       : info[:tiles]
     objects = i ? [info[:object_grid][i]] : info[:object_grid]
 
@@ -1299,7 +1303,7 @@ module Map
 
     # Compose image
     unless info[:blank]
-      frame = !h.is_level?
+      frame = list || !h.is_level?
       render_objects(objects, image, ppc: ppc, frame: frame, atlas: object_atlas)
       render_tiles(  tiles  , image, ppc: ppc, frame: frame, palette_idx: palette_idx, atlas: tile_atlas)
       render_borders(tiles  , image, ppc: ppc, frame: frame, palette_idx: palette_idx)
@@ -1529,7 +1533,8 @@ module Map
 
     anim = false if !FEATURE_ANIMATE
     gif = !nsim.empty?
-    filename =  "#{spoiler ? 'SPOILER_' : ''}#{sanitize_filename(h.name)}.#{gif ? 'gif' : 'png'}"
+    basename = h.is_a?(Array) ? 'results' : sanitize_filename(h.name)
+    filename =  "#{spoiler ? 'SPOILER_' : ''}#{basename}.#{gif ? 'gif' : 'png'}"
     memory = [] if BENCH_IMAGES
 
     res = _fork do
@@ -1548,9 +1553,9 @@ module Map
       res = nil
 
       # Render each highscoreable
-      multi = h.is_episode? && gif && anim
+      multi = !h.is_a?(Array) && h.is_episode? && gif && anim
       h_list = multi ? h.levels : [h]
-      h_list.each_with_index{ |h, i|
+      h_list.each_with_index{ |_, i|
         # Generate PNG screenshot
         context_png = render_screenshot(context_info, palette_idx, ppc, i: multi ? i : nil)
         if BENCH_IMAGES

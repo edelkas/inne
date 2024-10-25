@@ -1208,10 +1208,15 @@ def format_level_matches(event, msg, page, matches, name)
     list = list[pag[:offset]...pag[:offset] + PAGE_SIZE]
   end
 
-  # Print list and optionally add navigation buttons
+  # Print list and optionally add navigation buttons and screenshot
   content = "#{name.capitalize}: #{matches[0]}\n#{format_level_list(list)}"
   view = matches[1].size > PAGE_SIZE ? interaction_add_button_navigation(nil, pag[:page], pag[:pages]) : nil
-  send_message(event, content: content, components: view)
+  if IMAGESEARCH_AUTO && matches[1].size <= IMAGESEARCH_LIMIT
+    hash = parse_palette(event)
+    screenshot = Map.screenshot(hash[:palette], file: true, h: list)
+    attachments = [screenshot] if screenshot
+  end
+  send_message(event, content: content, components: view, files: attachments || [])
   perror('', log: false, discord: false)
 end
 
