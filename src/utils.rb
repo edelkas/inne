@@ -2244,24 +2244,59 @@ end
 #   - Floats will also be formatted with 3 decimals
 # Additionally, all entries will be padded.
 # An entry could also be the symbol :sep, will will insert a separator in that row
-def make_table(rows, header = nil, sep_x = "=", sep_y = "|", sep_i = "x")
+def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false)
+  # Convert all non-integer numbers to floats
+  rows.each{ |r|
+    next unless r.is_a?(Array)
+    r.map!{ |e| e.is_a?(Numeric) && !e.integer? ? e.to_f : e }
+  }
+
+  # Compute column widths
   text_rows = rows.select{ |r| r.is_a?(Array) }
   count = text_rows.map(&:size).max
   rows.each{ |r| if r.is_a?(Array) then r << "" while r.size < count end }
   widths = (0..count - 1).map{ |c| text_rows.map{ |r| (r[c].is_a?(Float) ? "%.3f" % r[c] : r[c].to_s).length }.max }
-  sep = widths.map{ |w| sep_i + sep_x * (w + 2) }.join + sep_i + "\n"
-  table = sep.dup
-  table << sep_y + " " * (((sep.size - 1) - header.size) / 2) + header + " " * ((sep.size - 1) - ((sep.size - 1) - header.size) / 2 - header.size - 2) + sep_y + "\n" + sep if !header.nil?
+
+  # Build connectors
+  ver        = sep_y ? sep_y : double ? '║' : heavy ? '┃' : '│'
+  hor        = sep_x ? sep_x : double ? '═' : heavy ? '━' : '─'
+  up_left    = sep_i ? sep_i : double ? '╔' : heavy ? '┏' : '┌'
+  up_mid     = sep_i ? sep_i : double ? '╦' : heavy ? '┳' : '┬'
+  up_right   = sep_i ? sep_i : double ? '╗' : heavy ? '┓' : '┐'
+  mid_left   = sep_i ? sep_i : double ? '╠' : heavy ? '┣' : '├'
+  mid_mid    = sep_i ? sep_i : double ? '╬' : heavy ? '╋' : '┼'
+  mid_right  = sep_i ? sep_i : double ? '╣' : heavy ? '┫' : '┤'
+  down_left  = sep_i ? sep_i : double ? '╚' : heavy ? '┗' : '└'
+  down_mid   = sep_i ? sep_i : double ? '╩' : heavy ? '┻' : '┴'
+  down_right = sep_i ? sep_i : double ? '╝' : heavy ? '┛' : '┘'
+  sep_up     = up_left   + widths.map{ |w| hor * (w + 2) }.join(up_mid)   + up_right
+  sep_mid    = mid_left  + widths.map{ |w| hor * (w + 2) }.join(mid_mid)  + mid_right
+  sep_down   = down_left + widths.map{ |w| hor * (w + 2) }.join(down_mid) + down_right
+  clean_up   = up_left   + widths.map{ |w| hor * (w + 2) }.join(hor)      + up_right
+  clean_mid  = mid_left  + widths.map{ |w| hor * (w + 2) }.join(hor)      + mid_right
+  clean_down = mid_left  + widths.map{ |w| hor * (w + 2) }.join(up_mid)   + mid_right
+
+  # Build table
+  table = ''
+  if !header.nil?
+    header = ' ' + header + ' '
+    table << clean_up + "\n"
+    table << ver + ANSI.bold + header.center(sep_mid.size - 2, '░') + ANSI.clear + ver + "\n"
+    table << clean_down + "\n"
+  else
+    table << sep_up + "\n"
+  end
   rows.each{ |r|
-    if r == :sep
-      table << sep
-    else
-      r.each_with_index{ |s, i|
-        table << sep_y + " " + (s.is_a?(Numeric) ? (s.is_a?(Integer) ? s : "%.3f" % s).to_s.rjust(widths[i], " ") : s.to_s.ljust(widths[i], " ")) + " "
-      }
-      table << sep_y + "\n"
-    end
+    next table << sep_mid + "\n" if r == :sep
+    r.each_with_index{ |s, i|
+      sign = s.is_a?(Numeric) ? '' : '-'
+      fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
+      table << ver + ' ' + "%#{sign}#{widths[i]}#{fmt}" % s + ' '
+      #table << ver + " " + (s.is_a?(Numeric) ? (s.is_a?(Integer) ? s : "%.3f" % s).to_s.rjust(widths[i], " ") : s.to_s.ljust(widths[i], " ")) + " "
+    }
+    table << ver + "\n"
   }
-  table << sep
+  table << sep_down
+
   return table
 end

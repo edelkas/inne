@@ -1029,10 +1029,11 @@ def send_table(event)
   star  = format_star(star)
   ties  = format_ties(ties)
   range = format_range(range[0], range[1], [:maxed, :maxable].include?(rtype))
-  header = "#{cool} #{range}#{star} #{header} #{ties} table".squish
+  name = "#{cool} #{range}#{star} #{header} #{ties}".squish
+  header = "#{name} table".squish
   player = global ? "" : "#{player.format_name.strip}'s "
-  event << "#{player} #{global ? header.capitalize : header} #{format_time}:".squish
-  event << format_block(make_table(rows))
+  #event << "#{player} #{global ? header.capitalize : header} #{format_time}:".squish
+  event << format_block(make_table(rows, name.capitalize.pluralize))
 rescue => e
   lex(e, "Error crafting table.", event: event)
 end
