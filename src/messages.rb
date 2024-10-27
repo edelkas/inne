@@ -595,8 +595,8 @@ def send_stats(event)
   histogram = make_histogram(full_counts.map(&:first).each_with_index.to_a.map(&:reverse))
 
   # Format response
-  header1 = "Player #{format_tabs(tabs)} highscore counts for #{player.print_name}:"
-  header2 = "Player #{format_tabs(tabs)} highscore histogram for #{player.print_name}:"
+  header1 = "Player #{format_tabs(tabs)} highscore counts for #{player.print_name}:".squish
+  header2 = "Player #{format_tabs(tabs)} highscore histogram for #{player.print_name}:".squish
   widths  = [5, 4, 4, 4, 4]
   pads_d  = widths.map{ |w| "%#{w}d" }.join(' ')
   pads_s  = widths.map{ |w| "%#{w}s" }.join(' ')
@@ -612,7 +612,8 @@ def send_stats(event)
 
   send_message(event, content: header1 + format_block(stats))
   sleep(0.25)
-  send_message(event, content: header2 + format_block(histogram))
+  send_message(event, content: format_block(histogram))
+  dbg("Length: #{format_block(histogram).size}")
 rescue => e
   lex(e, "Error computing stats.", event: event)
 end

@@ -2300,8 +2300,20 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
   return table
 end
 
-# Construct a simple histogram based on a list of pairs (value, amount)
-def make_histogram(values, steps: 10, hor_step: 5, vert_step: 4, grid: false, labels: true)
+# Construct a simple text-based histogram (requires Unicode support)
+def make_histogram(
+    values, # List of pairs (value, amount)
+    title:       'Histogram',   # Title of the histogram, will appear at the top
+    steps:       10,            # Rough number of steps in the Y axis
+    hor_step:    5,             # X axis grid lines separation (also for labels)
+    vert_step:   4,             # Y axis grid lines separation
+    grid:        false,         # Whether to draw the grid
+    frame:       true,          # Whether to frame the histogram in a rectangle
+    labels:      true,          # Whether to write X axis labels
+    color_graph: ANSI.blue,     # ANSI color for the graph bars
+    color_lines: ANSI.magenta,  # ANSI color for the lines (frame and axes)
+    color_text:  ANSI.green     # ANSI color for the axes labels
+  )
   max_y = values.max_by(&:last).last
   min_y = values.min_by(&:last).last
   range_y = max_y - min_y
@@ -2318,21 +2330,27 @@ def make_histogram(values, steps: 10, hor_step: 5, vert_step: 4, grid: false, la
   end
   heights = values.map{ |_, n| (n / step.to_f).round }
   pad = range_y >= 1 ? Math.log10(range_y).floor + 1 : 0
+  width = pad + 3 + values.size
   histogram = ""
+  histogram << ANSI.bold + title.center(width + (frame ? 4 : 0)) + ANSI.clear << "\n" if title
+  histogram << (color_lines || '') << '┌─' << '─' * width << '─┐' << "\n" if frame
   steps.times.reverse_each do |s|
-    histogram << "%*d │ " % [pad, step * (s + 1)]
+    histogram << (color_lines || '') << '│ ' if frame
+    histogram << (color_text || '') << "%*d" % [pad, step * (s + 1)] << (color_lines || '') << " │ "
+    histogram << color_graph if color_graph
     is_row = grid && (s + 1) % vert_step == 0
     heights.each_with_index{ |h, i|
       is_col = grid && i % hor_step == 0
       empty_char = is_row ? (is_col ? '·' : '·') : (is_col ? '.' : ' ')
       histogram << (h >= (s + 1) ? '▌' : empty_char)
     }
+    histogram << (color_lines || '') << ' │' if frame
     histogram << "\n"
   end
   x_axis = '─' * values.size
   i = -hor_step
   x_axis[i += hor_step] = '╥' while i < x_axis.size - hor_step if labels
-  histogram << '─' * pad + '─┴─' + x_axis
+  histogram << (frame ? (color_lines || '') + '│ ' : '') << '─' * pad + '─┴─' + x_axis << (frame ? ' │' : '')
   label_row = ' ' * x_axis.size
   if labels
     x_axis.each_char.with_index{ |c, i|
@@ -2341,7 +2359,9 @@ def make_histogram(values, steps: 10, hor_step: 5, vert_step: 4, grid: false, la
       label_row[i - label.size / 2, label.size] = label
     }
     label_row.prepend(' ' * (pad + 3))
-    histogram << "\n" + label_row
+    histogram << "\n" << (frame ? '│ ' : '') << (color_text || '') << label_row << (frame ? ((color_lines || '') + ' │') : '')
   end
+  histogram << "\n" << (color_lines || '') << '└─' << '─' * width << '─┘' if frame
+  histogram << ANSI.clear
   histogram
 end
