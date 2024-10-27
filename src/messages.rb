@@ -582,39 +582,37 @@ def send_stats(event)
 
   # Retrieve counts and generate table and histogram
   counts = player.score_counts(tabs, ties)
-
   full_counts = (0..19).map{ |r|
     l = counts[:levels][r].to_i
     e = counts[:episodes][r].to_i
     s = counts[:stories][r].to_i
-    [l + e, l, e, s]
+    [l + e + s, l + e, l, e, s]
   }
-
-  histogram = AsciiCharts::Cartesian.new(
-    (0..19).map{ |r| [r, counts[:levels][r].to_i + counts[:episodes][r].to_i] },
-    bar: true,
-    hide_zero: true,
-    max_y_vals: 15,
-    title: 'Score histogram'
-  ).draw
+  totals = full_counts.reduce([0] * 5) { |sums, curr| sums.zip(curr).map(&:sum) }
+  maxes = [Level, Episode, Story].map{ |t| find_max(:rank, t, tabs) }
+  maxes.prepend(maxes.sum, maxes[0,2].sum)
+  percents = totals.map.with_index{ |tot, i| (100.0 * tot / maxes[i]).round }
+  histogram = make_histogram(full_counts.map(&:first).each_with_index.to_a.map(&:reverse))
 
   # Format response
-  totals  = full_counts.each_with_index.map{ |c, r| "#{Highscoreable.format_rank(r)}: #{"   %4d  %4d    %4d   %4d" % c}" }.join("\n\t")
-  overall = "Totals:    %4d  %4d    %4d   %4d" % full_counts.reduce([0, 0, 0, 0]) { |sums, curr| sums.zip(curr).map { |a| a[0] + a[1] } }
-  maxes   = [Level, Episode, Story].map{ |t| find_max(:rank, t, tabs) }
-  maxes   = "Max:       %4d  %4d    %4d   %4d" % maxes.unshift(maxes[0] + maxes[1])
-  tabs    = tabs.empty? ? "" : " in the #{format_tabs(tabs)} #{tabs.length == 1 ? 'tab' : 'tabs'}"
-  msg1    = "Player highscore counts for #{player.print_name}#{tabs}:\n```        Overall Level Episode Column\n\t#{totals}\n#{overall}\n#{maxes}"
-  msg2    = "#{histogram}```"
+  header1 = "Player #{format_tabs(tabs)} highscore counts for #{player.print_name}:"
+  header2 = "Player #{format_tabs(tabs)} highscore histogram for #{player.print_name}:"
+  widths  = [5, 4, 4, 4, 4]
+  pads_d  = widths.map{ |w| "%#{w}d" }.join(' ')
+  pads_s  = widths.map{ |w| "%#{w}s" }.join(' ')
+  pads_p  = widths.map{ |w| "%#{w - 1}d%%" }.join(' ')
+  counts  = full_counts.each_with_index.map{ |c, r| "#{Highscoreable.format_rank(r)} │ #{pads_d % c}" }.join("\n ")
+  tot     = "Tot │ #{pads_d}"  % totals
+  max     = "Max │ #{pads_d}"  % maxes
+  per     = "  %% │ #{pads_p}" % percents
+  stats   = "#{ANSI.bold}      #{pads_s}#{ANSI.clear}\n" % ['Total', 'Solo', 'Lvl', 'Ep', 'Col']
+  sep1    = '─' * 4 + '┬' + '─' * (tot.size - 5)
+  sep2    = '─' * 4 + '┼' + '─' * (tot.size - 5)
+  stats << sep1 << "\n " << counts << "\n" << sep2 << "\n" << tot << "\n" << max << "\n" << per
 
-  # Send response (careful, it can go over the char limit)
-  if msg1.length + msg2.length <= DISCORD_CHAR_LIMIT
-    event << msg1
-    event << msg2
-  else
-    send_message(event, content: msg1 + "```")
-    send_message(event, content: "```" + msg2)
-  end
+  send_message(event, content: header1 + format_block(stats))
+  sleep(0.25)
+  send_message(event, content: header2 + format_block(histogram))
 rescue => e
   lex(e, "Error computing stats.", event: event)
 end

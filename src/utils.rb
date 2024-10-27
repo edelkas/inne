@@ -2292,11 +2292,56 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
       sign = s.is_a?(Numeric) ? '' : '-'
       fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
       table << ver + ' ' + "%#{sign}#{widths[i]}#{fmt}" % s + ' '
-      #table << ver + " " + (s.is_a?(Numeric) ? (s.is_a?(Integer) ? s : "%.3f" % s).to_s.rjust(widths[i], " ") : s.to_s.ljust(widths[i], " ")) + " "
     }
     table << ver + "\n"
   }
   table << sep_down
 
   return table
+end
+
+# Construct a simple histogram based on a list of pairs (value, amount)
+def make_histogram(values, steps: 10, hor_step: 5, vert_step: 4, grid: false, labels: true)
+  max_y = values.max_by(&:last).last
+  min_y = values.min_by(&:last).last
+  range_y = max_y - min_y
+  if range_y <= steps
+    step = 1
+    steps = range_y
+  else
+    step = range_y / steps.to_f
+    exp = Math.log10(step).floor
+    base_step = step / 10 ** exp
+    base_steps = [1, 2, 5]
+    step = base_steps.min_by{ |s| (s - base_step).abs } * 10 ** exp
+    steps = (range_y / step.to_f).round
+  end
+  heights = values.map{ |_, n| (n / step.to_f).round }
+  pad = range_y >= 1 ? Math.log10(range_y).floor + 1 : 0
+  histogram = ""
+  steps.times.reverse_each do |s|
+    histogram << "%*d │ " % [pad, step * (s + 1)]
+    is_row = grid && (s + 1) % vert_step == 0
+    heights.each_with_index{ |h, i|
+      is_col = grid && i % hor_step == 0
+      empty_char = is_row ? (is_col ? '·' : '·') : (is_col ? '.' : ' ')
+      histogram << (h >= (s + 1) ? '▌' : empty_char)
+    }
+    histogram << "\n"
+  end
+  x_axis = '─' * values.size
+  i = -hor_step
+  x_axis[i += hor_step] = '╥' while i < x_axis.size - hor_step if labels
+  histogram << '─' * pad + '─┴─' + x_axis
+  label_row = ' ' * x_axis.size
+  if labels
+    x_axis.each_char.with_index{ |c, i|
+      next if c == '─'
+      label = values[i][0].to_s
+      label_row[i - label.size / 2, label.size] = label
+    }
+    label_row.prepend(' ' * (pad + 3))
+    histogram << "\n" + label_row
+  end
+  histogram
 end
