@@ -844,9 +844,13 @@ class Entity:
             self.last_exported_state = state
 
     def log_position(self):
-        """Log position of entity on current frame"""
+        """Log position of entity on current frame.
+        Clamp it into a signed 2-byte integer for memory reasons."""
         if self.log_positions and self.active:
-            self.poslog.append((self.xpos, self.ypos))
+            lim = (1 << 15) - 1
+            xpos = clamp(round(10 * self.xpos), -lim, lim)
+            ypos = clamp(round(10 * self.ypos), -lim, lim)
+            self.poslog.append((xpos, ypos))
 
 
 class EntityToggleMine(Entity):
@@ -2380,21 +2384,17 @@ def map_vector_to_orientation(xdir, ydir):
     if angle < 0: angle += 2 * math.pi
     return round(8 * angle / (2 * math.pi)) % 8
 
+def clamp(n, a, b):
+    """Force a number n into a range (a, b)"""
+    return a if n < a else b if n > b else n
+
 def clamp_cell(xcell, ycell):
     """If necessary, adjust coordinates of cell so it is in bounds."""
-    xcell = max(xcell, 0)
-    xcell = min(xcell, 43)
-    ycell = max(ycell, 0)
-    ycell = min(ycell, 24)
-    return (xcell, ycell)
+    return (clamp(xcell, 0, 43), clamp(ycell, 0, 24))
 
 def clamp_half_cell(xcell, ycell):
     """If necessary, adjust coordinates of half cell so it is in bounds."""
-    xcell = max(xcell, 0)
-    xcell = min(xcell, 88)
-    ycell = max(ycell, 0)
-    ycell = min(ycell, 50)
-    return (xcell, ycell)
+    return (clamp(xcell, 0, 88), clamp(ycell, 0, 50))
 
 def is_empty_row(sim, xcoord1, xcoord2, ycoord, dir):
     """Return true if the cell has no solid horizontal edge in the specified direction."""

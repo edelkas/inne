@@ -1554,7 +1554,7 @@ class NSim
       entity_count.times do
         id, index, frames = fparse(f, 'CS<S<')
         next f.seek(16 * frames, :CUR) if @coords_raw[id][index]
-        @coords_raw[id][index] = fparse(f, "E#{2 * frames}").each_slice(2).to_a
+        @coords_raw[id][index] = fparse(f, "s<#{2 * frames}").each_slice(2).to_a
       end
 
       # Entity collision section
@@ -1635,6 +1635,13 @@ class NSim
     )
   end
 
+  # Coordinates are exported and stored scaled for memory reasons, so before using
+  # them we must unpack them back to a standard units
+  def fix_coords(pos)
+    return nil if !pos || pos.any?{ |c| c.abs >= (1 << 15) - 1 }
+    pos.map{ |c| c / 10.0 }
+  end
+
   # Rescale coordinates (which are given in game units) for drawing
   def rescale(pos, ppc = @ppc)
     ppc == 0 ? pos : pos.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
@@ -1644,7 +1651,7 @@ class NSim
   # ppc contains the scale (in pixels per coordinate) if the coordinates need
   # to be scaled for drawing
   def coords(id, index, frame, ppc: @ppc)
-    pos = @coords_raw[id][index]&.[](frame)
+    pos = fix_coords(@coords_raw[id][index]&.[](frame))
     return nil if !pos
     rescale(pos, ppc)
   end
@@ -1670,7 +1677,7 @@ class NSim
     res = []
     @coords_raw.each{ |id, list|
       list.each{ |idx, c_list|
-        pos = c_list[frame ... frame + step].to_a.last
+        pos = fix_coords(c_list[frame ... frame + step].to_a.last)
         next if !pos
         res << { id: id, index: idx, coords: rescale(pos, ppc) }
       }

@@ -46,8 +46,6 @@ elif tool_mode == "splits":
 HOR_INPUTS_DIC = {0:0, 1:0, 2:1, 3:1, 4:-1, 5:-1, 6:-1, 7:-1}
 JUMP_INPUTS_DIC = {0:0, 1:1, 2:0, 3:1, 4:0, 5:1, 6:0, 7:1}
 
-xposlog = []
-yposlog = []
 goldlog = []
 frameslog = []
 validlog = []
@@ -84,13 +82,14 @@ for i in range(len(inputs_list)):
             break
 
     #Append to the logs for each replay.
-    xposlog.append(sim.ninja.xposlog)
-    yposlog.append(sim.ninja.yposlog)
     goldlog.append(sim.gold_collected)
     frameslog.append(inp_len)
     validlog.append(valid)
     collisionlog.append(sim.collisionlog)
-    entities = [(0, i, list(zip(sim.ninja.xposlog, sim.ninja.yposlog)))]
+    lim = (1 << 15) - 1
+    xposlog = [clamp(round(10 * xpos), -lim, lim) for xpos in sim.ninja.xposlog]
+    yposlog = [clamp(round(10 * ypos), -lim, lim) for ypos in sim.ninja.yposlog]
+    entities = [(0, i, list(zip(xposlog, yposlog)))]
     entities += [(e.type, e.index, e.poslog) for l in sim.entity_dic.values() for e in l if e.log_positions]
     entitylog.append(entities)
 
@@ -111,7 +110,7 @@ if tool_mode == "trace":
                 frames = len(entity[2])
                 f.write(struct.pack('<BHH', *(entity[:2] + (frames,))))
                 for frame in range(frames):
-                    f.write(struct.pack('<2d', *entity[2][frame]))
+                    f.write(struct.pack('<2h', *entity[2][frame]))
             # Collision section
             collisions = len(collisionlog[i])
             f.write(struct.pack('<L', collisions))
