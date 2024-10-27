@@ -986,39 +986,39 @@ def send_table(event)
     totals = Level::tabs.select{ |tab, id| id < 7 }.map{ |tab, id|
       lvl = scores[0][tab] || 0
       ep  = scores[1][tab] || 0
-      [format_tab(tab.to_sym), lvl, ep, lvl + ep]
+      col = scores[2][tab] || 0
+      [format_tab(tab.to_sym), lvl, ep, col, lvl + ep, lvl + ep + col]
     }
   end
   table = Level::tabs.select{ |tab, id| id < 7 }.each_with_index.map{ |tab, i|
     lvl = table[0][tab[0]] || 0
     ep  = table[1][tab[0]] || 0
+    col = table[2][tab[0]] || 0
     [
       format_tab(tab[0].to_sym),
       avg ? lvl : round_score(lvl),
-      avg ? ep : round_score(ep),
-      avg ? wavg([lvl, ep], totals[i][1..2]) : round_score(lvl + ep)
+      avg ? ep  : round_score(ep),
+      avg ? col : round_score(col),
+      avg ? wavg([lvl, ep],      totals[i][1..2]) : round_score(lvl + ep),
+      avg ? wavg([lvl, ep, col], totals[i][1..3]) : round_score(lvl + ep + col)
     ]
   }
 
   # Format table rows
   rows = []
-  rows << ["", "Level", "Episode", "Total"]
+  rows << ["", "Level", "Episode", "Column", "Solo", "Total"]
   rows << :sep
   rows += table
   rows << :sep
   if !avg
     rows << [
       "Total",
-      table.map(&:second).sum,
-      table.map(&:third).sum,
-      table.map(&:fourth).sum
+      *5.times.map{ |i| table.map{ |t| t[i + 1] }.sum }
     ]
   else
     rows << [
       "Total",
-      wavg(table.map(&:second), totals.map(&:second)),
-      wavg(table.map(&:third),  totals.map(&:third)),
-      wavg(table.map(&:fourth), totals.map(&:fourth))
+      *5.times.map{ |i| wavg(table.map{ |t| t[i + 1] }, totals.map{ |t| t[i + 1] }) }
     ]
   end
 

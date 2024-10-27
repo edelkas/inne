@@ -2244,7 +2244,7 @@ end
 #   - Floats will also be formatted with 3 decimals
 # Additionally, all entries will be padded.
 # An entry could also be the symbol :sep, will will insert a separator in that row
-def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false)
+def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false, hor_pad: true)
   # Convert all non-integer numbers to floats
   rows.each{ |r|
     next unless r.is_a?(Array)
@@ -2269,12 +2269,12 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
   down_left  = sep_i ? sep_i : double ? '╚' : heavy ? '┗' : '└'
   down_mid   = sep_i ? sep_i : double ? '╩' : heavy ? '┻' : '┴'
   down_right = sep_i ? sep_i : double ? '╝' : heavy ? '┛' : '┘'
-  sep_up     = up_left   + widths.map{ |w| hor * (w + 2) }.join(up_mid)   + up_right
-  sep_mid    = mid_left  + widths.map{ |w| hor * (w + 2) }.join(mid_mid)  + mid_right
-  sep_down   = down_left + widths.map{ |w| hor * (w + 2) }.join(down_mid) + down_right
-  clean_up   = up_left   + widths.map{ |w| hor * (w + 2) }.join(hor)      + up_right
-  clean_mid  = mid_left  + widths.map{ |w| hor * (w + 2) }.join(hor)      + mid_right
-  clean_down = mid_left  + widths.map{ |w| hor * (w + 2) }.join(up_mid)   + mid_right
+  sep_up     = up_left   + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + up_right
+  sep_mid    = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(mid_mid)  + mid_right
+  sep_down   = down_left + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(down_mid) + down_right
+  clean_up   = up_left   + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + up_right
+  clean_mid  = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + mid_right
+  clean_down = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + mid_right
 
   # Build table
   table = ''
@@ -2291,7 +2291,7 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
     r.each_with_index{ |s, i|
       sign = s.is_a?(Numeric) ? '' : '-'
       fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
-      table << ver + ' ' + "%#{sign}#{widths[i]}#{fmt}" % s + ' '
+      table << ver + (hor_pad ? ' ' : '') + "%#{sign}#{widths[i]}#{fmt}" % s + (hor_pad ? ' ' : '')
     }
     table << ver + "\n"
   }
