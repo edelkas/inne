@@ -1556,7 +1556,7 @@ end
 # TODO: Make splits use this as well.
 class NSim
 
-  attr_reader :count, :success, :correct, :valid, :valid_flags, :coords_raw
+  attr_reader :count, :success, :correct, :valid, :valid_flags
   attr_accessor :ppc
   Collision = Struct.new(:id, :index, :state)
 
@@ -1690,12 +1690,12 @@ class NSim
 
   # Run is finished for this ninja on this frame
   def finished?(index, frame, trace: false)
-    @coords_raw[0][index].size < frame + 1 + (trace ? 1 : 0)
+    length(index) < frame + 1 + (trace ? 1 : 0)
   end
 
   # Run just finished on the given frame range (of width "step")
   def just_finished?(index, frame, step, trace: false)
-    @coords_raw[0][index].size.between?(
+    length(index).between?(
       frame +    1 + (trace ? 1 : 0),
       frame + step + (trace ? 1 : 0)
     )

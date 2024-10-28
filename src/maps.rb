@@ -1393,16 +1393,13 @@ module Map
 
     # Trace -> Draw whole trace and return encoded (static) GIF
     dim = 4 * gif[:ppc]
-    scale = gif[:ppc] * 4.0 / Map::UNITS
     off_x = !info[:h].is_level? ? dim : 0
     off_y = off_x
     info[:nsim].each{ |level|
-      level.coords_raw[0].reverse_each{ |i, c_list|
-        (0 ... c_list.size - 1).each{ |f|
-          x1 = (c_list[f][0] * scale).round
-          y1 = (c_list[f][1] * scale).round
-          x2 = (c_list[f + 1][0] * scale).round
-          y2 = (c_list[f + 1][1] * scale).round
+      level.count.times.reverse_each{ |i|
+        (level.length(i) - 1).times.each{ |f|
+          x1, y1 = level.ninja(i, f)
+          x2, y2 = level.ninja(i, f + 1)
           p1 = [off_x + x1, off_y + y1]
           p2 = [off_x + x2, off_y + y2]
           background.line(p1: p1, p2: p2, color: gif[:colors][:ninja][i], weight: info[:h].is_level? ? 2 : 1)
@@ -1721,12 +1718,9 @@ module Map
 
       # Plot traces
       n.times.each{ |i|
-        mpl.plot(
-          nsim.coords_raw[0][n - 1 - i].map(&:first),
-          nsim.coords_raw[0][n - 1 - i].map(&:last),
-          colors[n - 1 - i],
-          linewidth: 0.5
-        )
+        j = n - 1 - i
+        coords = nsim.length(j).times.map{ |f| nsim.ninja(j, f) }.transpose
+        mpl.plot(coords[0], coords[1], colors[j], linewidth: 0.5)
       }
       bench(:step, 'Trace plot', pad_str: 11) if BENCH_IMAGES
 
