@@ -1,3 +1,4 @@
+import array
 import math
 from itertools import product
 import os.path
@@ -816,7 +817,7 @@ class Entity:
         self.sim = sim
         self.xpos = xcoord*6
         self.ypos = ycoord*6
-        self.poslog = []
+        self.poslog = array.array('h')
         self.active = True
         self.is_logical_collidable = False
         self.is_physical_collidable = False
@@ -840,18 +841,15 @@ class Entity:
     def log_collision(self, state=1):
         """Log an interaction with this entity"""
         if self.log_collisions and self.sim.frame > 0 and state != self.last_exported_state:
-            self.sim.collisionlog.append((self.sim.frame, self.type, self.index, state))
+            self.sim.collisionlog.append(struct.pack('<HBHB', self.sim.frame, self.type, self.index, state))
             self.last_exported_state = state
 
     def log_position(self):
         """Log position of entity on current frame.
         Clamp it into a signed 2-byte integer for memory reasons."""
         if self.log_positions and self.active:
-            lim = (1 << 15) - 1
-            xpos = clamp(round(10 * self.xpos), -lim, lim)
-            ypos = clamp(round(10 * self.ypos), -lim, lim)
-            self.poslog.append((xpos, ypos))
-
+            self.poslog.append(pack_coord(self.xpos))
+            self.poslog.append(pack_coord(self.ypos))
 
 class EntityToggleMine(Entity):
     """This class handles both toggle mines (untoggled state) and regular mines (toggled state)."""
@@ -2395,6 +2393,11 @@ def clamp_cell(xcell, ycell):
 def clamp_half_cell(xcell, ycell):
     """If necessary, adjust coordinates of half cell so it is in bounds."""
     return (clamp(xcell, 0, 88), clamp(ycell, 0, 50))
+
+def pack_coord(coord):
+    """Pack a coordinate into a signed short for exporting"""
+    lim = (1 << 15) - 1
+    return clamp(round(10 * coord), -lim, lim)
 
 def is_empty_row(sim, xcoord1, xcoord2, ycoord, dir):
     """Return true if the cell has no solid horizontal edge in the specified direction."""

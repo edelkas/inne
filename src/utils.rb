@@ -235,7 +235,7 @@ module Log extend self
 
     # Log to Discord DMs, if specified
     discord(text) if log_to_discord
-    !TmpMsg.empty? ? TmpMsg.final(text) : send_message(event, content: text, edit: false) if event
+    TmpMsg.update(event, text, temp: false) if event
 
     # Log occurrence to db
     action_inc('logs')
@@ -1247,16 +1247,13 @@ class TmpMsg
   end
 
   def delete
+    @@msgs.delete(@event)
     if @temp
       @mutex.synchronize do
         @msg.delete rescue nil
       end
     end
-    @@msgs.delete(@event)
-    @msg     = nil
-    @event   = nil
-    @content = nil
-    @mutex   = nil
+    @event = nil
   end
 
   def ready?
@@ -1577,7 +1574,7 @@ class NSim
   end
 
   # Export input files for nsim
-  def export
+  private def export
     if @splits
       File.binwrite(NTRACE_INPUTS_E, @demo_data)
       @map_data.each_with_index{ |map, i| File.binwrite(NTRACE_MAP_DATA_E % i, map) }
@@ -1588,7 +1585,7 @@ class NSim
   end
 
   # Execute simulation
-  def execute(basic_sim: true, basic_render: true)
+  private def execute(basic_sim: true, basic_render: true)
     path = PATH_NTRACE + (basic_sim ? ' basic_sim' : '') + (basic_render ? ' basic_render' : '')
     stdout, stderr, status = python(path, output: true)
     @output = [stdout, stderr].join("\n\n")
@@ -1596,7 +1593,7 @@ class NSim
   end
 
   # Remove all temp files
-  def clean
+  private def clean
     if @splits
       FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')], force: true)
     else
@@ -1607,7 +1604,7 @@ class NSim
 
   # Parse nsim's output file and read entity coordinates and collisions
   # TODO: Should we deduplicate collisions, or handle it later?
-  def parse
+  private def parse
     f = File.open(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT, 'rb')
 
     # Run count and valid flags
@@ -1620,16 +1617,16 @@ class NSim
       entity_count.times do
         id, index, frames = fparse(f, 'CS<S<')
         next f.seek(4 * frames, :CUR) if @coords_raw[id][index]
-        @coords_raw[id][index] = fparse(f, "s<#{2 * frames}").each_slice(2).to_a
+        @coords_raw[id][index] = f.read(4 * frames)
       end
 
       # Entity collision section
       collision_count, = fparse(f, 'L<')
       collision_count.times do
-        frame, id, index, state = fparse(f, 'S<CS<C')
-        @collisions_raw[frame] ||= []
-        id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
-        @collisions_raw[frame] << Collision.new(id, index, state)
+        collision = f.read(6)
+        frame, = collision.unpack('S<')
+        @collisions_raw[frame] ||= ""
+        @collisions_raw[frame] << collision[2, 4]
       end
     end
 
@@ -1657,7 +1654,7 @@ class NSim
 
   # Check if nsim was executed successfully, its output parsed correctly, and
   # its result is a valid run
-  def validate
+  private def validate
     @valid = @success && @correct && @valid_flags.all?
   end
 
@@ -1676,7 +1673,7 @@ class NSim
     if @splits
       index ? @demos[index].size : @demos.map(&:size).sum
     else
-      index ? @coords_raw[0][index].size : @coords_raw[0].map{ |index, coords| coords.length }.max
+      index ? @coords_raw[0][index].length / 4 : @coords_raw[0].map{ |index, coords| coords.length / 4 }.max
     end
   end
 
@@ -1701,23 +1698,11 @@ class NSim
     )
   end
 
-  # Coordinates are exported and stored scaled for memory reasons, so before using
-  # them we must unpack them back to a standard units
-  def fix_coords(pos)
-    return nil if !pos || pos.any?{ |c| c.abs >= (1 << 15) - 1 }
-    pos.map{ |c| c / 10.0 }
-  end
-
-  # Rescale coordinates (which are given in game units) for drawing
-  def rescale(pos, ppc = @ppc)
-    ppc == 0 ? pos : pos.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
-  end
-
   # Return coordinates of an entity for the given frame
   # ppc contains the scale (in pixels per coordinate) if the coordinates need
   # to be scaled for drawing
   def coords(id, index, frame, ppc: @ppc)
-    pos = fix_coords(@coords_raw[id][index]&.[](frame))
+    pos = fetch_coords(id, index, frame)
     return nil if !pos
     rescale(pos, ppc)
   end
@@ -1735,20 +1720,40 @@ class NSim
   # Return array of collisions for the given frame
   def collisions(frame)
     return [] if !@collisions_raw[frame]
-    @collisions_raw[frame]
+    @collisions_raw[frame].scan(/..../m).map{ |c|
+      id, index, state = c.unpack('CS<C')
+      id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
+      Collision.new(id, index, state)
+    }
   end
 
   # Return entity movements for the given frame range
   def movements(frame, step, ppc: @ppc)
     res = []
     @coords_raw.each{ |id, list|
-      list.each{ |idx, c_list|
-        pos = fix_coords(c_list[frame ... frame + step].to_a.last)
+      list.each{ |index, _|
+        pos = fetch_coords(id, index, frame, step)
         next if !pos
-        res << { id: id, index: idx, coords: rescale(pos, ppc) }
+        res << { id: id, index: index, coords: rescale(pos, ppc) }
       }
     }
     res
+  end
+
+  private
+
+  # Coordinates are exported and stored scaled and packed for memory reasons,
+  # so before using them we must unpack them and scale them
+  def fetch_coords(id, index, frame, step = 1)
+    poslog = @coords_raw[id]&.[](index)
+    return nil if !poslog || poslog.length / 4 < frame + 1
+    f = [frame + step - 1, poslog.length / 4 - 1].min
+    poslog[4 * f, 4].unpack('s<2').map{ |c| c / 10.0 }
+  end
+
+  # Rescale coordinates (which are given in game units) for drawing
+  def rescale(pos, ppc = @ppc)
+    ppc == 0 ? pos : pos.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
   end
 end
 

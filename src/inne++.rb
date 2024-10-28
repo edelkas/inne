@@ -247,7 +247,7 @@ rescue OutteError => e
   return if !e.discord
   is_auto = event.is_a?(Discordrb::Events::Respondable)
   if tmp_msg = TmpMsg.fetch(event)
-    tmp_msg.edit(msg)
+    tmp_msg.edit(msg, temp: false)
     event.drain if is_auto
   elsif is_auto
     event << msg
