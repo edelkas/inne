@@ -12,7 +12,7 @@
 #       requests and acting as a middleman, building multipart POSTs, ...
 #  4) System operations:
 #       Forking, threading, inkoving the shell, getting memory information for
-#       maintenance, etc.
+#       maintenance, running Python scripts, etc.
 #  5) Benchmarking:
 #       Functions to benchmark code, perform memory profiling, etc.
 #  6) String manipulation:
@@ -21,22 +21,28 @@
 #       string distance (Damerau-Levenshtein), etc.
 #  7) Binary manipulation:
 #       Basically packing and unpacking binary data into/from strings.
-#  8) Discord related:
+#  8) File manipulation:
+#       Helpers for parsing binary files and zipping/unzipping stuff.
+#  9) Discord related:
 #       Finding Discord users, channels, servers, emojis, etc. Pinging users,
 #       reacting or unreacting to comments, mentioning channels... Formatting
 #       strings (as code blocks, spoilers, ...), etc.
-#  9) N++ specific:
+# 10) N++ specific:
 #       Stuff like sanitizing parameters for N++ functions, finding maximum values
 #       for rankings, calculating episode splits, or computing a highscoreable's
 #       name from its ID.
-# 10) Graphics:
-#       Generating SVG plots from a dataset.
-# 11) Bot management:
+# 11) Graphics:
+#       Text-based and image-based graphics generation. Includes things such as
+#       progress bars, tables, histograms, and plots.
+# 12) Bot management:
 #       Permission system for commands with custom roles, setting the bot's main
 #       channels, leaving blacklisted servers, restarting the bot, etc.
-# 12) Other:
-#       Random assortment of functions, like computing a SHA1 hash, zipping and
-#       unzipping files, making a text table, etc.
+# 13) SQL:
+#       Acquire/release db connections, perform raw SQL queries, monitor SQL
+#       resources, check Rails version, etc.
+# 14) Maths:
+#       Operations (e.g. weighted averages), geometry (e.g. intersection and
+#       areas of rectangles), hashing (SHA1, MD5), etc.
 
 require 'active_record'
 require 'damerau-levenshtein'
@@ -502,6 +508,14 @@ rescue => e
   lex(e, "Failed to execute shell command: #{cmd}")
 end
 
+# Execute a python script
+def python(cmd, stream: LOG_SHELL, output: false)
+  shell("python3 #{cmd}", stream: stream, output: output)
+rescue => e
+  lex(e, "Failed to run Python script.")
+  nil
+end
+
 # Represents a proc that will be queued in a worker thread but executed in the
 # main thread. Once enqueued, this blocks the calling thread until the main
 # one is done processing the command, and the result is filled.
@@ -916,10 +930,56 @@ rescue
   bytes.unpack('H*')[0].scan(/../).reverse.join.to_i(16)
 end
 
-# Verifies if an arbitrary floating point can be a valid score
-def verify_score(score)
-  decimal = (score * 60) % 1
-  [decimal, 1 - decimal].min < 0.03
+# <---------------------------------------------------------------------------->
+# <------                       FILE MANIPULATION                        ------>
+# <---------------------------------------------------------------------------->
+
+# Helper for reading files. Raises if not n bytes left to read.
+def assert_left(f, n)
+  raise if f.size - f.pos < n
+end
+
+# Computes the size in bytes of a binary string given the packing format string.
+def fmtsz(fmt)
+  sizes = {
+    'c' => 1, 'C' => 1,
+    's' => 2, 'S' => 2, 'n' => 2, 'v' => 2,
+    'l' => 4, 'L' => 4, 'i' => 4, 'I' => 4, 'N' => 4, 'V' => 4,
+    'f' => 4, 'F' => 4, 'e' => 4, 'g' => 4,
+    'q' => 8, 'Q' => 8, 'j' => 8, 'J' => 8,
+    'd' => 8, 'D' => 8, 'E' => 8, 'G' => 8
+  }
+  fmt.tr('<>!_', '').scan(/([A-Za-z])(\d+)?/)
+     .inject(0){ |sum, pat| sum + sizes[pat[0]] * (pat[1] || 1).to_i }
+end
+
+# Unpacks a series of bytes from an open file. Only works for unpacking numeric
+# types (e.g. integers or floats), not strings.
+def fparse(f, fmt)
+  sz = fmtsz(fmt)
+  assert_left(f, sz)
+  f.read(sz).unpack(fmt)
+end
+
+# Create a ZIP file. Provided data should be a Hash with the filenames
+# as keys and the file contents as values.
+def zip(data)
+  Zip::OutputStream.write_buffer{ |zip|
+    data.each{ |name, content|
+      zip.put_next_entry(name)
+      zip.write(content)
+    }
+  }.string
+end
+
+def unzip(data)
+  res = {}
+  Zip::File.open_buffer(data){ |zip|
+    zip.each{ |entry|
+      res[entry.name] = entry.get_input_stream.read
+    }
+  }
+  res
 end
 
 # <---------------------------------------------------------------------------->
@@ -1274,6 +1334,12 @@ end
 # <------                         N++ SPECIFIC                           ------>
 # <---------------------------------------------------------------------------->
 
+# Verifies if an arbitrary floating point can be a valid score
+def verify_score(score)
+  decimal = (score * 60) % 1
+  [decimal, 1 - decimal].min < 0.03
+end
+
 # Sometimes we need to make sure there's exactly one valid type
 def ensure_type(type, mappack: false)
   base = mappack ? MappackLevel : Level
@@ -1553,7 +1619,7 @@ class NSim
       entity_count, = fparse(f, 'S<')
       entity_count.times do
         id, index, frames = fparse(f, 'CS<S<')
-        next f.seek(16 * frames, :CUR) if @coords_raw[id][index]
+        next f.seek(4 * frames, :CUR) if @coords_raw[id][index]
         @coords_raw[id][index] = fparse(f, "s<#{2 * frames}").each_slice(2).to_a
       end
 
@@ -1689,6 +1755,161 @@ end
 # <---------------------------------------------------------------------------->
 # <------                           GRAPHICS                             ------>
 # <---------------------------------------------------------------------------->
+
+# A nice looking progress bar. The style can be split of filled.
+def progress_bar(cur, tot, size: 20, style: :split, single: true)
+  return '' if tot < 0
+  size += 1 if single
+  cur = cur.clamp(0, tot)
+  full = (cur * size / tot).to_i
+
+  case style
+  when :split
+    full_char = '🔘'
+    empty_char = '▬'
+  when :filled
+    full_char = '■'
+    empty_char = '□'
+  else
+    full_char = '#'
+    empty_char = '-'
+  end
+
+  if single
+    bar = empty_char * [full, size - 1].min + full_char + empty_char * [(size - full - 1), 0].max
+  else
+    bar = full_char * full + empty_char * (size - full)
+  end
+end
+
+# Transform a table (2-dim array) into a text table
+# Individual entries can be either strings or numbers:
+#   - Strings will be left-aligned
+#   - Numbers will be right-aligned
+#   - Floats will also be formatted with 3 decimals
+# Additionally, all entries will be padded.
+# An entry could also be the symbol :sep, will will insert a separator in that row
+def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false, hor_pad: true)
+  # Convert all non-integer numbers to floats
+  rows.each{ |r|
+    next unless r.is_a?(Array)
+    r.map!{ |e| e.is_a?(Numeric) && !e.integer? ? e.to_f : e }
+  }
+
+  # Compute column widths
+  text_rows = rows.select{ |r| r.is_a?(Array) }
+  count = text_rows.map(&:size).max
+  rows.each{ |r| if r.is_a?(Array) then r << "" while r.size < count end }
+  widths = (0..count - 1).map{ |c| text_rows.map{ |r| (r[c].is_a?(Float) ? "%.3f" % r[c] : r[c].to_s).length }.max }
+
+  # Build connectors
+  ver        = sep_y ? sep_y : double ? '║' : heavy ? '┃' : '│'
+  hor        = sep_x ? sep_x : double ? '═' : heavy ? '━' : '─'
+  up_left    = sep_i ? sep_i : double ? '╔' : heavy ? '┏' : '┌'
+  up_mid     = sep_i ? sep_i : double ? '╦' : heavy ? '┳' : '┬'
+  up_right   = sep_i ? sep_i : double ? '╗' : heavy ? '┓' : '┐'
+  mid_left   = sep_i ? sep_i : double ? '╠' : heavy ? '┣' : '├'
+  mid_mid    = sep_i ? sep_i : double ? '╬' : heavy ? '╋' : '┼'
+  mid_right  = sep_i ? sep_i : double ? '╣' : heavy ? '┫' : '┤'
+  down_left  = sep_i ? sep_i : double ? '╚' : heavy ? '┗' : '└'
+  down_mid   = sep_i ? sep_i : double ? '╩' : heavy ? '┻' : '┴'
+  down_right = sep_i ? sep_i : double ? '╝' : heavy ? '┛' : '┘'
+  sep_up     = up_left   + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + up_right
+  sep_mid    = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(mid_mid)  + mid_right
+  sep_down   = down_left + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(down_mid) + down_right
+  clean_up   = up_left   + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + up_right
+  clean_mid  = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + mid_right
+  clean_down = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + mid_right
+
+  # Build table
+  table = ''
+  if !header.nil?
+    header = ' ' + header + ' '
+    table << clean_up + "\n"
+    table << ver + ANSI.bold + header.center(sep_mid.size - 2, '░') + ANSI.clear + ver + "\n"
+    table << clean_down + "\n"
+  else
+    table << sep_up + "\n"
+  end
+  rows.each{ |r|
+    next table << sep_mid + "\n" if r == :sep
+    r.each_with_index{ |s, i|
+      sign = s.is_a?(Numeric) ? '' : '-'
+      fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
+      table << ver + (hor_pad ? ' ' : '') + "%#{sign}#{widths[i]}#{fmt}" % s + (hor_pad ? ' ' : '')
+    }
+    table << ver + "\n"
+  }
+  table << sep_down
+
+  return table
+end
+
+# Construct a simple text-based histogram (requires Unicode support)
+def make_histogram(
+    values, # List of pairs (value, amount)
+    title:       'Histogram',   # Title of the histogram, will appear at the top
+    steps:       10,            # Rough number of steps in the Y axis
+    hor_step:    5,             # X axis grid lines separation (also for labels)
+    vert_step:   4,             # Y axis grid lines separation
+    grid:        false,         # Whether to draw the grid
+    frame:       true,          # Whether to frame the histogram in a rectangle
+    labels:      true,          # Whether to write X axis labels
+    color_graph: ANSI.blue,     # ANSI color for the graph bars
+    color_lines: ANSI.magenta,  # ANSI color for the lines (frame and axes)
+    color_text:  ANSI.green     # ANSI color for the axes labels
+  )
+  max_y = values.max_by(&:last).last
+  min_y = values.min_by(&:last).last
+  range_y = max_y - min_y
+  if range_y <= steps
+    step = 1
+    steps = range_y
+  else
+    step = range_y / steps.to_f
+    exp = Math.log10(step).floor
+    base_step = step / 10 ** exp
+    base_steps = [1, 2, 5]
+    step = base_steps.min_by{ |s| (s - base_step).abs } * 10 ** exp
+    steps = (range_y / step.to_f).round
+  end
+  heights = values.map{ |_, n| (n / step.to_f).round }
+  pad = range_y >= 1 ? Math.log10(range_y).floor + 1 : 0
+  width = pad + 3 + values.size
+  histogram = ""
+  histogram << ANSI.bold + title.center(width + (frame ? 4 : 0)) + ANSI.clear << "\n" if title
+  histogram << (color_lines || '') << '┌─' << '─' * width << '─┐' << "\n" if frame
+  steps.times.reverse_each do |s|
+    histogram << (color_lines || '') << '│ ' if frame
+    histogram << (color_text || '') << "%*d" % [pad, step * (s + 1)] << (color_lines || '') << " │ "
+    histogram << color_graph if color_graph
+    is_row = grid && (s + 1) % vert_step == 0
+    heights.each_with_index{ |h, i|
+      is_col = grid && i % hor_step == 0
+      empty_char = is_row ? (is_col ? '·' : '·') : (is_col ? '.' : ' ')
+      histogram << (h >= (s + 1) ? '▌' : empty_char)
+    }
+    histogram << (color_lines || '') << ' │' if frame
+    histogram << "\n"
+  end
+  x_axis = '─' * values.size
+  i = -hor_step
+  x_axis[i += hor_step] = '╥' while i < x_axis.size - hor_step if labels
+  histogram << (frame ? (color_lines || '') + '│ ' : '') << '─' * pad + '─┴─' + x_axis << (frame ? ' │' : '')
+  label_row = ' ' * x_axis.size
+  if labels
+    x_axis.each_char.with_index{ |c, i|
+      next if c == '─'
+      label = values[i][0].to_s
+      label_row[i - label.size / 2, label.size] = label
+    }
+    label_row.prepend(' ' * (pad + 3))
+    histogram << "\n" << (frame ? '│ ' : '') << (color_text || '') << label_row << (frame ? ((color_lines || '') + ' │') : '')
+  end
+  histogram << "\n" << (color_lines || '') << '└─' << '─' * width << '─┘' if frame
+  histogram << ANSI.clear
+  histogram
+end
 
 def create_svg(
     filename: 'graph.svg',
@@ -2017,95 +2238,13 @@ rescue => e
 end
 
 # <---------------------------------------------------------------------------->
-# <------                             OTHER                              ------>
+# <------                             SQL                                ------>
 # <---------------------------------------------------------------------------->
 
-# Compute the SHA1 hash. It uses Ruby's native version, unless 'c' is specified,
-# in which case it uses the external C util that implements STB's function.
-# It transforms the result to an ASCII hex string if 'hex' is specified.
-#
-# This is done, not for speed, but because the implementations differ, and
-# the STB one is the exact one used by N++, so it's the one we need to verify
-# the integrity of the hashes generated by the game.
-def sha1(data, c: false, hex: false)
-  if c && $linux && File.file?(PATH_SHA1)
-    suffix = ((1 << 16) * rand).to_i.to_s(16)
-    name_in = File.join(DIR_UTILS, HASH_INPUT_FN + '_' + suffix)
-    name_out = File.join(DIR_UTILS, HASH_OUTPUT_FN + '_' + suffix)
-
-    File.binwrite(name_in, data)
-    code = shell("#{PATH_SHA1} #{name_in} #{name_out}", output: true).last
-    return nil if !code.success?
-    hash = File.binread(name_out)
-    FileUtils.rm([name_in, name_out])
-  else
-    hash = Digest::SHA1.digest(data)
-  end
-  hex ? hash.unpack('H*')[0] : hash
-rescue => e
-  lex(e, 'Failed to compute SHA1 hash')
-  nil
-end
-
-def md5(data, hex: false)
-  hash = Digest::MD5.digest(data)
-  hex ? hash.unpack('H*')[0] : hash
-rescue => e
-  lex(e, 'Failed to compute MD5 hash')
-  nil
-end
-
-# Execute a python script
-def python(cmd, stream: LOG_SHELL, output: false)
-  shell("python3 #{cmd}", stream: stream, output: output)
-rescue => e
-  lex(e, "Failed to run Python script.")
-  nil
-end
-
-# Create a ZIP file. Provided data should be a Hash with the filenames
-# as keys and the file contents as values.
-def zip(data)
-  Zip::OutputStream.write_buffer{ |zip|
-    data.each{ |name, content|
-      zip.put_next_entry(name)
-      zip.write(content)
-    }
-  }.string
-end
-
-def unzip(data)
-  res = {}
-  Zip::File.open_buffer(data){ |zip|
-    zip.each{ |entry|
-      res[entry.name] = entry.get_input_stream.read
-    }
-  }
-  res
-end
-
-# Helper for reading files. Raises if not n bytes left to read.
-def assert_left(f, n)
-  raise if f.size - f.pos < n
-end
-
-# Unpacks a series of bytes from a binary string. Only works for unpacking numeric
-# types (e.g. integers or floats), not strings.
-def fparse(f, fmt)
-  sizes = {
-    'c' => 1, 'C' => 1,
-    's' => 2, 'S' => 2, 'n' => 2, 'v' => 2,
-    'l' => 4, 'L' => 4, 'i' => 4, 'I' => 4, 'N' => 4, 'V' => 4,
-    'f' => 4, 'F' => 4, 'e' => 4, 'g' => 4,
-    'q' => 8, 'Q' => 8, 'j' => 8, 'J' => 8,
-    'd' => 8, 'D' => 8, 'E' => 8, 'G' => 8
-  }
-  sz = fmt.tr('<>!_', '').scan(/([A-Za-z])(\d+)?/)
-          .inject(0){ |sum, pat| sum + sizes[pat[0]] * (pat[1] || 1).to_i }
-  assert_left(f, sz)
-  f.read(sz).unpack(fmt)
-end
-
+# This function needs to be called whenever we've spent a "long time" without
+# querying the database, since we may've been disconnected due to inactivity.
+# In practice, we call it before the initial request on every command, and
+# after threading/forking.
 def acquire_connection
   sql("SELECT 1")
   #ActiveRecord::Base.connection.reconnect!
@@ -2115,6 +2254,8 @@ else
   true
 end
 
+# Release a db connection to prevent the pool from filling with zombie connections.
+# We presumably are also reaping idle connections regularly, but this is just in case.
 def release_connection
   ActiveRecord::Base.connection_pool.release_connection
   #ActiveRecord::Base.connection.disconnect!
@@ -2122,6 +2263,8 @@ rescue
   nil
 end
 
+# Shorthand to enclose a function call ensuring that we acquire a db connection
+# at the start and release it at the end.
 def with_connection(&block)
   return if !block_given?
   acquire_connection
@@ -2132,7 +2275,7 @@ rescue
   nil
 end
 
-# Perform arbitrary SQL command
+# Perform arbitrary raw SQL commands
 def sql(command)
   ActiveRecord::Base.connection.exec_query(command) rescue nil
 end
@@ -2142,6 +2285,53 @@ def update_sql_status
   $sql_vars   = sql("SHOW SESSION VARIABLES").rows.to_h
   $sql_status = sql("SHOW GLOBAL STATUS").rows.to_h
   $sql_conns  = sql("SHOW FULL PROCESSLIST").to_a
+end
+
+# Checks if current Rails version is at least the provided one
+def rails_at_least(ver)
+  ActiveRecord.version >= Gem::Version.create(ver)
+end
+
+# Checks if current Rails version is at most the provided one
+def rails_at_most(ver)
+  ActiveRecord.version <= Gem::Version.create(ver)
+end
+
+# Creates an enum in Rails. The syntax changed in Rails 7 from keyword to
+# positional arguments. The content can be provided as an array of symbols, in
+# which case the corresponding values will start at 0. Explicit values can
+# be provided if a hash is used instead. An optional hash of options can be
+# provided.
+def create_enum(name, values, opts = {})
+  if rails_at_least('7.0.0')
+    enum(name, values, **opts)
+  else
+    opts[name] = values
+    enum(opts)
+  end
+end
+
+# <---------------------------------------------------------------------------->
+# <------                             MATHS                              ------>
+# <---------------------------------------------------------------------------->
+
+# Weighted average
+def wavg(arr, w)
+  return -1 if arr.size != w.size
+  arr.each_with_index.map{ |a, i| a*w[i] }.sum.to_f / w.sum
+end
+
+# Length of the string representing a number
+def numlen(n, float = true)
+  n.to_i.to_s.length + (float ? 4 : 0)
+end
+
+# Used for correcting a datetime in the database when it's out of phase
+# (e.g. after a long downtime of the bot).
+def correct_time(time, frequency)
+  time -= frequency while time > Time.now
+  time += frequency while time < Time.now
+  time
 end
 
 # From now on, a bbox (short for bounding box) is a rectangle given in the form
@@ -2176,199 +2366,37 @@ def bbox_area(bbox)
   bbox[2] * bbox[3]
 end
 
-# Weighed average
-def wavg(arr, w)
-  return -1 if arr.size != w.size
-  arr.each_with_index.map{ |a, i| a*w[i] }.sum.to_f / w.sum
-end
+# Compute the SHA1 hash. It uses Ruby's native version, unless 'c' is specified,
+# in which case it uses the external C util that implements STB's function.
+# It transforms the result to an ASCII hex string if 'hex' is specified.
+#
+# This is done, not for speed, but because the implementations differ, and
+# the STB one is the exact one used by N++, so it's the one we need to verify
+# the integrity of the hashes generated by the game.
+def sha1(data, c: false, hex: false)
+  if c && $linux && File.file?(PATH_SHA1)
+    suffix = ((1 << 16) * rand).to_i.to_s(16)
+    name_in = File.join(DIR_UTILS, HASH_INPUT_FN + '_' + suffix)
+    name_out = File.join(DIR_UTILS, HASH_OUTPUT_FN + '_' + suffix)
 
-def numlen(n, float = true)
-  n.to_i.to_s.length + (float ? 4 : 0)
-end
-
-# This corrects a datetime in the database when it's out of phase
-# (e.g. after a long downtime of the bot).
-def correct_time(time, frequency)
-  time -= frequency while time > Time.now
-  time += frequency while time < Time.now
-  time
-end
-
-# Checks if current Rails version is at least the provided one
-def rails_at_least(ver)
-  ActiveRecord.version >= Gem::Version.create(ver)
-end
-
-# Checks if current Rails version is at most the provided one
-def rails_at_most(ver)
-  ActiveRecord.version <= Gem::Version.create(ver)
-end
-
-# Creates an enum in Rails. The syntax changed in Rails 7 from keyword to
-# positional arguments. The content can be provided as an array of symbols, in
-# which case the corresponding values will start at 0. Explicit values can
-# be provided if a hash is used instead. An optional hash of options can be
-# provided.
-def create_enum(name, values, opts = {})
-  if rails_at_least('7.0.0')
-    enum(name, values, **opts)
+    File.binwrite(name_in, data)
+    code = shell("#{PATH_SHA1} #{name_in} #{name_out}", output: true).last
+    return nil if !code.success?
+    hash = File.binread(name_out)
+    FileUtils.rm([name_in, name_out])
   else
-    opts[name] = values
-    enum(opts)
+    hash = Digest::SHA1.digest(data)
   end
+  hex ? hash.unpack('H*')[0] : hash
+rescue => e
+  lex(e, 'Failed to compute SHA1 hash')
+  nil
 end
 
-# A nice looking progress bar. The style can be split of filled.
-def progress_bar(cur, tot, size: 20, style: :split, single: true)
-  return '' if tot < 0
-  size += 1 if single
-  cur = cur.clamp(0, tot)
-  full = (cur * size / tot).to_i
-
-  case style
-  when :split
-    full_char = '🔘'
-    empty_char = '▬'
-  when :filled
-    full_char = '■'
-    empty_char = '□'
-  else
-    full_char = '#'
-    empty_char = '-'
-  end
-
-  if single
-    bar = empty_char * [full, size - 1].min + full_char + empty_char * [(size - full - 1), 0].max
-  else
-    bar = full_char * full + empty_char * (size - full)
-  end
-end
-
-# Transform a table (2-dim array) into a text table
-# Individual entries can be either strings or numbers:
-#   - Strings will be left-aligned
-#   - Numbers will be right-aligned
-#   - Floats will also be formatted with 3 decimals
-# Additionally, all entries will be padded.
-# An entry could also be the symbol :sep, will will insert a separator in that row
-def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false, hor_pad: true)
-  # Convert all non-integer numbers to floats
-  rows.each{ |r|
-    next unless r.is_a?(Array)
-    r.map!{ |e| e.is_a?(Numeric) && !e.integer? ? e.to_f : e }
-  }
-
-  # Compute column widths
-  text_rows = rows.select{ |r| r.is_a?(Array) }
-  count = text_rows.map(&:size).max
-  rows.each{ |r| if r.is_a?(Array) then r << "" while r.size < count end }
-  widths = (0..count - 1).map{ |c| text_rows.map{ |r| (r[c].is_a?(Float) ? "%.3f" % r[c] : r[c].to_s).length }.max }
-
-  # Build connectors
-  ver        = sep_y ? sep_y : double ? '║' : heavy ? '┃' : '│'
-  hor        = sep_x ? sep_x : double ? '═' : heavy ? '━' : '─'
-  up_left    = sep_i ? sep_i : double ? '╔' : heavy ? '┏' : '┌'
-  up_mid     = sep_i ? sep_i : double ? '╦' : heavy ? '┳' : '┬'
-  up_right   = sep_i ? sep_i : double ? '╗' : heavy ? '┓' : '┐'
-  mid_left   = sep_i ? sep_i : double ? '╠' : heavy ? '┣' : '├'
-  mid_mid    = sep_i ? sep_i : double ? '╬' : heavy ? '╋' : '┼'
-  mid_right  = sep_i ? sep_i : double ? '╣' : heavy ? '┫' : '┤'
-  down_left  = sep_i ? sep_i : double ? '╚' : heavy ? '┗' : '└'
-  down_mid   = sep_i ? sep_i : double ? '╩' : heavy ? '┻' : '┴'
-  down_right = sep_i ? sep_i : double ? '╝' : heavy ? '┛' : '┘'
-  sep_up     = up_left   + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + up_right
-  sep_mid    = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(mid_mid)  + mid_right
-  sep_down   = down_left + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(down_mid) + down_right
-  clean_up   = up_left   + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + up_right
-  clean_mid  = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + mid_right
-  clean_down = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + mid_right
-
-  # Build table
-  table = ''
-  if !header.nil?
-    header = ' ' + header + ' '
-    table << clean_up + "\n"
-    table << ver + ANSI.bold + header.center(sep_mid.size - 2, '░') + ANSI.clear + ver + "\n"
-    table << clean_down + "\n"
-  else
-    table << sep_up + "\n"
-  end
-  rows.each{ |r|
-    next table << sep_mid + "\n" if r == :sep
-    r.each_with_index{ |s, i|
-      sign = s.is_a?(Numeric) ? '' : '-'
-      fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
-      table << ver + (hor_pad ? ' ' : '') + "%#{sign}#{widths[i]}#{fmt}" % s + (hor_pad ? ' ' : '')
-    }
-    table << ver + "\n"
-  }
-  table << sep_down
-
-  return table
-end
-
-# Construct a simple text-based histogram (requires Unicode support)
-def make_histogram(
-    values, # List of pairs (value, amount)
-    title:       'Histogram',   # Title of the histogram, will appear at the top
-    steps:       10,            # Rough number of steps in the Y axis
-    hor_step:    5,             # X axis grid lines separation (also for labels)
-    vert_step:   4,             # Y axis grid lines separation
-    grid:        false,         # Whether to draw the grid
-    frame:       true,          # Whether to frame the histogram in a rectangle
-    labels:      true,          # Whether to write X axis labels
-    color_graph: ANSI.blue,     # ANSI color for the graph bars
-    color_lines: ANSI.magenta,  # ANSI color for the lines (frame and axes)
-    color_text:  ANSI.green     # ANSI color for the axes labels
-  )
-  max_y = values.max_by(&:last).last
-  min_y = values.min_by(&:last).last
-  range_y = max_y - min_y
-  if range_y <= steps
-    step = 1
-    steps = range_y
-  else
-    step = range_y / steps.to_f
-    exp = Math.log10(step).floor
-    base_step = step / 10 ** exp
-    base_steps = [1, 2, 5]
-    step = base_steps.min_by{ |s| (s - base_step).abs } * 10 ** exp
-    steps = (range_y / step.to_f).round
-  end
-  heights = values.map{ |_, n| (n / step.to_f).round }
-  pad = range_y >= 1 ? Math.log10(range_y).floor + 1 : 0
-  width = pad + 3 + values.size
-  histogram = ""
-  histogram << ANSI.bold + title.center(width + (frame ? 4 : 0)) + ANSI.clear << "\n" if title
-  histogram << (color_lines || '') << '┌─' << '─' * width << '─┐' << "\n" if frame
-  steps.times.reverse_each do |s|
-    histogram << (color_lines || '') << '│ ' if frame
-    histogram << (color_text || '') << "%*d" % [pad, step * (s + 1)] << (color_lines || '') << " │ "
-    histogram << color_graph if color_graph
-    is_row = grid && (s + 1) % vert_step == 0
-    heights.each_with_index{ |h, i|
-      is_col = grid && i % hor_step == 0
-      empty_char = is_row ? (is_col ? '·' : '·') : (is_col ? '.' : ' ')
-      histogram << (h >= (s + 1) ? '▌' : empty_char)
-    }
-    histogram << (color_lines || '') << ' │' if frame
-    histogram << "\n"
-  end
-  x_axis = '─' * values.size
-  i = -hor_step
-  x_axis[i += hor_step] = '╥' while i < x_axis.size - hor_step if labels
-  histogram << (frame ? (color_lines || '') + '│ ' : '') << '─' * pad + '─┴─' + x_axis << (frame ? ' │' : '')
-  label_row = ' ' * x_axis.size
-  if labels
-    x_axis.each_char.with_index{ |c, i|
-      next if c == '─'
-      label = values[i][0].to_s
-      label_row[i - label.size / 2, label.size] = label
-    }
-    label_row.prepend(' ' * (pad + 3))
-    histogram << "\n" << (frame ? '│ ' : '') << (color_text || '') << label_row << (frame ? ((color_lines || '') + ' │') : '')
-  end
-  histogram << "\n" << (color_lines || '') << '└─' << '─' * width << '─┘' if frame
-  histogram << ANSI.clear
-  histogram
+def md5(data, hex: false)
+  hash = Digest::MD5.digest(data)
+  hex ? hash.unpack('H*')[0] : hash
+rescue => e
+  lex(e, 'Failed to compute MD5 hash')
+  nil
 end

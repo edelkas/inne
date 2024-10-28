@@ -613,7 +613,6 @@ def send_stats(event)
   send_message(event, content: header1 + format_block(stats))
   sleep(0.25)
   send_message(event, content: format_block(histogram))
-  dbg("Length: #{format_block(histogram).size}")
 rescue => e
   lex(e, "Error computing stats.", event: event)
 end
