@@ -517,7 +517,7 @@ module Downloadable
           score:     scoretime,
           replay_id: score['replay_id'].to_i,
           player:    player,
-          tied_rank: updated.find_index { |s| s['score'] == score['score'] }
+          tied_rank: updated.reject{ |s| s['cheated'] }.find_index { |s| s['score'] == score['score'] }
         ) unless score['cheated']
 
         # Non-userlevel updates (tab, archive, demos)
