@@ -1857,11 +1857,11 @@ module Map
         delay:  delay,
         event:  event
       )
-      perror('Failed to generate screenshot') if trace.nil?
+      perror('Failed to render animation') if trace.nil?
     else
       TmpMsg.update(event, '-# Plotting routes...')
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
-      perror('Failed to generate screenshot') if screenshot.nil?
+      perror('Failed to render screenshot') if screenshot.nil?
       $trace_context = {
         theme:   palette,
         bg:      screenshot,
@@ -1878,7 +1878,15 @@ module Map
     ext = gif ? 'gif' : 'png'
     send_file(event, trace, "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}", true)
 
+    # Free allocated resources
+    res.each{ |nsim| nsim.destroy }
+    res.map!{ nil }
+    res.clear
+    trace.clear
+
     # Output debug info
+    event << "Memory: %dMB." % getmem
+    event << "Time: %.3fs." % [Time.now - t]
     event << res.map{ |l| l.debug(event) }.join("\n\n") if debug
     dbg("FINAL: #{"%8.3f" % [1000 * (Time.now - t)]}") if BENCH_IMAGES
   rescue => e

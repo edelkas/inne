@@ -1668,6 +1668,39 @@ class NSim
     clean
   end
 
+  # Free references to allocated data so that it's hopefully garbage collected
+  def destroy
+    @map_data.clear
+    @map_data = nil
+
+    @demo_data.each{ |demo| demo.clear }
+    @demo_data.map!{ nil }
+    @demo_data.clear
+    @demo_data = nil
+
+    @demos.each{ |demo| demo.clear }
+    @demos.map!{ nil }
+    @demos.clear
+    @demos = nil
+
+    @collisions_raw.each{ |frame, cols| cols.clear }
+    @collisions_raw.keys.each{ |frame| @collisions_raw[frame] = nil }
+    @collisions_raw.clear
+    @collisions_raw = nil
+
+    @coords_raw.each{ |id, hash|
+      hash.each{ |index, coords| coords.clear }
+      hash.keys.each{ |index| hash[index] = nil }
+      hash.clear
+    }
+    @coords_raw.keys.each{ |id| @coords_raw[id] = nil }
+    @coords_raw.clear
+    @coords_raw = nil
+
+    @output.clear
+    @output = nil
+  end
+
   # Length of the simulation, in frames
   def length(index = nil)
     if @splits
