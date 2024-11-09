@@ -509,8 +509,8 @@ rescue => e
 end
 
 # Execute a python script
-def python(cmd, stream: LOG_SHELL, output: false)
-  shell("python3 #{cmd}", stream: stream, output: output)
+def python(cmd, stream: LOG_SHELL, output: false, fast: false)
+  shell("#{fast ? 'pypy3' : 'python3'} #{cmd}", stream: stream, output: output)
 rescue => e
   lex(e, "Failed to run Python script.")
   nil
@@ -1589,7 +1589,7 @@ class NSim
   private def execute(basic_sim: true, basic_render: true)
     t = Time.now
     path = PATH_NTRACE + (basic_sim ? ' --basic-sim' : '') + (basic_render ? '' : ' --full-export')
-    stdout, stderr, status = python(path, output: true)
+    stdout, stderr, status = python(path, output: true, fast: true)
     @output = [stdout, stderr].join("\n\n")
     @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
     dbg("NSim simulation time: %.3fs" % [Time.now - t])
