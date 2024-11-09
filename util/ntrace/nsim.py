@@ -1172,7 +1172,8 @@ class EntityDroneBase(Entity):
         """Change the drone's direction and log it."""
         self.dir_old = self.dir or dir
         self.dir = dir
-        self.log_collision(dir)
+        if ARGUMENTS.full_export:
+            self.log_collision(dir)
 
     def move(self):
         """Make the drone move along the grid. The drone will try to move towards the center of an
@@ -1353,7 +1354,8 @@ class EntityThwump(Entity):
     def set_state(self, state):
         """Set the thwump's state and log it. 0:immobile, 1:forward, -1:backward"""
         self.state = state
-        self.log_collision(state % 3) #The logged value goes from 0 to 2
+        if ARGUMENTS.full_export:
+            self.log_collision(state % 3) #The logged value goes from 0 to 2
 
     def move(self):
         """Update the position of the thwump only if it is already moving. If the thwump retracts past
@@ -1736,8 +1738,9 @@ class EntityShoveThwump(Entity):
         """Changes the state of the shwump. 0:immobile, 1:activated, 2:launching, 3:retreating
         Also logs it, combined with the direction information into a single integer."""
         self.state = state
-        dir = map_vector_to_orientation(self.xdir, self.ydir)
-        self.log_collision(4 * state + dir // 2)
+        if ARGUMENTS.full_export:
+            dir = map_vector_to_orientation(self.xdir, self.ydir)
+            self.log_collision(4 * state + dir // 2)
 
     def think(self):
         """Update the state of the shwump and move it if possible."""
