@@ -1568,8 +1568,9 @@ class NSim
     @valid          = false # Was nsim result a valid run?
     @output         = ''
     @valid_flags    = []
-    @coords_raw     = 40.times.map{ |id| [id, {}] }.to_h
-    @collisions_raw = {}
+    @raw_coords     = 40.times.map{ |id| [id, {}] }.to_h
+    @raw_chunks     = 40.times.map{ |id| [id, {}] }.to_h
+    @raw_collisions = {}
     @ppc            = 0 # Determines the default scaling factor for coordinates
   end
 
@@ -1586,10 +1587,12 @@ class NSim
 
   # Execute simulation
   private def execute(basic_sim: true, basic_render: true)
-    path = PATH_NTRACE + (basic_sim ? ' basic_sim' : '') + (basic_render ? ' basic_render' : '')
+    t = Time.now
+    path = PATH_NTRACE + (basic_sim ? ' --basic-sim' : '') + (basic_render ? '' : ' --full-export')
     stdout, stderr, status = python(path, output: true)
     @output = [stdout, stderr].join("\n\n")
     @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
+    dbg("NSim simulation time: %.3fs" % [Time.now - t])
   end
 
   # Remove all temp files
@@ -1605,7 +1608,10 @@ class NSim
   # Parse nsim's output file and read entity coordinates and collisions
   # TODO: Should we deduplicate collisions, or handle it later?
   private def parse
-    f = File.open(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT, 'rb')
+    fn = @splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT
+    f = File.open(fn, 'rb')
+    dbg("NSim output size: %.3fKiB" % [File.size(fn) / 1024.0])
+    t = Time.now
 
     # Run count and valid flags
     n, = fparse(f, 'C')
@@ -1615,9 +1621,12 @@ class NSim
       # Entity coordinate section
       entity_count, = fparse(f, 'S<')
       entity_count.times do
-        id, index, frames = fparse(f, 'CS<S<')
-        next f.seek(4 * frames, :CUR) if @coords_raw[id][index]
-        @coords_raw[id][index] = f.read(4 * frames)
+        id, index, chunk_count = fparse(f, 'CS<S<')
+        chunks = fparse(f, "S<#{2 * chunk_count}").each_slice(2).to_a.transpose
+        @raw_chunks[id][index] = chunks unless @raw_chunks[id][index]
+        frames = chunks.last.sum
+        next f.seek(4 * frames, :CUR) if @raw_coords[id][index]
+        @raw_coords[id][index] = f.read(4 * frames)
       end
 
       # Entity collision section
@@ -1625,11 +1634,13 @@ class NSim
       collision_count.times do
         collision = f.read(6)
         frame, = collision.unpack('S<')
-        @collisions_raw[frame] ||= ""
-        @collisions_raw[frame] << collision[2, 4]
+        @raw_collisions[frame] ||= ""
+        @raw_collisions[frame] << collision[2, 4]
       end
     end
 
+    dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0])
+    dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)])
     @correct = true
   ensure
     f&.close
@@ -1673,29 +1684,41 @@ class NSim
     @map_data.clear
     @map_data = nil
 
-    @demo_data.each{ |demo| demo.clear }
+    @demo_data.each(&:clear)
     @demo_data.map!{ nil }
     @demo_data.clear
     @demo_data = nil
 
-    @demos.each{ |demo| demo.clear }
+    @demos.each(&:clear)
     @demos.map!{ nil }
     @demos.clear
     @demos = nil
 
-    @collisions_raw.each{ |frame, cols| cols.clear }
-    @collisions_raw.keys.each{ |frame| @collisions_raw[frame] = nil }
-    @collisions_raw.clear
-    @collisions_raw = nil
+    @raw_collisions.each{ |frame, cols| cols.clear }
+    @raw_collisions.keys.each{ |frame| @raw_collisions[frame] = nil }
+    @raw_collisions.clear
+    @raw_collisions = nil
 
-    @coords_raw.each{ |id, hash|
+    @raw_coords.each{ |id, hash|
       hash.each{ |index, coords| coords.clear }
       hash.keys.each{ |index| hash[index] = nil }
       hash.clear
     }
-    @coords_raw.keys.each{ |id| @coords_raw[id] = nil }
-    @coords_raw.clear
-    @coords_raw = nil
+    @raw_coords.keys.each{ |id| @raw_coords[id] = nil }
+    @raw_coords.clear
+    @raw_coords = nil
+
+    @raw_chunks.each{ |id, hash|
+      hash.each{ |index, chunks|
+        chunks.each(&:clear)
+        chunks.clear
+      }
+      hash.keys.each{ |index| hash[index] = nil }
+      hash.clear
+    }
+    @raw_chunks.keys.each{ |id| @raw_chunks[id] = nil }
+    @raw_chunks.clear
+    @raw_chunks = nil
 
     @output.clear
     @output = nil
@@ -1706,7 +1729,7 @@ class NSim
     if @splits
       index ? @demos[index].size : @demos.map(&:size).sum
     else
-      index ? @coords_raw[0][index].length / 4 : @coords_raw[0].map{ |index, coords| coords.length / 4 }.max
+      index ? @raw_coords[0][index].length / 4 : @raw_coords[0].map{ |index, coords| coords.length / 4 }.max
     end
   end
 
@@ -1752,8 +1775,8 @@ class NSim
 
   # Return array of collisions for the given frame
   def collisions(frame)
-    return [] if !@collisions_raw[frame]
-    @collisions_raw[frame].scan(/..../m).map{ |c|
+    return [] if !@raw_collisions[frame]
+    @raw_collisions[frame].scan(/..../m).map{ |c|
       id, index, state = c.unpack('CS<C')
       id = id == 6 ? 7 : id == 8 ? 9 : id # Change doors to switches
       Collision.new(id, index, state)
@@ -1763,7 +1786,7 @@ class NSim
   # Return entity movements for the given frame range
   def movements(frame, step, ppc: @ppc)
     res = []
-    @coords_raw.each{ |id, list|
+    @raw_coords.each{ |id, list|
       list.each{ |index, _|
         pos = fetch_coords(id, index, frame, step)
         next if !pos
@@ -1778,7 +1801,21 @@ class NSim
   # Coordinates are exported and stored scaled and packed for memory reasons,
   # so before using them we must unpack them and scale them
   def fetch_coords(id, index, frame, step = 1)
-    poslog = @coords_raw[id]&.[](index)
+    poslog = @raw_coords[id]&.[](index)
+    chunks = @raw_chunks[id]&.[](index)
+    return nil if !poslog || !chunks
+    max_frame = chunks[0].last + chunks[1].last - 1
+    return nil if frame > max_frame
+    chunk_index = chunks[0].rindex{ |f| f <= frame }
+    chunk_frame = chunks[0][chunk_index]
+    chunk_length = chunks[1][chunk_index]
+    d = [frame - chunk_frame, chunk_length - 1].min
+    f = chunks[1].take(chunk_index).sum + d
+    poslog[4 * f, 4].unpack('s<2').map{ |c| c / 10.0 }
+  end
+
+  def fetch_coords_old(id, index, frame, step = 1)
+    poslog = @raw_coords[id]&.[](index)
     return nil if !poslog || poslog.length / 4 < frame + 1
     f = [frame + step - 1, poslog.length / 4 - 1].min
     poslog[4 * f, 4].unpack('s<2').map{ |c| c / 10.0 }

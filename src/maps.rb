@@ -1885,8 +1885,8 @@ module Map
     trace.clear
 
     # Output debug info
-    event << "Memory: %dMB." % getmem
-    event << "Time: %.3fs." % [Time.now - t]
+    dbg("NSim memory used: %dMB." % getmem)
+    dbg("NSim full time: %.3fs." % [Time.now - t])
     event << res.map{ |l| l.debug(event) }.join("\n\n") if debug
     dbg("FINAL: #{"%8.3f" % [1000 * (Time.now - t)]}") if BENCH_IMAGES
   rescue => e

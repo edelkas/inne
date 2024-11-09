@@ -90,8 +90,11 @@ for i in range(len(inputs_list)):
     for xpos, ypos in zip(sim.ninja.xposlog, sim.ninja.yposlog):
         poslog.append(pack_coord(xpos))
         poslog.append(pack_coord(ypos))
-    entities = [(0, i, poslog)]
-    entities += [(e.type, e.index, e.poslog) for l in sim.entity_dic.values() for e in l if e.log_positions]
+    chunks = array.array('H')
+    chunks.append(0)
+    chunks.append(round(len(poslog) / 2))
+    entities = [(0, i, chunks, poslog)]
+    entities += [(e.type, e.index, e.exported_chunks, e.poslog) for l in sim.entity_dic.values() for e in l if e.log_positions]
     entitylog.append(entities)
 
             
@@ -108,9 +111,10 @@ if tool_mode == "trace":
             f.write(struct.pack('<H', entities))
             for j in range(entities):
                 entity = entitylog[i][j]
-                frames = round(len(entity[2]) / 2)
-                f.write(struct.pack('<BHH', *entity[:2], frames))
+                id, index, chunk_count = entity[0], entity[1], round(len(entity[2]) / 2)
+                f.write(struct.pack('<BHH', id, index, chunk_count))
                 entity[2].tofile(f)
+                entity[3].tofile(f)
             # Collision section
             collisions = len(collisionlog[i])
             f.write(struct.pack('<L', collisions))

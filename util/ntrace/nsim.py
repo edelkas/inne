@@ -1,3 +1,4 @@
+import argparse
 import array
 import math
 from itertools import product
@@ -7,15 +8,17 @@ import copy
 import random
 import sys
 
-#Only simulate entities required for proper simulation (i.e. no drones/lasers/etc)
-BASIC_SIMULATION = 'basic_sim' in sys.argv
-
-#Only export coordinates of simple objects (i.e. no bounceblocks/thwumps/etc)
-BASIC_RENDERING = 'basic_render' in sys.argv
+#Create argument parser so that we can pass parameters when executing the tool
+#Run the tool with the -h option to see the complete help
+parser = argparse.ArgumentParser(description='N++ physics clone')
+parser.add_argument('--basic-sim', action='store_true', help='Only simulate entities with physical collision')
+parser.add_argument('--full-export', action='store_true', help="Export coordinates of moving entities")
+parser.add_argument('-t', '--tolerance', type=float, default=1.0, help='Minimum units to consider an entity moved')
+ARGUMENTS = parser.parse_args()
 
 #Simulate ragdoll physics
 ANIM_DATA = "anim_data_line_new.txt.bin"
-NINJA_ANIM_MODE = not BASIC_SIMULATION and os.path.isfile(ANIM_DATA)
+NINJA_ANIM_MODE = not ARGUMENTS.basic_sim and os.path.isfile(ANIM_DATA)
 
 if NINJA_ANIM_MODE:
     with open(ANIM_DATA, mode="rb") as f:
@@ -827,6 +830,9 @@ class Entity:
         self.log_collisions = True
         self.cell = clamp_cell(math.floor(self.xpos / 24), math.floor(self.ypos / 24))
         self.last_exported_state = None
+        self.last_exported_frame = None
+        self.last_exported_coords = None
+        self.exported_chunks = array.array('H')
     
     def grid_move(self):
         """As the entity is moving, if its center goes from one grid cell to another,
@@ -845,11 +851,25 @@ class Entity:
             self.last_exported_state = state
 
     def log_position(self):
-        """Log position of entity on current frame.
-        Clamp it into a signed 2-byte integer for memory reasons."""
-        if self.log_positions and self.active:
-            self.poslog.append(pack_coord(self.xpos))
-            self.poslog.append(pack_coord(self.ypos))
+        """Log position of entity on current frame"""
+        # Only export position if enabled and the entity has moved enough
+        if not (self.active and self.log_positions):
+            return
+        last = self.last_exported_coords
+        dist = abs(last[0] - self.xpos) + abs(last[1] - self.ypos) if last else 0
+        if last and dist < ARGUMENTS.tolerance:
+            return
+
+        # Determine if a new chunk needs to be started or the last one extended
+        if not self.last_exported_frame or self.sim.frame > self.last_exported_frame + 1:
+            self.exported_chunks.extend((self.sim.frame, 1))
+        else:
+            self.exported_chunks[-1] += 1
+
+        # Update logs
+        self.poslog.extend((pack_coord(self.xpos), pack_coord(self.ypos)))
+        self.last_exported_frame = self.sim.frame
+        self.last_exported_coords = (self.xpos, self.ypos)
 
 class EntityToggleMine(Entity):
     """This class handles both toggle mines (untoggled state) and regular mines (toggled state)."""
@@ -1139,7 +1159,7 @@ class EntityDroneBase(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord, orientation, mode, speed):
         super().__init__(type, sim, xcoord, ycoord)
-        self.log_positions = not BASIC_RENDERING
+        self.log_positions = ARGUMENTS.full_export
         self.is_movable = True
         self.speed = speed
         self.dir = None
@@ -1268,7 +1288,7 @@ class EntityBounceBlock(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
-        self.log_positions = not BASIC_RENDERING
+        self.log_positions = ARGUMENTS.full_export
         self.is_physical_collidable = True
         self.is_logical_collidable = True
         self.is_movable = True
@@ -1319,7 +1339,7 @@ class EntityThwump(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord, orientation):
         super().__init__(type, sim, xcoord, ycoord)
-        self.log_positions = not BASIC_RENDERING
+        self.log_positions = ARGUMENTS.full_export
         self.is_movable = True
         self.is_thinkable = True
         self.is_logical_collidable = True
@@ -1577,7 +1597,7 @@ class EntityDeathBall(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
-        self.log_positions = not BASIC_RENDERING
+        self.log_positions = ARGUMENTS.full_export
         self.is_thinkable = True
         self.is_logical_collidable = True
         self.xspeed, self.yspeed = 0, 0
@@ -1703,7 +1723,7 @@ class EntityShoveThwump(Entity):
 
     def __init__(self, type, sim, xcoord, ycoord):
         super().__init__(type, sim, xcoord, ycoord)
-        self.log_positions = not BASIC_RENDERING
+        self.log_positions = ARGUMENTS.full_export
         self.is_thinkable = True
         self.is_logical_collidable = True
         self.is_physical_collidable = True
@@ -2025,9 +2045,9 @@ class Simulator:
                 entity = EntityLaunchPad(type, self, xcoord, ycoord, orientation)
             elif type == 11:
                 entity = EntityOneWayPlatform(type, self, xcoord, ycoord, orientation)
-            elif type == 14 and not BASIC_SIMULATION:
+            elif type == 14 and not ARGUMENTS.basic_sim:
                 entity = EntityDroneZap(type, self, xcoord, ycoord, orientation, mode)
-            #elif type == 15 and not BASIC_SIMULATION:
+            #elif type == 15 and not ARGUMENTS.basic_sim:
             #    entity = EntityDroneChaser(type, self, xcoord, ycoord, orientation, mode)
             elif type == 17:
                 entity = EntityBounceBlock(type, self, xcoord, ycoord)
@@ -2035,13 +2055,13 @@ class Simulator:
                 entity = EntityThwump(type, self, xcoord, ycoord, orientation)
             elif type == 21:
                 entity = EntityToggleMine(type, self, xcoord, ycoord, 1)
-            #elif type == 23 and not BASIC_SIMULATION:
+            #elif type == 23 and not ARGUMENTS.basic_sim:
             #    entity = EntityLaser(type, self, xcoord, ycoord, orientation, mode)
             elif type == 24:
                 entity = EntityBoostPad(type, self, xcoord, ycoord)
-            elif type == 25 and not BASIC_SIMULATION:
+            elif type == 25 and not ARGUMENTS.basic_sim:
                 entity = EntityDeathBall(type, self, xcoord, ycoord)
-            elif type == 26 and not BASIC_SIMULATION:
+            elif type == 26 and not ARGUMENTS.basic_sim:
                 entity = EntityMiniDrone(type, self, xcoord, ycoord, orientation, mode)
             elif type == 28:
                 entity = EntityShoveThwump(type, self, xcoord, ycoord)
