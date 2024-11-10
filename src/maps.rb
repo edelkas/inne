@@ -308,11 +308,7 @@ module Map
 
   # Shortcuts for some object counts
   def gold(version: nil)
-    object_counts(version: version)[2]
-  end
-
-  def mines(version: nil)
-    object_counts(version: version)[1]
+    object_counts(version: version)[ID_GOLD]
   end
 
   # This is used for computing the hash of a level. It's required due to a
@@ -1841,7 +1837,9 @@ module Map
     end
 
     # Render trace or animation
-    if gif
+    trace = ''
+    test = false
+    if !test && gif
       TmpMsg.update(event, '-# Animating...')
       sleep(0.05) while !TmpMsg.fetch(event).sent? # Wait till first msg is sent before forking, otherwise problems!
       trace = screenshot(
@@ -1858,7 +1856,7 @@ module Map
         event:  event
       )
       perror('Failed to render animation') if trace.nil?
-    else
+    elsif !test && !gif
       TmpMsg.update(event, '-# Plotting routes...')
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
       perror('Failed to render screenshot') if screenshot.nil?
@@ -1876,7 +1874,8 @@ module Map
 
     # Send image file
     ext = gif ? 'gif' : 'png'
-    send_file(event, trace, "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}", true)
+    fn = "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}"
+    send_file(event, trace, fn, true) unless test
 
     # Free allocated resources
     res.each{ |nsim| nsim.destroy }

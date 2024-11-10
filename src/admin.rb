@@ -42,6 +42,13 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event)
+  lvls = Level.all.map{ |l| [l, l.map.object_counts[Map::ID_BOUNCEBLOCK]] }.sort_by{ |l, g| -g }.take(20)
+  list = lvls.map.with_index{ |l, i| "%02d: %-10s %4d" % [i, l[0].name, l[1]] }
+  send_message(
+    event,
+    content: format_block(list.join("\n")),
+    files: [Map.screenshot(file: true, h: lvls.map(&:first))]
+  )
 end
 
 def send_color_test(event)

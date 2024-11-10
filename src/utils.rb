@@ -1639,8 +1639,14 @@ class NSim
       end
     end
 
+    coords = @raw_chunks.map{ |id, hash|
+      hash.map{ |index, chunks|
+        chunks[1].sum
+      }.sum
+    }.sum
     dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0])
     dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)])
+    dbg("NSim coordinates: %d" % [coords])
     @correct = true
   ensure
     f&.close
@@ -1729,7 +1735,7 @@ class NSim
     if @splits
       index ? @demos[index].size : @demos.map(&:size).sum
     else
-      index ? @raw_coords[0][index].length / 4 : @raw_coords[0].map{ |index, coords| coords.length / 4 }.max
+      index ? @raw_chunks[0][index][1].sum : @raw_chunks[0].map{ |index, chunks| chunks[1].sum }.max
     end
   end
 

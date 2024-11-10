@@ -126,7 +126,7 @@ LOG_SHELL       = false # Redirect STDOUT/STDERR to outte when we call the shell
 
 # Log format (can be set on the fly as well)
 LOG_FANCY      = true    # Use rich terminal logs (bold, colors...)
-LOG_LEVEL      = :debug  # Default terminal logging level (see Log class)
+LOG_LEVEL      = TEST ? :debug : :normal # Default terminal logging level
 LOG_LEVEL_FILE = :quiet  # Default file logging level (see Log class)
 LOG_APPS       = false   # Append source app to log msgs
 LOG_PAD        = 120     # Pad each log line to this many chars
