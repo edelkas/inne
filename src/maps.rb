@@ -468,6 +468,17 @@ module Map
     objs
   end
 
+  # Transform bbox from game coordinates to pixel coordinates.
+  def self.bbox2pixel(bbox, ppc)
+    px = bbox.map{ |c| c.to_f * PPU * ppc / PPC }
+    [px[0].round, px[1].round, px[2].ceil, px[3].ceil]
+  end
+
+  # Transform bbox from pixel coordinates to game coordinates.
+  def self.bbox2game(bbox, ppc)
+    bbox.map{ |c| c.to_f * PPC / ppc / PPU }
+  end
+
   # Determine the scale of the screenshot based on the highscoreable type and
   # whether it's an animation or not
   def self.find_scale(h, anim)
@@ -564,7 +575,7 @@ module Map
 
       # Figure out which area must be redrawn (trying to be efficient)
       new_bbox = find_object_bbox(o, gif[:object_atlas], gif[:ppc])
-      full_bbox = bbox_hull([old_bbox, new_bbox])
+      full_bbox = bbox_hull([old_bbox, new_bbox], round: true)
       if bbox_area(full_bbox) <= bbox_area(old_bbox) + bbox_area(new_bbox)
         bboxes << full_bbox
       else
@@ -847,7 +858,7 @@ module Map
     width = dim * (COLUMNS + 2)
     height = dim * (ROWS + 2)
     bbox = [0, 0, UNITS * (COLUMNS + 2), UNITS * (ROWS + 2)] if !bbox
-    dest_bbox = bbox.map{ |c| (c * PPU * ppc / PPC).round }
+    dest_bbox = bbox2pixel(bbox, ppc)
     gif = Gifenc::Image === image
 
     # Draw objects
@@ -893,7 +904,7 @@ module Map
     gif = Gifenc::Image === image
     color = palette[color >> 8] if gif
     bbox = [0, 0, UNITS * (COLUMNS + 2), UNITS * (ROWS + 2)] if !bbox
-    dest_bbox = bbox.map{ |c| (c * PPU * ppc / PPC).round }
+    dest_bbox = bbox2pixel(bbox, ppc)
     x_min, y_min, x_max, y_max = gather_cells(bbox, false)
 
     # Draw tiles within the given cell range
@@ -951,7 +962,7 @@ module Map
     gif = Gifenc::Image === image
     color = palette[color >> 8] if gif
     bbox = [0, 0, UNITS * (COLUMNS + 2), UNITS * (ROWS + 2)] if !bbox
-    dest_bbox = bbox.map{ |c| (c * PPU * ppc / PPC).round }
+    dest_bbox = bbox2pixel(bbox, ppc)
     x_min, y_min, x_max, y_max = gather_cells(bbox, true)
 
     # Parse borders and color
@@ -1022,7 +1033,7 @@ module Map
   # as usual (bg -> objects -> tiles -> borders -> traces), and restricted to the
   # box, otherwise we could mess other parts up.
   def self.redraw_bbox(image, bbox, objects, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
-    pixel_bbox = bbox.map{ |c| (c * PPU * ppc / PPC).round }
+    pixel_bbox = bbox2pixel(bbox, ppc)
     image.rect(*pixel_bbox, nil, palette[PALETTE[2, palette_idx] >> 8])
     render_objects(objects, image, ppc: ppc, atlas: object_atlas, bbox: bbox, frame: frame)
     render_tiles(tiles, image, ppc: ppc, atlas: tile_atlas, bbox: bbox, frame: frame, palette: palette, palette_idx: palette_idx)
@@ -1035,7 +1046,7 @@ module Map
   def self.redraw_changes(image, regions, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx = 0, ppc = PPC, frame = true)
     regions.each{ |bbox|
       next if !bbox
-      bbox = bbox.map{ |c| c * PPC / ppc.to_f / PPU }
+      bbox = bbox2game(bbox, ppc)
       redraw_bbox(image, bbox, object_grid, tiles, object_atlas, tile_atlas, palette, palette_idx, ppc, frame)
     }
   end

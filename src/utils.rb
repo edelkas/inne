@@ -2432,11 +2432,12 @@ def bbox_intersect(bboxes)
 end
 
 # Compute the rectangular hull of a list of bboxes.
-def bbox_hull(bboxes)
+def bbox_hull(bboxes, round: false)
   x1 = bboxes.map{ |bbox| bbox[0] }.min
   y1 = bboxes.map{ |bbox| bbox[1] }.min
   x2 = bboxes.map{ |bbox| bbox[0] + bbox[2] }.max
   y2 = bboxes.map{ |bbox| bbox[1] + bbox[3] }.max
+  x1, y1, x2, y2 = x1.round, y1.round, x2.round, y2.round if round
   w = x2 - x1
   h = y2 - y1
   [w, h].min > 0.01 ? [x1, y1, w, h] : nil
