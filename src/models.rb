@@ -2518,12 +2518,12 @@ class Challenge < ActiveRecord::Base
 
   def format_objs
     objs.map{ |k, v|
-      v == 1 ? "#{k}++" : (v == -1 ? "#{k}--" : "")
+      v == 1 ? ANSI.good + "#{k}++" : (v == -1 ? ANSI.bad + "#{k}--" : "")
     }.join
   end
 
   def format(pad)
-    format_type + " " * [1, pad - count + 1].max + format_objs
+    ANSI.yellow + format_type + " " * [1, pad - count + 1].max + format_objs + ANSI.clear
   end
 end
 
