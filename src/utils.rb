@@ -725,6 +725,10 @@ module ANSI extend self
     "\x1B[#{num}m"
   end
 
+  def unesc(str)
+    str.gsub(/\x1B\[\d+m/, '')
+  end
+
   def format(str, bold: false, underlined: false, fg: nil, bg: nil)
     return str if !bold && !underlined && !fg && !bg
     str.prepend(esc(BOLD))  if bold
@@ -1870,7 +1874,7 @@ end
 #   - Floats will also be formatted with 3 decimals
 # Additionally, all entries will be padded.
 # An entry could also be the symbol :sep, will will insert a separator in that row
-def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false, hor_pad: true)
+def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false, hor_pad: true, color: nil)
   # Convert all non-integer numbers to floats
   rows.each{ |r|
     next unless r.is_a?(Array)
@@ -1882,6 +1886,7 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
   count = text_rows.map(&:size).max
   rows.each{ |r| if r.is_a?(Array) then r << "" while r.size < count end }
   widths = (0..count - 1).map{ |c| text_rows.map{ |r| (r[c].is_a?(Float) ? "%.3f" % r[c] : r[c].to_s).length }.max }
+  length = widths.sum + (hor_pad ? 2 * widths.size : 0) + widths.size + 1
 
   # Build connectors
   ver        = sep_y ? sep_y : double ? '║' : heavy ? '┃' : '│'
@@ -1902,12 +1907,23 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
   clean_mid  = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(hor)      + mid_right
   clean_down = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + mid_right
 
+  # Optionally, add color
+  if color
+    ver        = color + ver        + ANSI.clear
+    sep_up     = color + sep_up     + ANSI.clear
+    sep_mid    = color + sep_mid    + ANSI.clear
+    sep_down   = color + sep_down   + ANSI.clear
+    clean_up   = color + clean_up   + ANSI.clear
+    clean_mid  = color + clean_mid  + ANSI.clear
+    clean_down = color + clean_down + ANSI.clear
+  end
+
   # Build table
   table = ''
   if !header.nil?
     header = ' ' + header + ' '
     table << clean_up + "\n"
-    table << ver + ANSI.bold + header.center(sep_mid.size - 2, '░') + ANSI.clear + ver + "\n"
+    table << ver + ANSI.bold + header.center(length - 2, '░') + ANSI.clear + ver + "\n"
     table << clean_down + "\n"
   else
     table << sep_up + "\n"
