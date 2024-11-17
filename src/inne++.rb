@@ -85,6 +85,8 @@
 #                                                                              #
 ################################################################################
 
+$boot_time = Time.now
+
 # We use some gems directly from Github repositories. This is supported by
 # Bundler but not by RubyGems directly. The next two lines makes these gems
 # available / visible.
@@ -144,7 +146,6 @@ def initialize_vars
   $status_update   = Time.now.to_i
   $twitch_token    = nil
   $twitch_streams  = {}
-  $boot_time       = Time.now
   $active_tasks    = {}
   $memory_warned   = false
   $memory_warned_c = false
@@ -401,7 +402,7 @@ def shutdown(trap: false, force: false)
   if !force && !Scheduler.free?
     _thread do
       names = Scheduler.list_blocking.map{ |job| job.task.name }.join(", ")
-      warn("Waiting for background tasks to finish (#{names})")
+      alert("Waiting for background tasks to finish (#{names})")
       sleep(0.1)
       Scheduler.clear
     end
@@ -433,7 +434,7 @@ _thread do
   set_channels
   start_discord_tasks
 end
-succ("Loaded outte")
+succ("Loaded outte (%.2fs)" % [Time.now - $boot_time])
 binding.pry if DEBUG
 
 # Idle until we need to execute commands on the main thread issued from

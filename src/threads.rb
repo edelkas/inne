@@ -687,14 +687,14 @@ def monitor_memory
     if used_ratio > MEMORY_USAGE.clamp(0, 1)
       _thread do restart("Lack of memory (#{str})") end
     elsif !$memory_warned
-      warn("Something's taking up excessive memory, and it's not outte! (#{str})", discord: true)
+      alert("Something's taking up excessive memory, and it's not outte! (#{str})", discord: true)
       $memory_warned = true
     end
   end
 
   # If below 5%, send another warning to Discord, regardless of outte usage
   if available_ratio < MEMORY_CRITICAL.clamp(0, 1) && !$memory_warned_c
-    warn("Memory usage is critical! (#{"%.2f%%" % [100 - 100 * available_ratio]})", discord: true)
+    alert("Memory usage is critical! (#{"%.2f%%" % [100 - 100 * available_ratio]})", discord: true)
     $memory_warned_c = true
   end
 end
@@ -714,7 +714,7 @@ def monitor_db
   cur = stats[:connections]
   max = stats[:size]
   ratio = cur.to_f / max
-  warn("Lack of Rails pool connections (#{cur} / #{max})", discord: true) if ratio >= POOL_LIMIT
+  alert("Lack of Rails pool connections (#{cur} / #{max})", discord: true) if ratio >= POOL_LIMIT
 end
 
 def potato

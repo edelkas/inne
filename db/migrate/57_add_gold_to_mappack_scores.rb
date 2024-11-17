@@ -9,7 +9,7 @@ class AddGoldToMappackScores < ActiveRecord::Migration[5.1]
       print("Calculating gold count for score #{i + 1} / #{count}...".ljust(80, ' ') + "\r")
       next if s.id == 131072
       gold = MappackScore.gold_count(s.highscoreable_type, s.score_hs, s.score_sr)
-      warn("Potentially incorrect hs score at #{s.id}") if !MappackScore.verify_gold(gold)
+      alert("Potentially incorrect hs score at #{s.id}") if !MappackScore.verify_gold(gold)
       s.update(gold: gold.round)
     }
   end

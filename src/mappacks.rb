@@ -119,7 +119,7 @@ class Mappack < ActiveRecord::Base
       path = File.join(dir, f)
       File.file?(path) && File.extname(path) == ".txt"
     }.sort
-    warn("No appropriate files found in directory for mappack #{name_str}") if files.count == 0
+    alert("No appropriate files found in directory for mappack #{name_str}") if files.count == 0
 
     if !hard
       # Soft updates: Ensure the new tabs will replace the old ones precisely
@@ -149,7 +149,7 @@ class Mappack < ActiveRecord::Base
       tab_code = f[0..-5]
       tab = TABS_NEW.values.find{ |att| att[:files].key?(tab_code) }
       if tab.nil?
-        warn("Unrecognized file #{tab_code} parsing mappack #{name_str}")
+        alert("Unrecognized file #{tab_code} parsing mappack #{name_str}")
         next
       end
 
@@ -278,7 +278,7 @@ class Mappack < ActiveRecord::Base
       if count == 0
         dbg("Parsed file #{tab_code} for mappack #{name_str} without errors", pad: true)
       else
-        warn("Parsed file #{tab_code} for mappack #{name_str} with #{count} errors", pad: true)
+        alert("Parsed file #{tab_code} for mappack #{name_str} with #{count} errors", pad: true)
       end
     }
 
@@ -306,7 +306,7 @@ class Mappack < ActiveRecord::Base
       succ("Successfully parsed mappack #{name_str}")
       self.update(version: v)
     else
-      warn("Parsed mappack #{name_str} with #{file_errors} file errors and #{map_errors} map errors")
+      alert("Parsed mappack #{name_str} with #{file_errors} file errors and #{map_errors} map errors")
     end
     dbg("Soft update: #{changes[:name]} name changes, #{changes[:tiles]} tile changes, #{changes[:objects]} object changes.") if !hard
   rescue => e
@@ -359,13 +359,13 @@ class Mappack < ActiveRecord::Base
         # Demo must have even length (coop)
         sz = d.size
         if sz % 2 == 1
-          warn("Demo does not satisfy Duality's requirements (odd length)")
+          alert("Demo does not satisfy Duality's requirements (odd length)")
           return false
         end
 
         # Both halves of the demo must be identical
         if d[0...sz / 2] != d[sz / 2..-1]
-          warn("Demo does not satisfy Duality's requirements (different inputs)")
+          alert("Demo does not satisfy Duality's requirements (different inputs)")
           return false
         end
       }
@@ -877,7 +877,7 @@ class MappackScore < ActiveRecord::Base
     # Parse player ID
     uid = query['user_id'].to_i
     if uid <= 0 || uid >= 10000000
-      warn("Invalid player (ID #{uid}) submitted a score")
+      alert("Invalid player (ID #{uid}) submitted a score")
       return
     end
 
@@ -885,14 +885,14 @@ class MappackScore < ActiveRecord::Base
     name = "ID:#{uid}"
     if HACKERS.key?(uid) || CHEATERS.key?(uid)
       name = (HACKERS[uid] || CHEATERS[uid]).first
-      warn("Blacklisted player #{name} submitted a score", discord: true)
+      alert("Blacklisted player #{name} submitted a score", discord: true)
       return
     end
 
     # Parse type
     type = TYPES.find{ |_, h| query.key?("#{h[:name].downcase}_id") }[1] rescue nil
     if type.nil?
-      warn("Score submitted: Type not found")
+      alert("Score submitted: Type not found")
       return
     end
     id_field = "#{type[:name].downcase}_id"
@@ -915,7 +915,7 @@ class MappackScore < ActiveRecord::Base
     # Find mappack
     mappack = Mappack.find_by(code: code)
     if mappack.nil?
-      warn("Score submitted by #{name}: Mappack '#{code}' not found")
+      alert("Score submitted by #{name}: Mappack '#{code}' not found")
       return
     end
 
@@ -925,7 +925,7 @@ class MappackScore < ActiveRecord::Base
     if h.nil?
       # If highscoreable not found, and forwarding is disabled, return nil
       if !CLE_FORWARD
-        warn("Score submitted by #{name}: #{type[:name]} ID:#{sid} for mappack '#{code}' not found")
+        alert("Score submitted by #{name}: #{type[:name]} ID:#{sid} for mappack '#{code}' not found")
         return
       end
 
@@ -951,7 +951,7 @@ class MappackScore < ActiveRecord::Base
     if type[:name] == 'Level'
       score_hs = MappackScoresTweak.tweak(score_hs, player, h, Demo.parse_header(query['replay_data']))
       if score_hs.nil?
-        warn("Tweaking of score submitted by #{name} to #{h.name} failed", discord: true)
+        alert("Tweaking of score submitted by #{name} to #{h.name} failed", discord: true)
         score_hs = score_hs_orig
       end
     end
@@ -1023,7 +1023,7 @@ class MappackScore < ActiveRecord::Base
       # Verify hs score integrity by checking calculated gold count
       if (!MappackScore.verify_gold(goldf) && type[:name] != 'Story') || (h.gold && gold > h.gold) || (gold < 0)
         _thread do
-          warn("Potentially incorrect hs score submitted by #{name} in #{h.name} (ID #{score.id})", discord: true)
+          alert("Potentially incorrect hs score submitted by #{name} in #{h.name} (ID #{score.id})", discord: true)
         end
       end
 
@@ -1035,7 +1035,7 @@ class MappackScore < ActiveRecord::Base
           score: score_hs_orig
         )
         _thread do
-          warn("Score submitted by #{name} to #{h.name} has invalid security hash", discord: true)
+          alert("Score submitted by #{name} to #{h.name} has invalid security hash", discord: true)
         end
       end
 
@@ -1044,7 +1044,7 @@ class MappackScore < ActiveRecord::Base
       v2 = mappack.version
       if WARN_VERSION && v1 != v2
         _thread do
-          warn("#{name} submitted a score to #{h.name} with an incorrect mappack version (#{v1} vs #{v2})", discord: true)
+          alert("#{name} submitted a score to #{h.name} with an incorrect mappack version (#{v1} vs #{v2})", discord: true)
         end
       end
     end
@@ -1089,7 +1089,7 @@ class MappackScore < ActiveRecord::Base
     # Parse type
     type = TYPES.find{ |_, h| query.key?("#{h[:name].downcase}_id") }[1] rescue nil
     if type.nil?
-      warn("Getting scores: Type not found")
+      alert("Getting scores: Type not found")
       return
     end
     sid = query["#{type[:name].downcase}_id"].to_i
@@ -1098,7 +1098,7 @@ class MappackScore < ActiveRecord::Base
     # Find mappack
     mappack = Mappack.find_by(code: code)
     if mappack.nil?
-      warn("Getting scores: Mappack '#{code}' not found")
+      alert("Getting scores: Mappack '#{code}' not found")
       return
     end
 
@@ -1106,7 +1106,7 @@ class MappackScore < ActiveRecord::Base
     h = "Mappack#{type[:name]}".constantize.find_by(mappack: mappack, inner_id: sid)
     if h.nil?
       return forward(req) if CLE_FORWARD
-      warn("Getting scores: #{type[:name]} #{name} for mappack '#{code}' not found")
+      alert("Getting scores: #{type[:name]} #{name} for mappack '#{code}' not found")
       return
     end
     name = h.name
@@ -1123,21 +1123,21 @@ class MappackScore < ActiveRecord::Base
   def self.get_replay(code, query, req = nil)
     # Integrity checks
     if !query.key?('replay_id')
-      warn("Getting replay: Replay ID not provided")
+      alert("Getting replay: Replay ID not provided")
       return
     end
 
     # Parse type (no type = level)
     type = TYPES.find{ |_, h| query['qt'].to_i == h[:qt] }[1] rescue nil
     if type.nil?
-      warn("Getting replay: Type #{query['qt'].to_i} is incorrect")
+      alert("Getting replay: Type #{query['qt'].to_i} is incorrect")
       return
     end
 
     # Find mappack
     mappack = Mappack.find_by(code: code)
     if mappack.nil?
-      warn("Getting replay: Mappack '#{code}' not found")
+      alert("Getting replay: Mappack '#{code}' not found")
       return
     end
 
@@ -1149,19 +1149,19 @@ class MappackScore < ActiveRecord::Base
     score = MappackScore.find_by(id: query['replay_id'].to_i)
     if score.nil?
       return forward(req) if CLE_FORWARD
-      warn("Getting replay: Score with ID #{query['replay_id']} not found")
+      alert("Getting replay: Score with ID #{query['replay_id']} not found")
       return
     end
 
     if score.highscoreable.mappack.code != code
       return forward(req) if CLE_FORWARD
-      warn("Getting replay: Score with ID #{query['replay_id']} is not from mappack '#{code}'")
+      alert("Getting replay: Score with ID #{query['replay_id']} is not from mappack '#{code}'")
       return
     end
 
     if score.highscoreable.basetype != type[:name]
       return forward(req) if CLE_FORWARD
-      warn("Getting replay: Score with ID #{query['replay_id']} is not from a #{type[:name].downcase}")
+      alert("Getting replay: Score with ID #{query['replay_id']} is not from a #{type[:name].downcase}")
       return
     end
 
@@ -1171,7 +1171,7 @@ class MappackScore < ActiveRecord::Base
     # Find replay
     demo = score.demo
     if demo.nil? || demo.demo.nil?
-      warn("Getting replay: Replay with ID #{query['replay_id']} not found")
+      alert("Getting replay: Replay with ID #{query['replay_id']} not found")
       return
     end
 
@@ -1243,7 +1243,7 @@ class MappackScore < ActiveRecord::Base
     when 'Story'
       tweak = 25
     else
-      warn("Incorrect type when calculating gold count")
+      alert("Incorrect type when calculating gold count")
       tweak = 0
     end
     (score_hs + score_sr - 5400 - tweak).to_f / 120
@@ -1458,14 +1458,14 @@ class MappackScoresTweak < ActiveRecord::Base
     else
       tw = self.find_by(player: player, episode_id: level.episode.id)
       if tw.nil? # Tweak should exist
-        warn("Tweak for #{player.name}'s #{level.episode.name} run should exit")
+        alert("Tweak for #{player.name}'s #{level.episode.name} run should exit")
         return nil
       end
     end
 
     # Ensure tweak corresponds to the right level
     if tw.index != index
-      warn("Tweak for #{player.name}'s #{level.episode.name} has index #{tw.index}, should be #{index}")
+      alert("Tweak for #{player.name}'s #{level.episode.name} has index #{tw.index}, should be #{index}")
       return nil
     end
 

@@ -228,7 +228,7 @@ module Log extend self
     if log_to_file
       if File.size?(PATH_LOG_FILE).to_i >= LOG_FILE_MAX
         File.rename(PATH_LOG_FILE, PATH_LOG_OLD)
-        warn("Log file was filled!", file: false, discord: true)
+        alert("Log file was filled!", file: false, discord: true)
       end
       File.write(PATH_LOG_FILE, msg[:plain].strip + "\n", mode: 'a')
     end
@@ -273,7 +273,7 @@ end
 
 # Shortcuts for different logging methods
 def log   (msg, **kwargs)    Log.write(msg, :info,  **kwargs) end
-def warn  (msg, **kwargs)    Log.write(msg, :warn,  **kwargs) end
+def alert (msg, **kwargs)    Log.write(msg, :warn,  **kwargs) end
 def err   (msg, **kwargs)    Log.write(msg, :error, **kwargs) end
 def msg   (msg, **kwargs)    Log.write(msg, :msg,   **kwargs) end
 def succ  (msg, **kwargs)    Log.write(msg, :good,  **kwargs) end
@@ -2112,7 +2112,7 @@ def parse_tga(file, unpack: true)
   perror("RLE TGA files not supported.") if image_type > 3
   perror("True color TGA files not supported.") if image_type < 3
   perror("Reverse-storage TGAs not supported.") unless desc[5] == 1
-  warn("Trying to parse a sub-8bit depth TGA.") if depth < 8
+  alert("Trying to parse a sub-8bit depth TGA.") if depth < 8
 
   # Parse image data
   offset = 18 + id_length + cm_length
@@ -2314,7 +2314,7 @@ def leave_unknown_servers
       s.leave
     end
   }
-  warn("Left #{names.count} unknown servers: #{names.join(', ')}") if names.count > 0
+  alert("Left #{names.count} unknown servers: #{names.join(', ')}") if names.count > 0
 end
 
 def update_bot_status
@@ -2325,7 +2325,7 @@ end
 # are being executed, like publishing lotd or downloading the scores.
 # If force is true, the threads will be killed immediately.
 def restart(reason = 'Unknown reason', force: false)
-  warn("Restarting outte due to: #{reason}.", discord: true)
+  alert("Restarting outte due to: #{reason}.", discord: true)
   shutdown(trap: false, force: force)
   exec('./inne')
 rescue => e

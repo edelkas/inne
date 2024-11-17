@@ -509,7 +509,7 @@ class Userlevel < ActiveRecord::Base
     perror("Some of the queried userlevels have an incorrect game mode.") if maps.any?{ |m| MODES.invert[m.mode] != mode }
     if maps.size > QUERY_LIMIT_HARD
       maps = maps.take(QUERY_LIMIT_HARD)
-      warn("Too many queried userlevels, truncated to #{QUERY_LIMIT_HARD} maps.")
+      alert("Too many queried userlevels, truncated to #{QUERY_LIMIT_HARD} maps.")
     end
 
     # Compose query result

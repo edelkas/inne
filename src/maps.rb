@@ -212,7 +212,7 @@ module Map
     tiles = [map_data[8...1940]].pack('h*').bytes
     invalid_count = tiles.count{ |t| t > 33 }
     if invalid_count > 0
-      warn("#{warning}: #{invalid_count} invalid tiles.")
+      alert("#{warning}: #{invalid_count} invalid tiles.")
     end
     tiles = tiles.each_slice(42).to_a
 
@@ -254,9 +254,9 @@ module Map
 
     # Warnings if footer is incorrect
     if size != offset + 8
-      warn("#{warning}: Incorrect footer length.")
+      alert("#{warning}: Incorrect footer length.")
     elsif map_data[offset..-1] != '00000000'
-      warn("#{warning}: Incorrect footer format.")
+      alert("#{warning}: Incorrect footer format.")
     end
 
     # Return map elements
@@ -615,7 +615,7 @@ module Map
         when ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH
           # For switches, toggle / remove door too
           door = object_dict[o[0] - 1]&.[](o[5])
-          next warn("Door for collided switch not found.") if !door
+          next alert("Door for collided switch not found.") if !door
           door[4] = door[0] == ID_DOOR_LOCKED ? -1 : o[4]
           bboxes << find_object_bbox(door, gif[:object_atlas], gif[:ppc])
         when ID_DRONE_ZAP, ID_DRONE_CHASER, ID_MICRODRONE, ID_SHOVE_THWUMP

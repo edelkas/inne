@@ -398,7 +398,7 @@ end
 def send_shutdown(event, force = false)
   flags = parse_flags(remove_command(parse_message(event)))
   force ||= flags.key?(:force)
-  warn("#{force ? 'Killing' : 'Shutting down'} outte.", discord: true)
+  alert("#{force ? 'Killing' : 'Shutting down'} outte.", discord: true)
   shutdown(trap: false, force: force)
   exit
 rescue => e
