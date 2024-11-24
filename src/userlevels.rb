@@ -1119,19 +1119,18 @@ def send_userlevel_demo_download(event)
   msg.sub!(/\w*replay\w*/i, '')
   msg.squish!
   send_userlevel_individual(event, msg){ |map|
-    h     = map[:query]
-    h.update_scores
-    rank  = [parse_range(msg).first, h.scores.size - 1].min
-    score = h.scores[rank]
+    map[:query].update_scores
+    rank  = [parse_range(msg).first, map[:query].scores.size - 1].min
+    score = map[:query].scores[rank]
     perror("This userlevel has no scores.") if !score
 
     output = "Downloading #{rank.ordinalize} score by `#{score.player.name}` "
-    output += "(#{"%.3f" % [score.score / 60.0]}) in userlevel #{verbatim(h.title)} "
-    output += "with ID #{verbatim(h.id.to_s)} "
-    output += "by #{verbatim(h.author.name)} "
-    output += "on #{Time.now.to_s}"
+    output += "(#{"%.3f" % [score.score / 60.0]}) in userlevel #{verbatim(map[:query].title)} "
+    output += "with ID #{verbatim(map[:query].id.to_s)} "
+    output += "by #{verbatim(map[:query].author.name)} "
+    output += "from #{verbatim(map[:query].date.strftime('%F'))}"
     event << format_header(output)
-    send_file(event, Demo.encode(score.demo), "#{h.id}_#{rank}", true)
+    send_file(event, Demo.encode(score.demo), "#{map[:query].id}_#{rank}", true)
   }
 rescue => e
   lex(e, 'Error fetching userlevel demo download.', event: event)
@@ -1146,7 +1145,7 @@ def send_userlevel_download(event)
     output = "Downloading userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
-    output += "on #{Time.now.to_s}"
+    output += "from #{verbatim(map[:query].date.strftime('%F'))}"
     event << format_header(output)
     send_file(event, map[:query].dump_level, map[:query].id.to_s, true)
   }
@@ -1167,8 +1166,8 @@ def send_userlevel_screenshot(event, userlevel = nil)
     output += "Screenshot for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
-    output += "using palette #{verbatim(h[:palette])} "
-    output += " on #{Time.now.to_s}:"
+    output += "from #{verbatim(map[:query].date.strftime('%F'))} "
+    output += "using palette #{verbatim(h[:palette])}:"
     event << output
     send_file(event, map[:query].screenshot(h[:palette]), map[:query].id.to_s + ".png", true)
   }
@@ -1186,7 +1185,7 @@ def send_userlevel_scores(event)
     output = "Scores for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
-    output += "on #{Time.now.to_s}"
+    output += "from #{verbatim(map[:query].date.strftime('%F'))}"
     count = map[:query].completions
     header = format_header(output)
     boards = format_block(map[:query].format_scores)
