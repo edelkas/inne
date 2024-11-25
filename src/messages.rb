@@ -818,15 +818,20 @@ def send_worst(event, worst = true)
   full    = parse_full(msg)
   mappack = parse_mappack(msg, parse_user(event.user), event.channel)
   board   = parse_board(msg, 'hs')
-  perror("This function is only available for highscore and speedrun mode.") if !['hs', 'sr'].include?(board)
-  perror("Speedrun mode is not yet available for Metanet levels.") if board == 'sr' && !mappack
+  agd     = !!msg[/\bagd?\b/i] || !!msg[/\bg\+\+(\s|$)/i]
+  perror("Metanet levels only support highscore mode.") if (board != 'hs' || agd) && !mappack
 
   # Retrieve and format most improvable scores
-  list = player.score_gaps(type, tabs, worst, full, mappack, board)
-  fmt  = board == 'sr' ? 'd' : '.3f'
+  if agd || board == 'gm'
+    list = player.gold_gaps(type, tabs, worst, full, mappack, agd)
+  else
+    list = player.score_gaps(type, tabs, worst, full, mappack, board)
+  end
+  board = 'gp' if agd
+  fmt  = board != 'hs' ? 'd' : '.3f'
   pad1 = list.map{ |level, gap| level.length }.max
-  pad2 = list.map{ |level, gap| gap }.max.to_i.to_s.length + (board == 'sr' ? 0 : 4)
-  list = list.map{ |level, gap| "#{"%-#{pad1}s" % [level]} - #{"%#{pad2}#{fmt}" % [round_score(gap)]}" }.join("\n")
+  pad2 = list.map{ |level, gap| gap }.max.to_i.to_s.length + (board != 'hs' ? 0 : 4)
+  list = list.map{ |level, gap| "%-*s - %*#{fmt}" % [pad1, level, pad2, round_score(gap)] }.join("\n")
 
   # Send response
   adverb  = worst ? 'most' : 'least'

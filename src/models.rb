@@ -2186,6 +2186,28 @@ class Player < ActiveRecord::Base
     list
   end
 
+  # Return highscoreables with most/least missed pieces of gold.
+  def gold_gaps(type, tabs, worst = true, full = false, mappack = nil, agd = true)
+    # Prepare params
+    type = ensure_type(normalize_type(type)).mappack
+    tname = type.table_name
+    klass = MappackScore.where(mappack: mappack, player: self)
+    klass = klass.where(tab: tabs) unless tabs.empty?
+    diff = agd ? "`#{tname}`.`gold` - MAX(`mappack_scores`.`gold`)" : 'MIN(`mappack_scores`.`gold`)'
+
+    # Calculate gaps
+    bench(:start) if BENCHMARK
+    list = klass.joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `highscoreable_id`")
+                .where(highscoreable_type: type)
+                .group(:highscoreable_id)
+                .having('`diff` > 0')
+                .order("`diff` #{worst ? 'DESC' : 'ASC'}")
+                .limit(full ? nil : NUM_ENTRIES)
+                .pluck(:name, "#{diff} AS `diff`")
+    bench(:step) if BENCHMARK
+    list
+  end
+
   def points(type, tabs)
     bench(:start) if BENCHMARK
     points = scores_by_type_and_tabs(type, tabs).sum('20 - `rank`')

@@ -984,6 +984,7 @@ def parse_board(msg, dflt = nil, dual: false)
   board = 'dual' if !!msg[/\bdual\b/i] && dual
   board = 'hs'   if !!msg[/\bhs\b/i] || !!msg[/\bhigh\s*score\b/i]
   board = 'gm'   if !!msg[/\bng\b/i] || !!msg[/\bg--(\s|$)/i]
+  #board = 'gp'   if !!msg[/\bagd?\b/i] || !!msg[/\bg\+\+(\s|$)/i]
   board = 'sr'   if !!msg[/\bsr\b/i] || !!msg[/\bspeed\s*run\b/i]
   board = dflt   if board.nil?
   board
@@ -1046,6 +1047,8 @@ def format_board(board)
     'speedrun'
   when 'gm'
     'G--'
+  when 'gp'
+    'G++'
   when 'dual'
     'dual'
   else
