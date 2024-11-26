@@ -379,6 +379,7 @@ def run_bot
     exit
   }
   leave_unknown_servers
+  register_commands
   log("Bot connected to servers: #{$bot.servers.map{ |id, s| s.name }.join(', ')}.")
 rescue => e
   fatal("Failed to execute bot: #{e}")

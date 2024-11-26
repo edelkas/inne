@@ -373,6 +373,34 @@ def delete_score(event, yes: false)
   send_message(event, content: msg, append: true)
 end
 
+# Register a global command. Will update (overwrite) if it already exists.
+def register_command(cmd, update = false)
+  sig = ''
+  case cmd
+  when :screenshot
+    sig = 'str,str'
+    $bot.register_application_command(:screenshot, 'Generate a screenshot') do |cmd|
+      cmd.string(:id, 'The level, episode or story')
+      cmd.string(:palette, 'Official palette to use')
+    end
+  end
+  succ("%s command: %s(%s)" % [update ? 'Updated' : 'Registered', cmd, sig])
+rescue => e
+  lex(e, "Failed to %s command: %s(%s)" % [update ? 'update' : 'register', cmd, sig])
+end
+
+# Check that all commands are registered, and create any new ones
+def register_commands()
+  names = $bot.get_application_commands.map(&:name)
+  commands = [:screenshot]
+  to_update = [] # To force an update, for development
+  commands.each{ |cmd|
+    next register_command(cmd, false) if !names.include?(cmd)
+    register_command(cmd, true) if to_update.include?(cmd)
+  }
+  log("Registered commands")
+end
+
 # Important notes for parsing interaction components:
 #
 # 1) We determine the origin of the interaction (the bot's source message) based
