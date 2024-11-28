@@ -395,7 +395,7 @@ def register_commands()
   commands = [:screenshot]
   to_update = [] # To force an update, for development
   commands.each{ |cmd|
-    next register_command(cmd, false) if !names.include?(cmd)
+    next register_command(cmd, false) if !names.include?(cmd.to_s)
     register_command(cmd, true) if to_update.include?(cmd)
   }
   log("Registered commands")
