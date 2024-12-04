@@ -1207,6 +1207,10 @@ module Levelish
     self.episode.story
   end
 
+  def levels
+    [self]
+  end
+
   def format_name
     str = "#{verbatim(longname)} (#{name.remove('MET-')})"
     str += " by #{verbatim(author)}" if author rescue ''
@@ -2725,6 +2729,30 @@ class Archive < ActiveRecord::Base
   end
 end
 
+# Implemented by Demo and MappackDemo
+module Demoish
+  def decode(dump = false)
+    Demo.decode(demo, dump)
+  end
+
+  def framecount
+    decode(true).map(&:size).sum rescue -1
+  end
+
+  # The complexity of a run is the number of moving entities NSim supports times
+  # the number of frames. This is used as a threshold to determine when a run is
+  # too complex to be rendered fully in animations.
+  def complexity
+    run = is_a?(Demo) ? archive : score
+    return -1 if !run || !demo
+    object_counts = run.highscoreable.levels.map{ |l|
+      l.map.object_counts.values_at(0, *Map::ID_LIST_MOTIONFUL).sum
+    }
+    frame_counts = decode(true).map(&:size)
+    object_counts.zip(frame_counts).map{ |a, b| a * b }.sum
+  end
+end
+
 #------------------------------------------------------------------------------#
 #                    METANET REPLAY FORMAT DOCUMENTATION                       |
 #------------------------------------------------------------------------------#
@@ -2763,6 +2791,7 @@ end
 #   * 1st bit for jump, 2nd for right, 3rd for left, 4th for suicide           |
 #------------------------------------------------------------------------------#
 class Demo < ActiveRecord::Base
+  include Demoish
   belongs_to :archive, foreign_key: :id
 
   def self.encode(replay)
@@ -2829,10 +2858,6 @@ class Demo < ActiveRecord::Base
     Demo.parse(replay, archive.highscoreable_type)
   end
 
-  def decode
-    Demo.decode(demo)
-  end
-
   def get_demo
     uri = Proc.new { |steam_id| uri(steam_id) }
     data = Proc.new { |data| data }
@@ -2840,16 +2865,6 @@ class Demo < ActiveRecord::Base
            "for #{archive.highscoreable_type.downcase} "\
            "with id #{archive.highscoreable_id}"
     get_data(uri, data, err)
-  end
-
-  # This is only used in the migration file, to compute the framecount of
-  # preexisting demos. New ones get computed on the fly right after download.
-  def framecount
-    return -1 if demo.nil?
-    demos = decode
-    return (!demo[0].is_a?(Array) ? demos.size : demos.map(&:size).sum)
-  rescue
-    -1
   end
 
   def update_archive(framecounts, lost)

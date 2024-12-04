@@ -1557,7 +1557,7 @@ end
 # TODO: Make splits use this as well.
 class NSim
 
-  attr_reader :count, :success, :correct, :valid, :valid_flags
+  attr_reader :count, :success, :correct, :valid, :valid_flags, :complexity
   attr_accessor :ppc
   Collision = Struct.new(:id, :index, :state)
 
@@ -1576,6 +1576,7 @@ class NSim
     @raw_chunks     = 40.times.map{ |id| [id, {}] }.to_h
     @raw_collisions = {}
     @ppc            = 0 # Determines the default scaling factor for coordinates
+    @complexity     = 0 # Total coordinates
   end
 
   # Export input files for nsim
@@ -1595,8 +1596,8 @@ class NSim
     path = PATH_NTRACE + (basic_sim ? ' --basic-sim' : '') + (basic_render ? '' : ' --full-export')
     stdout, stderr, status = python(path, output: true, fast: true)
     @output = [stdout, stderr].join("\n\n")
-    @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
     dbg("NSim simulation time: %.3fs" % [Time.now - t])
+    @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
   end
 
   # Remove all temp files
@@ -1643,14 +1644,8 @@ class NSim
       end
     end
 
-    coords = @raw_chunks.map{ |id, hash|
-      hash.map{ |index, chunks|
-        chunks[1].sum
-      }.sum
-    }.sum
     dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0])
     dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)])
-    dbg("NSim coordinates: %d" % [coords])
     @correct = true
   ensure
     f&.close
@@ -1684,6 +1679,7 @@ class NSim
     export
     execute(basic_sim: basic_sim, basic_render: basic_render)
     parse if @success
+    compute_complexity if @correct
     validate
   ensure
     clean
@@ -1709,14 +1705,25 @@ class NSim
     @raw_collisions.clear
     @raw_collisions = nil
 
+    clear_coords
+    @raw_coords.keys.each{ |id| @raw_coords[id] = nil }
+    @raw_coords.clear
+    @raw_coords = nil
+    @raw_chunks.keys.each{ |id| @raw_chunks[id] = nil }
+    @raw_chunks.clear
+    @raw_chunks = nil
+
+    @output.clear
+    @output = nil
+  end
+
+  # Free coordinate data (we may just want to do this to disable full anims on command)
+  def clear_coords
     @raw_coords.each{ |id, hash|
       hash.each{ |index, coords| coords.clear }
       hash.keys.each{ |index| hash[index] = nil }
       hash.clear
     }
-    @raw_coords.keys.each{ |id| @raw_coords[id] = nil }
-    @raw_coords.clear
-    @raw_coords = nil
 
     @raw_chunks.each{ |id, hash|
       hash.each{ |index, chunks|
@@ -1726,12 +1733,6 @@ class NSim
       hash.keys.each{ |index| hash[index] = nil }
       hash.clear
     }
-    @raw_chunks.keys.each{ |id| @raw_chunks[id] = nil }
-    @raw_chunks.clear
-    @raw_chunks = nil
-
-    @output.clear
-    @output = nil
   end
 
   # Length of the simulation, in frames
@@ -1834,6 +1835,17 @@ class NSim
   # Rescale coordinates (which are given in game units) for drawing
   def rescale(pos, ppc = @ppc)
     ppc == 0 ? pos : pos.map{ |c| (c * ppc * 4.0 / Map::UNITS).round }
+  end
+
+  # Measure the complexity of a run by adding up all coordinates of moving entities
+  # Used for limiting when full animations can be done
+  def compute_complexity
+    @complexity = @raw_chunks.map{ |id, hash|
+      hash.map{ |index, chunks|
+        chunks[1].sum
+      }.sum
+    }.sum
+    dbg("NSim coordinates: %d" % [@complexity])
   end
 end
 

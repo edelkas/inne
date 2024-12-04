@@ -109,6 +109,11 @@ module Map
     ID_MICRODRONE, ID_SHOVE_THWUMP
   ]
 
+  # Objects which are moving constantly
+  ID_LIST_MOTIONFUL = [
+    ID_DRONE_ZAP,  ID_DRONE_CHASER, ID_DEATHBALL, ID_MICRODRONE
+  ]
+
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -745,7 +750,7 @@ module Map
         hash.each{ |row, objs|
           objs.map(&:first).uniq.each{ |id|
             # Skip if this object doesn't exist
-            next if !OBJECTS.key?(id) || atlas.key?(id)
+            next if atlas.key?(id) || !OBJECTS.key?(id)
             atlas[id] = {}
 
             # Initialize sprites for all states
@@ -827,13 +832,13 @@ module Map
   # Convert the PNG sprites to GIF format for animations
   def self.convert_atlases(context_png, context_gif)
     # Tile atlas
-    context_gif[:tile_atlas] ||= context_png[:tile_atlas].map{ |id, png|
+    context_gif[:tile_atlas] = context_png[:tile_atlas].map{ |id, png|
       png.pixels.map!{ |c| c == 0 ? TRANSPARENT_COLOR : c }
       [id, png2gif(png, context_gif[:palette], TRANSPARENT_COLOR, TRANSPARENT_COLOR)]
     }.to_h
 
     # Object atlas
-    context_gif[:object_atlas] ||= context_png[:object_atlas].map{ |id, states|
+    context_gif[:object_atlas] = context_png[:object_atlas].map{ |id, states|
       [
         id,
         states.map{ |state, sprites|
@@ -1795,6 +1800,7 @@ module Map
     debug = !!msg[/\bdebug\b/i] && check_permission(event, 'ntracer')
     full = !!msg[/\bfull\b/i] || !!msg[/\bcomplete\b/i]
     gif = anim || !h.is_level?
+    trace = !!msg[/\btrace\b/i]
 
     # Prepare demos
     demos = scores.map{ |score|
@@ -1808,12 +1814,20 @@ module Map
 
     # Execute simulation and parse result
     TmpMsg.update(event, '-# Running simulation...')
-    levels = h.is_level? ? [h] : h.levels
-    res = levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
+    full_old = full
+    complexity = !userlevel ? scores.map{ |score| score.demo.complexity }.max : ANIM_LIMIT_HARD + 1
+    full = true if complexity < ANIM_LIMIT_SOFT
+    full = false if complexity > ANIM_LIMIT_HARD || !anim || trace
+    res = h.levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
     res.each{ |nsim|
       nsim.run(basic_sim: !full, basic_render: !full)
       bench(:step, 'Simulation', pad_str: 12, pad_num: 9) if BENCH_IMAGES
     }
+    complexity = res.map(&:complexity).sum
+    if complexity > ANIM_LIMIT_HARD || complexity > ANIM_LIMIT_SOFT && !full_old
+      full = false
+      res.each(&:clear_coords)
+    end
 
     # Check simulation success
     all_success = res.all?(&:success)
@@ -1841,22 +1855,31 @@ module Map
     event << header
     texts = h.format_scores(np: gif ? 0 : 11, mode: board, ranks: ranks, join: false, cools: false, stars: false)
     if !all_valid
-      warning = "(**Warning**: #{'Trace'.pluralize(wrong_names.count)}"
+      warning = "**Warning**: #{'Trace'.pluralize(wrong_names.count)}"
       warning << " for #{wrong_names.to_sentence}"
-      warning << " #{wrong_names.count == 1 ? 'is' : 'are'} likely incorrect)."
-      event << warning
+      warning << " #{wrong_names.count == 1 ? 'is' : 'are'} likely incorrect."
+      event << mdtext(warning, header: -1)
+    end
+    if full_old && !full && anim
+      reason = case
+      when trace
+        'not available for traces'
+      else
+        'complexity too high'
+      end
+      event << mdtext("**Note**: Entity animation disabled (#{reason}).", header: -1)
     end
 
     # Render trace or animation
-    trace = ''
+    output = ''.b
     test = false
     if !test && gif
       TmpMsg.update(event, '-# Animating...')
       sleep(0.05) while !TmpMsg.fetch(event).sent? # Wait till first msg is sent before forking, otherwise problems!
-      trace = screenshot(
+      output = screenshot(
         palette,
         h:      h,
-        trace:  !!msg[/trace/i],
+        trace:  trace,
         nsim:   res,
         texts:  texts,
         anim:   anim,
@@ -1866,7 +1889,7 @@ module Map
         delay:  delay,
         event:  event
       )
-      perror('Failed to render animation') if trace.nil?
+      perror('Failed to render animation') if output.nil?
     elsif !test && !gif
       TmpMsg.update(event, '-# Plotting routes...')
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
@@ -1878,21 +1901,21 @@ module Map
         markers: markers,
         texts:   !blank ? texts : []
       }
-      trace = QueuedCmd.new(:trace).enqueue
+      output = QueuedCmd.new(:trace).enqueue
       screenshot.close
-      perror('Failed to trace replays') if trace.nil?
+      perror('Failed to trace replays') if output.nil?
     end
 
     # Send image file
     ext = gif ? 'gif' : 'png'
     fn = "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}"
-    send_file(event, trace, fn, true) unless test
+    send_file(event, output, fn, true) unless test
 
     # Free allocated resources
     res.each{ |nsim| nsim.destroy }
     res.map!{ nil }
     res.clear
-    trace.clear
+    output.clear
 
     # Output debug info
     dbg("NSim memory used: %dMB." % getmem)

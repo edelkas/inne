@@ -1413,6 +1413,7 @@ class MappackScore < ActiveRecord::Base
 end
 
 class MappackDemo < ActiveRecord::Base
+  include Demoish
   belongs_to :mappack_score, foreign_key: :id
   alias_method :score,  :mappack_score
   alias_method :score=, :mappack_score=
@@ -1424,10 +1425,6 @@ class MappackDemo < ActiveRecord::Base
     count = orphans.count
     orphans.delete_all
     count
-  end
-
-  def decode
-    Demo.decode(demo)
   end
 end
 

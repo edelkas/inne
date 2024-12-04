@@ -215,10 +215,14 @@ TRANSPARENT_COLOR = 0x00FF00FF
 # Fonts
 FONT_TIMEBAR = 'retro'
 
+# Memory mitigation
+ANIM_GC              = false  # Garbage collect periodically when generating frames
+ANIM_GC_STEP         = 100    # How many frames to render before running the GC
+ANIM_MOVE_THRESHOLD  = 1      # Minimum 1-distance (in game units) to redraw an entity
+ANIM_LIMIT_SOFT      = 15000  # Below this many coordinates, full anims are enabled by default
+ANIM_LIMIT_HARD      = 200000 # Above this limit, full anims are disabled
+
 # Other
-ANIM_GC              = false # Garbage collect periodically when generating frames
-ANIM_GC_STEP         = 100   # How many frames to render before running the GC
-ANIM_MOVE_THRESHOLD  = 1     # Minimum 1-distance (in game units) to redraw an entity
 ANIM_PROGRESS_UPDATE = 2     # Seconds between progress bar updates
 
 # <---------------------------------------------------------------------------->
@@ -876,7 +880,8 @@ PATCH_IND_CHG = {
 
 # For these boards, replays won't be visible
 PROTECTED_BOARDS = {
-  'ape' => ['S-A-00', 'S-A-00-00']
+  'ape' => ['S-A-00', 'S-A-00-00'],
+  'eon' => ['S-A-01', 'S-A-01-00']
 }
 
 # For these boards, scores (and replays) won't be visible
