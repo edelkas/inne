@@ -2745,9 +2745,7 @@ module Demoish
   def complexity
     run = is_a?(Demo) ? archive : score
     return -1 if !run || !demo
-    object_counts = run.highscoreable.levels.map{ |l|
-      l.map.object_counts.values_at(0, *Map::ID_LIST_MOTIONFUL).sum
-    }
+    object_counts = run.highscoreable.levels.map{ |l| l.map.complexity }
     frame_counts = decode(true).map(&:size)
     object_counts.zip(frame_counts).map{ |a, b| a * b }.sum
   end

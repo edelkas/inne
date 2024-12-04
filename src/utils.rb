@@ -1705,7 +1705,7 @@ class NSim
     @raw_collisions.clear
     @raw_collisions = nil
 
-    clear_coords
+    clear_coords(true)
     @raw_coords.keys.each{ |id| @raw_coords[id] = nil }
     @raw_coords.clear
     @raw_coords = nil
@@ -1718,14 +1718,16 @@ class NSim
   end
 
   # Free coordinate data (we may just want to do this to disable full anims on command)
-  def clear_coords
+  def clear_coords(clear_ninja = false)
     @raw_coords.each{ |id, hash|
+      next if id == Map::ID_NINJA && !clear_ninja
       hash.each{ |index, coords| coords.clear }
       hash.keys.each{ |index| hash[index] = nil }
       hash.clear
     }
 
     @raw_chunks.each{ |id, hash|
+      next if id == Map::ID_NINJA && !clear_ninja
       hash.each{ |index, chunks|
         chunks.each(&:clear)
         chunks.clear

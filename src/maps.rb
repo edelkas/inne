@@ -316,6 +316,12 @@ module Map
     object_counts(version: version)[ID_GOLD]
   end
 
+  # Measure complexity of a map with regards to animations by the amount of
+  # moving entities is has.
+  def complexity
+    object_counts.values_at(0, *ID_LIST_MOTIONFUL).sum
+  end
+
   # This is used for computing the hash of a level. It's required due to a
   # misimplementation in N++, which instead of just hashing the map data,
   # overflows and copies object data from the next levels before doing so.
@@ -1803,22 +1809,24 @@ module Map
     trace = !!msg[/\btrace\b/i]
 
     # Prepare demos
-    demos = scores.map{ |score|
-      if userlevel
-        [Demo.encode(score.demo)]
-      else
-        Demo.decode(score.demo.demo, true).map{ |d| Demo.encode(d) }
-      end
+    demos_dec = scores.map{ |score|
+      userlevel ? score.demo : score.demo.decode(true)
     }.transpose
+    demos_enc = demos_dec.map{ |lvl| lvl.map{ |demo| Demo.encode(demo) } }
     bench(:step, 'Setup', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 
     # Execute simulation and parse result
     TmpMsg.update(event, '-# Running simulation...')
+    if userlevel
+      complexity = h.complexity * demos_dec.first.map(&:size).max
+    else
+      complexity = scores.map{ |score| score.demo.complexity }.max
+    end
+    dbg("NSim run complexity: #{complexity}.")
     full_old = full
-    complexity = !userlevel ? scores.map{ |score| score.demo.complexity }.max : ANIM_LIMIT_HARD + 1
     full = true if complexity < ANIM_LIMIT_SOFT
     full = false if complexity > ANIM_LIMIT_HARD || !anim || trace
-    res = h.levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos[i]) }
+    res = h.levels.each_with_index.map{ |l, i| NSim.new(l.map.dump_level, demos_enc[i]) }
     res.each{ |nsim|
       nsim.run(basic_sim: !full, basic_render: !full)
       bench(:step, 'Simulation', pad_str: 12, pad_num: 9) if BENCH_IMAGES
