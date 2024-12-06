@@ -1760,7 +1760,7 @@ module Map
     nil
   end
 
-  def self.trace(event, anim: false, h: nil)
+  def self.trace(event, anim: false, h: nil, spoiler: false)
     # Parse message parameters
     bench(:start) if BENCH_IMAGES
     t = Time.now
@@ -1917,6 +1917,7 @@ module Map
     # Send image file
     ext = gif ? 'gif' : 'png'
     fn = "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}"
+    fn.prepend('SPOILER_') if spoiler
     send_file(event, output, fn, true) unless test
 
     # Free allocated resources

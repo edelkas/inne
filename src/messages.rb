@@ -527,11 +527,11 @@ def send_screenshot(event, map = nil, ret = false)
   msg     = hash[:msg]
   h       = map.nil? ? parse_highscoreable(event, mappack: true) : map
   version = msg[/v(\d+)/i, 1]
+  spoiler = parse_spoiler(msg)
 
   # Retrieve screenshot
   h = h.map
   max_v = h.version
-  spoiler = false
   version = version ? [max_v, [1, version.to_i].max].min : max_v
   screenshot = Map.screenshot(hash[:palette], file: true, h: h, spoiler: spoiler, v: version)
   perror("Failed to generate screenshot!") if screenshot.nil?
@@ -1358,10 +1358,11 @@ end
 # the demo data: still image.
 def send_trace(event)
   perror("Sorry, tracing is disabled.") if !FEATURE_NTRACE
+  msg = parse_message(event)
   wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
   $mutex[:ntrace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
-    Map.trace(event, anim: !!parse_message(event)[/anim/i])
+    Map.trace(event, anim: !!msg[/anim/i], spoiler: parse_spoiler(msg))
   end
 rescue => e
   lex(e, "Error performing trace.", event: event)

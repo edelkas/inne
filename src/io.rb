@@ -1013,6 +1013,11 @@ def parse_initial(event)
   !event.is_a?(Discordrb::Events::ComponentEvent)
 end
 
+# Whether the response should be spoilered or not
+def parse_spoiler(msg)
+  !!msg[/\bspoiler\b/i]
+end
+
 def format_rank(rank)
   rank.to_i == 1 ? '0th' : "top #{rank}"
 end
