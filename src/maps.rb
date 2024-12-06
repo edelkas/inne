@@ -1852,6 +1852,7 @@ module Map
     end
 
     # Prepare output message
+    acquire_connection
     names = scores.map{ |s| s.player.print_name }
     valids = res.map{ |l| l.valid_flags }.transpose.map{ |s| s.all?(true) }
     wrong_names = names.each_with_index.select{ |_, i| !valids[i] }.map(&:first)
