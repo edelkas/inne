@@ -1944,7 +1944,7 @@ module Map
     demos = scores.map{ |s| s.demo.demo }
     return :other if demos.count(nil) > 0
     nsim = NSim.new(dump_level, demos)
-    nsim.run(basic_sim: false)
+    nsim.run(basic_sim: false, basic_render: false, silent: true)
     return :error if !nsim.success
     return :other if !nsim.correct
     return nsim.valid ? :good : :bad

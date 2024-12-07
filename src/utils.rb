@@ -1591,12 +1591,12 @@ class NSim
   end
 
   # Execute simulation
-  private def execute(basic_sim: true, basic_render: true)
+  private def execute(basic_sim: true, basic_render: true, silent: false)
     t = Time.now
     path = PATH_NTRACE + (basic_sim ? ' --basic-sim' : '') + (basic_render ? '' : ' --full-export')
-    stdout, stderr, status = python(path, output: true, fast: true)
+    stdout, stderr, status = python(path, output: true, fast: false)
     @output = [stdout, stderr].join("\n\n")
-    dbg("NSim simulation time: %.3fs" % [Time.now - t])
+    dbg("NSim simulation time: %.3fs" % [Time.now - t]) unless silent
     @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
   end
 
@@ -1612,10 +1612,10 @@ class NSim
 
   # Parse nsim's output file and read entity coordinates and collisions
   # TODO: Should we deduplicate collisions, or handle it later?
-  private def parse
+  private def parse(silent: false)
     fn = @splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT
     f = File.open(fn, 'rb')
-    dbg("NSim output size: %.3fKiB" % [File.size(fn) / 1024.0])
+    dbg("NSim output size: %.3fKiB" % [File.size(fn) / 1024.0]) unless silent
     t = Time.now
 
     # Run count and valid flags
@@ -1644,8 +1644,8 @@ class NSim
       end
     end
 
-    dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0])
-    dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)])
+    dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0]) unless silent
+    dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)]) unless silent
     @correct = true
   ensure
     f&.close
@@ -1675,11 +1675,11 @@ class NSim
   end
 
   # Run simulation and parse result
-  def run(basic_sim: true, basic_render: true)
+  def run(basic_sim: true, basic_render: true, silent: false)
     export
-    execute(basic_sim: basic_sim, basic_render: basic_render)
-    parse if @success
-    compute_complexity if @correct
+    execute(basic_sim: basic_sim, basic_render: basic_render, silent: silent)
+    parse(silent: silent) if @success
+    compute_complexity(silent: silent) if @correct
     validate
   ensure
     clean
@@ -1841,13 +1841,13 @@ class NSim
 
   # Measure the complexity of a run by adding up all coordinates of moving entities
   # Used for limiting when full animations can be done
-  def compute_complexity
+  def compute_complexity(silent: false)
     @complexity = @raw_chunks.map{ |id, hash|
       hash.map{ |index, chunks|
         chunks[1].sum
       }.sum
     }.sum
-    dbg("NSim coordinates: %d" % [@complexity])
+    dbg("NSim coordinates: %d" % [@complexity]) unless silent
   end
 end
 
