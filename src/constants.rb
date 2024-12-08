@@ -472,7 +472,8 @@ QUERY_LIMIT_HARD = 500  # Maximum number of queried userlevels per page
 # CLE-specific variables
 PWD              = ENV['NPP_HASH']
 CLE_FORWARD      = true            # Forward unrelated requests to Metanet
-INTEGRITY_CHECKS = false           # Verity replay security hashes
+INTEGRITY_CHECKS = true            # Verity replay security hashes
+WARN_INTEGRITY   = true            # Warn when players submit scores with invalid hashes
 WARN_VERSION     = false           # Warning for score submissions with old map versions
 LOCAL_LOGIN      = true            # Try to login user ourselves if Metanet fails
 HASH_INPUT_FN    = 'hash_in'       # Filename for SHA1 util to read

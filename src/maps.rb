@@ -216,9 +216,7 @@ module Map
     # Parse tiles. Warning if invalid ones are found
     tiles = [map_data[8...1940]].pack('h*').bytes
     invalid_count = tiles.count{ |t| t > 33 }
-    if invalid_count > 0
-      alert("#{warning}: #{invalid_count} invalid tiles.")
-    end
+    alert("#{warning}: #{invalid_count} invalid tiles.") if invalid_count > 0
     tiles = tiles.each_slice(42).to_a
 
     # Parse objects

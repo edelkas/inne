@@ -748,7 +748,7 @@ def send_delete_score(event)
   # Response will be handled in delete_score@interactions, and buttons will be removed
   send_message(
     event,
-    content:    "Delete #{p.name}'s score (ID #{id}) in #{h.name}?",
+    content:    "Delete %s's %.3f score in %s (ID %d)?" % [p.name, round_score(score.score_hs / 60.0), h.name, id],
     components: interaction_add_confirmation_buttons
   )
 rescue => e

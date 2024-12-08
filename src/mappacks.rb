@@ -962,7 +962,12 @@ class MappackScore < ActiveRecord::Base
 
     # Verify replay integrity by checking security hash
     legit = h.verify_replay(query['ninja_check'], score_hs_orig)
-    return if INTEGRITY_CHECKS && !legit
+    if !legit
+      _thread do
+        alert("#{name} submitted a score to #{h.name} with an invalid security hash", discord: true)
+      end if WARN_INTEGRITY
+      return res.to_json if INTEGRITY_CHECKS
+    end
 
     # Verify additional mappack-wise requirements
     return if !mappack.check_requirements(demos)
@@ -1029,15 +1034,10 @@ class MappackScore < ActiveRecord::Base
 
       # Warn if the score submitted failed the map data integrity checks, and save it
       # to analyze it later (and possibly polish the hash algorithm)
-      if !legit
-        BadHash.find_or_create_by(id: id).update(
-          npp_hash: query['ninja_check'],
-          score: score_hs_orig
-        )
-        _thread do
-          alert("Score submitted by #{name} to #{h.name} has invalid security hash", discord: true)
-        end
-      end
+      BadHash.find_or_create_by(id: id).update(
+        npp_hash: query['ninja_check'],
+        score: score_hs_orig
+      ) if !legit
 
       # Warn if mappack version is outdated
       v1 = (req.path.split('/')[1][/\d+$/i] || 1).to_i
