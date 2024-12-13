@@ -1014,8 +1014,15 @@ def parse_initial(event)
 end
 
 # Whether the response should be spoilered or not
-def parse_spoiler(msg)
-  !!msg[/\bspoiler\b/i]
+def parse_spoiler(msg, h = nil, channel = nil)
+  old_enough = true
+  if h && !h.is_a?(Userlevel)
+    mappack = h.map.mappack
+    days = DAYS_PER_EPISODE * mappack.episodes.count
+    old_enough = mappack.date < days.days.ago
+    in_dms = channel.type == channel_type(:dm) rescue false
+  end
+  !!msg[/\bspoiler\b/i] || !old_enough && !in_dms
 end
 
 def format_rank(rank)
@@ -1247,8 +1254,9 @@ def tmp_file(data, name = 'result.txt', binary: false, file: true)
   file ? File::open(tmpfile) : tmpfile
 end
 
-def send_file(event, data, name = 'result.txt', binary = false)
+def send_file(event, data, name = 'result.txt', binary = false, spoiler = false)
   return nil if data.nil?
+  name.prepend('SPOILER_') if spoiler
   event.attach_file(tmp_file(data, sanitize_filename(name), binary: binary))
 end
 

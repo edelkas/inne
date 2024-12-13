@@ -109,6 +109,7 @@ EMOJIS_TO_DELETE = [                # Emojis to delete msgs via reactions
 EMOJIS_FOR_PLAY = [
   'Ninja', 'ninjajump', 'ninjavictory', 'nAight'
 ]
+DAYS_PER_EPISODE = 1 # Number of days to auto-spoiler screenshots in a mappack
 
 # <---------------------------------------------------------------------------->
 # <------                      LOGGING VARIABLES                         ------>

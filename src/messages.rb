@@ -527,7 +527,8 @@ def send_screenshot(event, map = nil, ret = false)
   msg     = hash[:msg]
   h       = map.nil? ? parse_highscoreable(event, mappack: true) : map
   version = msg[/v(\d+)/i, 1]
-  spoiler = parse_spoiler(msg)
+  channel = event.channel
+  spoiler = parse_spoiler(msg, h, channel)
 
   # Retrieve screenshot
   h = h.map
@@ -1362,7 +1363,7 @@ def send_trace(event)
   wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
   $mutex[:ntrace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
-    Map.trace(event, anim: !!msg[/anim/i], spoiler: parse_spoiler(msg))
+    Map.trace(event, anim: !!msg[/anim/i])
   end
 rescue => e
   lex(e, "Error performing trace.", event: event)

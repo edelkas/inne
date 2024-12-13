@@ -1758,7 +1758,7 @@ module Map
     nil
   end
 
-  def self.trace(event, anim: false, h: nil, spoiler: false)
+  def self.trace(event, anim: false, h: nil)
     # Parse message parameters
     bench(:start) if BENCH_IMAGES
     t = Time.now
@@ -1805,6 +1805,8 @@ module Map
     full = !!msg[/\bfull\b/i] || !!msg[/\bcomplete\b/i]
     gif = anim || !h.is_level?
     trace = !!msg[/\btrace\b/i]
+    channel = event.channel
+    spoiler = parse_spoiler(msg, h, channel)
 
     # Prepare demos
     demos_dec = scores.map{ |score|
@@ -1915,9 +1917,8 @@ module Map
 
     # Send image file
     ext = gif ? 'gif' : 'png'
-    fn = "#{sanitize_filename(name)}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}"
-    fn.prepend('SPOILER_') if spoiler
-    send_file(event, output, fn, true) unless test
+    fn = "#{name}_#{ranks.map(&:to_s).join('-')}_trace.#{ext}"
+    send_file(event, output, fn, true, spoiler) unless test
 
     # Free allocated resources
     res.each{ |nsim| nsim.destroy }
