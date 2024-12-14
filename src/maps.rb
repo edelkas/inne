@@ -518,15 +518,15 @@ module Map
     new_y = 4.0 * y / UNITS
     new_cell_x = (new_x / 4.0).floor
     new_cell_y = (new_y / 4.0).floor
-    new_list = grid[new_cell_x][new_cell_y]
+    new_list = grid[new_cell_x]&.[](new_cell_y)
 
     # Update cell
-    if !new_list.include?(o)
+    if !new_list || !new_list.include?(o)
       cell_x = (o[1] / 4.0).floor
       cell_y = (o[2] / 4.0).floor
-      list = grid[cell_x][cell_y]
-      list.delete(o)
-      new_list.append(o)
+      list = grid[cell_x]&.[](cell_y)
+      list.delete(o) if list
+      new_list.append(o) if new_list
     end
 
     # Update coordinates
@@ -635,7 +635,7 @@ module Map
       }
     }
 
-    bboxes.uniq
+    bboxes.compact.uniq
   end
 
   # Parse map(s) data, sanitize it, and return objects and tiles conveniently
@@ -1125,7 +1125,12 @@ module Map
     # Calculate bounding box in pixels
     x = ppc * o[1] - w / 2
     y = ppc * o[2] - h / 2
-    [x, y, w, h]
+    obj_bbox = [x, y, w, h]
+    map_bbox = [0, 0, 4 * (COLUMNS + 2) * ppc, 4 * (ROWS + 2) * ppc]
+    bbox = bbox_intersect([obj_bbox, map_bbox], round: true)
+    return nil if !bbox
+
+    bbox
   end
 
   # Find the bounding box of a specific ninja marker. The marker is the circle
@@ -1442,6 +1447,8 @@ module Map
     return if !bbox
 
     # Write previous frame to disk and create new frame
+    gif_bbox = [0, 0, gif[:gif].width, gif[:gif].height]
+    bbox = bbox_intersect([bbox, gif_bbox], round: true)
     image = Gifenc::Image.new(
       bbox:        bbox,
       color:       gif[:palette][TRANSPARENT_COLOR >> 8],
