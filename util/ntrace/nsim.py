@@ -214,7 +214,7 @@ class Ninja:
         """
         #Perform LOGICAL collisions between the ninja and nearby entities.
         #Also check if the ninja can interact with the walls of entities when applicable.
-        wall_normal = 0
+        wall_normal = None
         entities = gather_entities_from_neighbourhood(self.sim, self.xpos, self.ypos)
         for entity in entities:
             if entity.is_logical_collidable:
@@ -237,7 +237,8 @@ class Ninja:
                             self.applied_gravity = self.GRAVITY_FALL
                         self.state = 4
                     else: #If touched wall of bounce block, oneway, thwump or shwump, retrieve wall normal.
-                        wall_normal += collision_result                  
+                        if not wall_normal:
+                            wall_normal = collision_result                  
 
         #Check if the ninja can interact with walls from nearby tile segments.
         rad = self.RADIUS + 0.1
@@ -249,8 +250,8 @@ class Ninja:
             dx = self.xpos - a
             dy = self.ypos - b
             dist = math.sqrt(dx**2 + dy**2)
-            if abs(dy) < 0.00001 and 0 < dist <= rad:
-                wall_normal += dx/dist
+            if abs(dy) < 0.00001 and 0 < dist <= rad and not wall_normal:
+                wall_normal = dx/dist
 
         #Check if airborn or walled.
         self.airborn_old = self.airborn
@@ -258,7 +259,7 @@ class Ninja:
         self.walled = False
         if wall_normal:
             self.walled = True
-            self.wall_normal = wall_normal/abs(wall_normal)
+            self.wall_normal = wall_normal
 
         #Calculate the combined floor normalized normal vector if the ninja has touched any floor.
         if self.floor_count > 0:
@@ -650,7 +651,7 @@ class Ninja:
     def is_valid_target(self):
         """Return whether the ninja is a valid target for various interactions."""
         return not self.state in (6, 8, 9)
-    
+
     def log(self):
         """Log position and velocity vectors of the ninja for the current frame"""
         self.poslog.append((self.sim.frame, round(self.xpos, 6), round(self.ypos, 6)))
@@ -883,19 +884,21 @@ class EntityToggleMine(Entity):
 
     def think(self):
         """Handle interactions between the ninja and the untoggled mine"""
-        ninja = self.sim.ninja
-        if ninja.is_valid_target():
-            if self.state == 1: #Set state to toggling if ninja touches untoggled mine
-                if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
-                                            ninja.xpos, ninja.ypos, ninja.RADIUS):
-                    self.set_state(2)
-            elif self.state == 2: #Set state to toggled if ninja stops touching toggling mine
-                if not overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
-                                                ninja.xpos, ninja.ypos, ninja.RADIUS):
+        if self.state != 0:
+            ninja = self.sim.ninja
+            is_colliding = False
+            if ninja.is_valid_target():
+                is_colliding = overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
+                                                        ninja.xpos, ninja.ypos, ninja.RADIUS)
+            if self.state == 2 and not is_colliding:
+                #If the ninja is no longer touching the toggling mine, untoggle it if the ninja is dead, otherwise toggle it
+                if ninja.state in (6, 9):
+                    self.set_state(1)
+                else:
                     self.set_state(0)
-        else: #Set state to untoggled if ninja dies while toggling a mine
-            if self.state == 2 and ninja.state == 6:
-                self.set_state(1)
+            elif self.state == 1 and is_colliding:
+                #If the ninja is touching an untoggled mine, set it to toggling state.
+                self.set_state(2)
 
     def logical_collision(self):
         """Kill the ninja if it touches a toggled mine"""
@@ -1552,13 +1555,6 @@ class EntityLaser(Entity):
                     angle += self.dir*self.SURFACE_CORNER_SPEED
                     self.xvec = math.cos(angle)
                     self.yvec = math.sin(angle)
-
-
-            
-            
-            
-
-        
 
 
 class EntityBoostPad(Entity):
