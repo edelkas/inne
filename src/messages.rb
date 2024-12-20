@@ -592,7 +592,7 @@ def send_stats(event)
   totals = full_counts.reduce([0] * 5) { |sums, curr| sums.zip(curr).map(&:sum) }
   maxes = [Level, Episode, Story].map{ |t| find_max(:rank, t, tabs) }
   maxes.prepend(maxes.sum, maxes[0,2].sum)
-  percents = totals.map.with_index{ |tot, i| (100.0 * tot / maxes[i]).round }
+  percents = totals.map.with_index{ |tot, i| maxes[i] == 0 ? 0 : (100.0 * tot / maxes[i]).round }
   histogram = make_histogram(full_counts.map(&:first).each_with_index.to_a.map(&:reverse))
 
   # Format response
