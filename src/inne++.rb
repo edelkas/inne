@@ -401,14 +401,11 @@ def shutdown(trap: false, force: false)
   # We use a thread to ensure that this one is already listening by the time
   # the clear takes place.
   if !force && !Scheduler.free?
-    _thread do
-      names = Scheduler.list_blocking.map{ |job| job.task.name }.join(", ")
-      alert("Waiting for background tasks to finish (#{names})")
-      sleep(0.1)
-      Scheduler.clear
-    end
-    Scheduler.listen(:clear)
-    sleep(0.1)
+    names = Scheduler.list_blocking.map{ |job| job.task.name }.join(", ")
+    names = 'blocking threads' if names.empty?
+    alert("Waiting for background tasks to finish (#{names})")
+    Scheduler.free
+    sleep(0.1) while !Scheduler.free?
   end
 
   # Stop bot and CLE server, disconnect from DB

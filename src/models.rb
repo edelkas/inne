@@ -3182,7 +3182,10 @@ module Server extend self
       req.continue # Respond to "Expect: 100-continue"
       case query
       when 'submit_score'
-        return respond(res, MappackScore.add(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req))
+        body = Scheduler.with_lock do
+          MappackScore.add(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
+        end
+        return respond(res, body)
       when 'login'
         return respond(res, Player.login(mappack, req))
       end

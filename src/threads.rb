@@ -251,6 +251,7 @@ end
 module Scheduler extend self
   @@jobs = []
   @@listeners = []
+  @@blocking = []
 
   def add(name, freq: 0, time: nil, db: true, force: true, log: true, &block)
     task = Task.new(name, db: db, log: log, &block)
@@ -272,20 +273,46 @@ module Scheduler extend self
   def count_active()    @@jobs.count{ |job| job.active?    } end
   def count_blocking()  @@jobs.count{ |job| !job.free?     } end
 
+  # Clean dead blocking threads
+  def clean
+    @@blocking.reject!{ |thr| !thr.alive? }
+  end
+
   # Whether no forced background tasks are active
   def free?
-    @@jobs.all?(&:free?)
+    clean
+    @@jobs.all?(&:free?) && @@blocking.empty?
   end
 
   # Gracefully stop all jobs
-  def clear
-    @@jobs.each{ |job| job.stop }
-    broadcast(:clear) if free?
+  def free
+    @@jobs.each(&:stop)
+    clean
+    broadcast(:free) if free?
   end
 
   # Forcefully kill all jobs
   def terminate
-    @@jobs.each{ |job| job.kill }
+    @@jobs.each(&:kill)
+    @@blocking.each(&:kill)
+  end
+
+  # Register thread, which will prevent shutting down the bot
+  def lock
+    @@blocking << Thread.current
+  end
+
+  # Unregister thread to stop it from blocking shutdowns
+  def unlock
+    @@blocking.delete(Thread.current)
+  end
+
+  # Run block of code while locking shutdowns
+  def with_lock(&block)
+    lock
+    res = yield
+    unlock
+    res
   end
 
   # A thread can register to be woken up by a specific event
@@ -309,7 +336,7 @@ module Scheduler extend self
     # Test if other events need to be broadcasted
     case event
     when :stopped
-      broadcast(:clear) if free?
+      broadcast(:free) if free?
     end
   end
 end
