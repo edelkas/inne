@@ -3168,30 +3168,30 @@ module Server extend self
     end
 
     # Parse request
+    body = 0
     case method
     when 'GET'
       case query
       when 'get_scores'
-        return respond(res, MappackScore.get_scores(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req))
+        body = MappackScore.get_scores(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
       when 'get_replay'
-        return respond(res, MappackScore.get_replay(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req))
+        body = MappackScore.get_replay(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
       when 'levels'
-        return respond(res, Userlevel.search(req))
+        body = Userlevel.search(req)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
       case query
       when 'submit_score'
-        body = Scheduler.with_lock do
+        body = Scheduler.with_lock do # Prevent restarts during score submission
           MappackScore.add(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
         end
-        return respond(res, body)
       when 'login'
-        return respond(res, Player.login(mappack, req))
+        body = Player.login(mappack, req)
       end
     end
 
-    fwd(req, res)
+    body == 0 ? fwd(req, res) : respond(res, body)
   rescue => e
     action_inc('http_errors')
     lex(e, "CLE socket failed to parse request for: #{req.path}")
