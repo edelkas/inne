@@ -520,7 +520,7 @@ rescue => e
 end
 
 # Send a screenshot of a level/episode/story
-def send_screenshot(event, map = nil, ret = false)
+def send_screenshot(event, map = nil, ret: false)
   # Parse message parameters
   msg     = parse_message(event)
   hash    = parse_palette(event)
@@ -552,7 +552,7 @@ end
 def send_screenscores(event)
   # Parse message parameters
   map = parse_highscoreable(event, mappack: true)
-  ss  = send_screenshot(event, map, true)
+  ss  = send_screenshot(event, map, ret: true)
   s   = send_scores(event, map, true)
   send_message(event, content: ss[1], files: [ss[0]], spoiler: ss[2])
   sleep(0.25)
@@ -565,7 +565,7 @@ end
 def send_scoreshot(event)
   map = parse_highscoreable(event, mappack: true)
   s   = send_scores(event, map, true)
-  ss  = send_screenshot(event, map, true)
+  ss  = send_screenshot(event, map, ret: true)
   send_message(event, content: s)
   sleep(0.25)
   send_message(event, content: ss[1], files: [ss[0]], spoiler: ss[2])
@@ -1738,25 +1738,22 @@ def send_lotd(event, type = Level)
 
   # Fetch lotd and time
   curr_h = GlobalProperty.get_current(type, ctp)
-  next_h = GlobalProperty.get_next_update(type, ctp) - Time.now
-
-  # Compute times
-  if type == Level
-    time1 = "#{(next_h / (60 * 60)).to_i} hours"
-    time2 = "#{(next_h / 60).to_i - (next_h / (60 * 60)).to_i * 60} minutes"
-  else
-    time1 = "#{(next_h / (24 * 60 * 60)).to_i} days"
-    time2 = "#{(next_h / (60 * 60)).to_i - (next_h / (24 * 60 * 60)).to_i * 24} hours"
+  next_h = GlobalProperty.get_next_update(Level, ctp)
+  if type == Episode
+    next_h += 24 * 60 ** 2 while next_h.wday != 0
+  elsif type == Story
+    next_h += 24 * 60 ** 2 while next_h.day != 1
   end
+  next_h -= Time.now
 
   # Send messages
   if !curr_h.nil?
     event << "The current #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} is #{curr_h.format_name}."
-    event.attach_file(send_screenshot(event, curr_h, true)[0])
+    event.attach_file(send_screenshot(event, curr_h, ret: true)[0])
   else
     event << "There is no current #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period}."
   end
-  event << "I'll post a new #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} in #{time1} and #{time2}."
+  event << "I'll post a new #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} in #{format_timespan(next_h, 2)}."
 rescue => e
   lex(e, "Error sending lotd/eotw/cotm info.", event: event)
 end

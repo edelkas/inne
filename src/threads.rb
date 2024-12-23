@@ -310,9 +310,9 @@ module Scheduler extend self
   # Run block of code while locking shutdowns
   def with_lock(&block)
     lock
-    res = yield
+    yield
+  ensure
     unlock
-    res
   end
 
   # A thread can register to be woken up by a specific event

@@ -1182,7 +1182,9 @@ def format_author(author)
   "on maps by #{verbatim(author.name)}"
 end
 
-def format_timespan(time)
+# Format a timespan in seconds as a string of the form: Xd Xh Xm Xs.
+# Only the relevant figures will appear. The precision can be limited.
+def format_timespan(time, prec = -1)
   return '' unless time.is_a?(Numeric)
   levels = [
     ['d', 86400],
@@ -1190,12 +1192,14 @@ def format_timespan(time)
     ['m',    60],
     ['s',     1]
   ]
+  prec = levels.size if prec < 0
   terms = []
   levels.each{ |name, seconds|
-    if time >= seconds
-      terms << "#{(time / seconds).to_i}#{name}"
-      time %= seconds
-    end
+    break if prec <= 0
+    next if time < seconds
+    terms << "#{(time / seconds).to_i}#{name}"
+    time %= seconds
+    prec -= 1
   }
   terms << 'now' if terms.empty?
   terms.join(' ')
@@ -1260,13 +1264,15 @@ def send_file(event, data, name = 'result.txt', binary = false, spoiler = false)
   event.attach_file(tmp_file(data, sanitize_filename(name), binary: binary))
 end
 
-def log_message(content, components = nil, edit: false)
+def log_message(content, files = [], components = nil, edit: false)
   verb = edit ? 'Edited' : 'Sent'
   component_count = !components ? 0 : components.to_a.map{ |row| row[:components].size }.sum
-  properties = "[%d chars, %d components]" % [content.length, component_count]
+  size = files.map{ |f| File.size(f.path) rescue 0 }.sum / 1024.0
+  properties = "%d chars, %d attachments, %.3f KiB, %d components" % [content.length, files.length, size, component_count]
   summary = content.squish[0, 80]
   summary += '...' if content.length > 80
-  lout("%s message %s: %s" % [verb, properties, summary])
+  lout("%s message: %s" % [verb, properties])
+  lout(summary)
 end
 
 # Send a message to a destination (typically a respondable event or a Discord channel)
@@ -1307,7 +1313,7 @@ def send_message(
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
-    log_message(content, components, edit: true) if log
+    log_message(content, files, components, edit: true) if log
     return dest.update_message(content: content, components: components)
   end
 
@@ -1335,7 +1341,7 @@ def send_message(
   user_id = dest.user.id if dest.respond_to?(:user)
   Message.create(id: msg.id, user_id: user_id, date: Time.now) if user_id && db
   action_inc('messages')
-  log_message(content, components) if log
+  log_message(content, files, components) if log
   msg
 rescue => e
   lex(e, 'Failed to send message to Discord')
