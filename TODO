@@ -20,7 +20,6 @@ Ongoing:
 - Add a special command to run arbitrary Ruby code, sent from Discord, and print the return inside a text block. Ensure to execute inside guards for exceptions. Perhaps even code a simple Debugger that can be started in a separate Thread, which waits for commands (e.g. using a Queue).
 - Add Interaction module to handle them, now the code is too unorganized.
 - Add robust test suite that automatically tests as many outte features as possible. At least that they execute without throwing, even better if we can assert equality in some cases.
-- Add lock to prevent restarting outte when a score submission is in progress
 - For when we enforce hashes: Have secondary db table to temporarily store rejected runs due to invalid hash, just in case they're legit and need to be restored
 - Add indices to many tables, apparently add_column does not have an :index option (as opposed to create/change_table, which does), so many of the migrations we used the last years failed to create an index at all. Go table by table, seeing what's useful to add, and benchmark the differences.
 - Add a live control panel (a special command that puts a collection of buttons and perhaps select menus and modals on Discord, that allows to execute managerial functions, like batch update the completions (as well as cancelling them)).

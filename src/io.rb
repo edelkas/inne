@@ -1213,6 +1213,24 @@ def format_timespan(time, prec = -1)
   terms.join(' ')
 end
 
+# Obtain a custom Discord timestamp. Format:
+#   <t:TIMESTAMP:STYLE> or <t:TIMESTAMP>
+# Supported styles:
+#   t  16:20                         Short Time
+#   T	 16:20:30                      Long  Time
+#   d	 20/04/2021                    Short Date
+#   D	 20 April 2021                 Long  Date
+#   f  20 April 2021 16:20           Short DateTime
+#   F	 Tuesday, 20 April 2021 16:20  Long  DateTime
+#   R  2 months ago                  Rel.  Time
+# Default: f
+def format_timestamp(t, time: false, date: false, full: false, rel: false, long: false)
+  fmt = time ? 'T' : date ? 'D' : full ? 'F' : rel ? 'R' : ''
+  fmt.downcase! if !long && !rel
+  fmt.prepend(':') unless fmt.empty?
+  "<t:#{t.to_i}#{fmt}>"
+end
+
 def format_sentence(e)
   return e[0].to_s if e.size == 1
   e[-2] = e[-2].to_s + " and #{e[-1].to_s}"

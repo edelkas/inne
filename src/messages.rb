@@ -1748,7 +1748,7 @@ def send_lotd(event, type = Level)
   elsif type == Story
     next_h += 24 * 60 ** 2 while next_h.day != 1
   end
-  next_h -= Time.now
+  rem = next_h - Time.now
 
   # Send messages
   if !curr_h.nil?
@@ -1757,7 +1757,7 @@ def send_lotd(event, type = Level)
   else
     event << "There is no current #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period}."
   end
-  event << "I'll post a new #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} in #{format_timespan(next_h, 2)}."
+  event << "I'll post a new #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} on #{format_timestamp(next_h)}, #{format_timespan(rem, 2)} from now."
 rescue => e
   lex(e, "Error sending lotd/eotw/cotm info.", event: event)
 end
