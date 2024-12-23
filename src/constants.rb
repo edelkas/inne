@@ -100,6 +100,10 @@ SERVER_WHITELIST = [
   535635802386857995  # Test server
 ]
 
+# Application commands
+SUPPORTED_COMMANDS = [:screenshot]
+DISABLED_COMMANDS = []
+
 # Others
 BOT_STATUS   = 'online'             # Discord status for the bot
 BOT_ACTIVITY = "inne's evil cousin" # Discord activity for the bot

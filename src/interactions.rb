@@ -392,13 +392,19 @@ end
 # Check that all commands are registered, and create any new ones
 def register_commands()
   names = $bot.get_application_commands.map(&:name)
-  commands = [:screenshot]
   to_update = [] # To force an update, for development
-  commands.each{ |cmd|
+  SUPPORTED_COMMANDS.each{ |cmd|
     next register_command(cmd, false) if !names.include?(cmd.to_s)
     register_command(cmd, true) if to_update.include?(cmd)
   }
   log("Registered commands")
+end
+
+# Register Discordrb handlers for all supported application commands
+def register_command_handlers(&handler)
+  SUPPORTED_COMMANDS.each{ |cmd|
+    $bot.application_command(cmd, {}, &handler) unless DISABLED_COMMANDS.include?(cmd)
+  }
 end
 
 # Important notes for parsing interaction components:
@@ -512,5 +518,16 @@ def respond_interaction_modal(event)
   case keys[1]
   when 'identify'
     modal_identify(event, name: event.value('name'))
+  end
+end
+
+def respond_application_command(event)
+  return if event.interaction.type != 2 # Only respond to application commands
+
+  case event.command_name
+  when :screenshot
+    perror("Executing screenshot command.")
+  else
+    perror("Unrecognized application command.")
   end
 end

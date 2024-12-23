@@ -253,8 +253,9 @@ rescue OutteError => e
   elsif is_auto
     event << msg
   else
-    send_message(event.channel, content: msg)
+    send_message(event, content: msg, log: false)
   end
+  log_message(msg)
 rescue => e
   # These exceptions are internal errors, so send warning to the channel and
   # log full trace to the terminal/log file
@@ -265,25 +266,31 @@ ensure
 end
 
 # Handle a new command, by crafting a response and sending it appropriately
-def handle_command(event, log: true, &func)
+def handle_command(event, &func)
   # Return if responding is disabled, unless we're the botmaster
   return if !RESPOND && event.user.id != BOTMASTER_ID
+  special = false
 
-  # Parse the command
-  msg = parse_message(event)
-  remove_mentions!(msg)
-  special = msg[0] == '!' && event.user.id == BOTMASTER_ID
-
-  # Log to the terminal
-  if log
+  # Parse the command and log it
+  case event
+  when Discordrb::Events::MessageEvent
+    msg = parse_message(event)
+    remove_mentions!(msg)
+    special = msg[0] == '!' && event.user.id == BOTMASTER_ID
     if special
       log_msg = "Special command: #{msg}"
     elsif event.channel.type == 1
-      log_msg = "DM by #{event.user.name}: #{msg}"
+      log_msg = "DM by [#{event.user.name}]: #{msg}"
     else
-      log_msg = "Mention by #{event.user.name} in #{event.channel.name}: #{msg}"
+      log_msg = "Mention by [#{event.user.name}] in [#{event.channel.name}]: #{msg}"
     end
     special ? succ(log_msg) : msg(log_msg)
+  when Discordrb::Events::ApplicationCommandEvent
+    lin("Application command [#{event.command_name}] used by [#{event.user.name}] in [#{event.channel.name}]")
+  when Discordrb::Events::ButtonEvent
+    lin("Button [#{event.custom_id}] pressed by [#{event.user.name}] in [#{event.channel.name}]")
+  when Discordrb::Events::StringSelectEvent
+    lin("Select menu [#{event.custom_id}] used by [#{event.user.name}] in [#{event.channel.name}]: [#{event.values.join(', ')}]")
   end
 
   # Write up response and send it
@@ -338,7 +345,7 @@ def setup_bot
   # Respond to button interactions
   $bot.button do |event|
     action_inc('interactions')
-    handle_command(event, log: false) { |e| respond_interaction_button(e) }
+    handle_command(event) { |e| respond_interaction_button(e) }
   rescue => e
     lex(e, 'Failed to handle Discord button interaction')
   end
@@ -346,7 +353,7 @@ def setup_bot
   # Respond to select menu interactions
   $bot.select_menu do |event|
     action_inc('interactions')
-    handle_command(event, log: false) { |e| respond_interaction_menu(e) }
+    handle_command(event) { |e| respond_interaction_menu(e) }
   rescue => e
     lex(e, 'Failed to handle Discord select menu interaction')
   end
@@ -354,17 +361,25 @@ def setup_bot
   # Respond to text input interactions
   $bot.modal_submit do |event|
     action_inc('interactions')
-    handle_command(event, log: false) { |e| respond_interaction_modal(e) }
+    handle_command(event) { |e| respond_interaction_modal(e) }
   rescue => e
     lex(e, 'Failed to handle Discord text input interaction')
   end
 
   # Parse new reactions
   $bot.reaction_add do |event|
-    handle_command(event, log: false) { |e| respond_reaction(e) }
+    handle_command(event) { |e| respond_reaction(e) }
   rescue => e
     lex(e, 'Failed to handle Discord reaction')
   end
+
+  # Parse application commands
+  handler = Proc.new do |event|
+    handle_command(event) { |e| respond_application_command(e) }
+  rescue => e
+    lex(e, 'Failed to handle Discord application command')
+  end
+  register_command_handlers(&handler)
 
   log("Configured bot")
 rescue => e

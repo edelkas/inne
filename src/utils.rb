@@ -91,8 +91,7 @@ module Log extend self
     silent: [],
     quiet:  [:fatal, :error, :warn],
     normal: [:fatal, :error, :warn, :good, :info, :msg],
-    debug:  [:fatal, :error, :warn, :good, :info, :msg, :debug],
-    all:    [:fatal, :error, :warn, :good, :info, :msg, :debug, :in, :out]
+    debug:  [:fatal, :error, :warn, :good, :info, :msg, :debug, :in, :out]
   }
 
   BOLD  = "\x1B[1m"

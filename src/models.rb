@@ -141,7 +141,7 @@ module MonkeyPatches
           str = ::WEBrick::AccessLog::format(fmt.gsub('%T', ''), param)
           str += " #{"%.3fms" % (1000 * param['T'])}" if fmt.include?('%T') rescue ''
           str.squish!
-          fmt.include?('%s') ? lout(str) : lin(str)
+          fmt.include?('%s') ? lout(str) : lin(str) if SOCKET_LOG
         }
       end
     end

@@ -1260,6 +1260,15 @@ def send_file(event, data, name = 'result.txt', binary = false, spoiler = false)
   event.attach_file(tmp_file(data, sanitize_filename(name), binary: binary))
 end
 
+def log_message(content, components = nil, edit: false)
+  verb = edit ? 'Edited' : 'Sent'
+  component_count = !components ? 0 : components.to_a.map{ |row| row[:components].size }.sum
+  properties = "[%d chars, %d components]" % [content.length, component_count]
+  summary = content.squish[0, 80]
+  summary += '...' if content.length > 80
+  lout("%s message %s: %s" % [verb, properties, summary])
+end
+
 # Send a message to a destination (typically a respondable event or a Discord channel)
 # If the parameters are empty, then the content/file already appended to the event will
 # be used, if any. Register msg in db at the end.
@@ -1271,7 +1280,8 @@ def send_message(
     spoiler:    false, # Whether to spoiler the attachments
     db:         true,  # Whether we should register this msg in the db
     edit:       true,  # Whether a component event should edit or send a new msg
-    append:     false  # Whether to append content to preexisting message
+    append:     false, # Whether to append content to preexisting message
+    log:        true   # Whether to log the sent message in the terminal
   )
   # Save stuff already appended to message, and remove it to prevent autosend
   if dest.is_a?(Discordrb::Events::Respondable)  # Grab message
@@ -1297,28 +1307,35 @@ def send_message(
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
+    log_message(content, components, edit: true) if log
     return dest.update_message(content: content, components: components)
   end
 
   # Manually spoiler attachments if necessary
   files.map!{ |f|
-    if !File.basename(f).start_with?('SPOILER_')
-      new_name = File.join(File.dirname(f), 'SPOILER_' + File.basename(f))
-      File.rename(f.path, new_name)
-      f.close
-      File.open(new_name, 'r')
-    else
-      f
-    end
+    next f if File.basename(f).start_with?('SPOILER_')
+    new_name = File.join(File.dirname(f), 'SPOILER_' + File.basename(f))
+    File.rename(f.path, new_name)
+    f.close
+    File.open(new_name, 'r')
   } if spoiler
 
-  # Send message and log it in db
+  # Send message (syntax varies depending on event type)
+  case dest
+  when Discordrb::Channel
+    msg = dest.send(content, false, nil, files, nil, nil, components)
+  when Discordrb::Events::Respondable # Messages, reactions
+    msg = dest.respond(content, false, nil, files, nil, nil, components)
+  when Discordrb::Events::InteractionCreateEvent # Components, application commands
+    msg = dest.respond(content: content, components: components)
+  end
+  return if !msg
+
+  # Log msg and return
   user_id = dest.user.id if dest.respond_to?(:user)
-  dest = dest.channel if dest.respond_to?(:channel)
-  return if !dest.respond_to?(:send_message)
-  msg = dest.send_message(content, false, nil, files, nil, nil, components)
   Message.create(id: msg.id, user_id: user_id, date: Time.now) if user_id && db
   action_inc('messages')
+  log_message(content, components) if log
   msg
 rescue => e
   lex(e, 'Failed to send message to Discord')
