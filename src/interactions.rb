@@ -523,10 +523,11 @@ end
 
 def respond_application_command(event)
   return if event.interaction.type != 2 # Only respond to application commands
+  opt = event.options
 
   case event.command_name
   when :screenshot
-    perror("Executing screenshot command.")
+    send_screenshot(event, id: opt['id'], palette: opt['palette'])
   else
     perror("Unrecognized application command.")
   end

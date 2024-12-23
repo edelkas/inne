@@ -12,6 +12,8 @@ def parse_message(event, clean: true)
   is_message   = event.is_a?(Discordrb::Events::MessageEvent)
   is_component = event.is_a?(Discordrb::Events::ComponentEvent)
   is_reaction  = event.is_a?(Discordrb::Events::ReactionEvent)
+  is_command   = event.is_a?(Discordrb::Events::ApplicationCommandEvent)
+  return '' if is_command
   raise "Cannot parse message from a #{event.class.to_s}." if !is_message && !is_component && !is_reaction
 
   # Extract message
@@ -485,13 +487,15 @@ end
 # Returns it if a single result is found, or prints the list if multiple (see params).
 def parse_highscoreable(
     event,          # Event whose content contains the highscoreable to parse
+    msg:     nil,   # String to parse, instead of the event content
     list:    false, # Force to print list, even if there's a single match
     mappack: false, # Search mappack highscoreables as well
     page:    0,     # Page offset when navigating list of matches
     vanilla: true,  # Don't return Metanet highscoreables as MappackHighscoreable
     map:     false  # Force Metanet highscoreables to MappackHighscoreable
   )
-  msg = parse_message(event)
+  msg.prepend('for ') if msg
+  msg ||= parse_message(event)
   user = parse_user(event.user)
   channel = event.channel
   perror("Couldn't find the level, episode or story you were looking for :(") if msg.to_s.strip.empty?
@@ -888,8 +892,9 @@ end
 # The palette may or may not be quoted, but it MUST go at the end of the command
 # if it's not quoted. Only look in 'pal' if not nil. 'fallback' will default
 # to the default palette if no good matches, otherwise exception.
-def parse_palette(event, dflt = Map::DEFAULT_PALETTE, pal: nil, fallback: true)
-  msg = parse_message(event)
+def parse_palette(event, dflt = Map::DEFAULT_PALETTE, pal: nil, fallback: true, msg: nil)
+  msg.prepend('palette ') if msg
+  msg ||= parse_message(event)
   err = ""
   pal.strip! if !pal.nil?
 
@@ -1359,7 +1364,7 @@ def send_message(
   when Discordrb::Events::Respondable # Messages, reactions
     msg = dest.respond(content, false, nil, files, nil, nil, components)
   when Discordrb::Events::InteractionCreateEvent # Components, application commands
-    msg = dest.respond(content: content, components: components)
+    msg = dest.respond(content: content, components: components, wait: true)
   end
   return if !msg
 
