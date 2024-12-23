@@ -16,7 +16,7 @@ def send_list(event, file = true, missing = false, third = false)
   msg     = parse_message(event)
   player  = parse_player(event, false, false, false, false, third)
   msg     = msg.remove!(player.name)
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
   type    = parse_type(msg)
   tabs    = parse_tabs(msg)
@@ -153,7 +153,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     'G--'
   ].include?(rtype) # default type is Level
   type  = parse_type(msg, type: type, multiple: true, initial: initial, default: def_level ? Level : nil)
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   board = parse_board(msg, 'hs')
   board = 'hs' if !['hs', 'sr'].include?(board)
 
@@ -390,7 +390,7 @@ def send_spreads(event)
   tabs    = parse_tabs(msg)
   player  = parse_player(event, false, true, false)
   full    = parse_full(msg)
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
   small   = !!(msg =~ /smallest/)
   perror("Metanet maps only have highscore mode for now.") if !mappack && board != 'hs'
@@ -662,7 +662,7 @@ def send_maxable(event, maxed = false)
   type    = parse_type(msg, default: Level)
   tabs    = parse_tabs(msg)
   full    = parse_full(msg)
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
   perror("Metanet maps only have highscore mode for now.") if !mappack && board != 'hs'
   perror("This function is only available for highscore and speedrun modes for now.") if !['hs', 'sr'].include?(board)
@@ -711,7 +711,7 @@ def send_cleanliness(event)
   tabs    = parse_tabs(msg)
   rank    = parse_range(msg)[0]
   board   = parse_board(msg, 'hs')
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   full    = parse_full(msg)
   clean   = !!msg[/cleanest/i]
   perror("Cleanliness is only available for episodes or stories.") if type == Level
@@ -817,7 +817,7 @@ def send_worst(event, worst = true)
   type    = parse_type(msg, default: Level)
   tabs    = parse_tabs(msg)
   full    = parse_full(msg)
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
   agd     = !!msg[/\bagd?\b/i] || !!msg[/\bg\+\+(\s|$)/i]
   perror("Metanet levels only support highscore mode.") if (board != 'hs' || agd) && !mappack
@@ -1101,19 +1101,23 @@ end
 # Return a list of random highscoreables
 def send_random(event)
   # Parse message parameters
-  msg    = parse_message(event)
-  type   = parse_type(msg, default: Level)
-  tabs   = parse_tabs(msg)
-  amount = [msg[/\d+/].to_i || 1, NUM_ENTRIES].min
+  msg     = parse_message(event)
+  type    = parse_type(msg, default: Level)
+  tabs    = parse_tabs(msg)
+  amount  = [msg[/\d+/].to_i || 1, NUM_ENTRIES].min
+  mappack = parse_mappack(event: event)
 
   # Retrieve list of maps
-  maps = tabs.empty? ? type.all : type.where(tab: tabs)
+  type = type.mappack if mappack
+  maps = mappack ? type.where(mappack: mappack) : type
+  maps = tabs.empty? ? maps.all : maps.where(tab: tabs)
 
   # Format and send response
   if amount > 1
     tabs = format_tabs(tabs)
     type = format_type(type).downcase.pluralize
-    event << "Random selection of #{amount} #{tabs} #{type}:".squish
+    mappack = format_mappack(mappack)
+    event << format_header("Random selection of #{amount} #{tabs} #{type} #{mappack}")
     event << format_block(maps.sample(amount).map(&:name).join("\n"))
   else
     map = maps.sample
@@ -1154,7 +1158,7 @@ end
 def send_diff(event)
   # Parse params
   msg      = parse_message(event)
-  mappack  = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack  = parse_mappack(event: event)
   type     = parse_type(msg, default: Level)
   period   = type == Level ? 'day'   : type == Episode ? 'week'    : 'month'
   type_str = type == Level ? 'level' : type == Episode ? 'episode' : 'column'
@@ -1730,7 +1734,7 @@ end
 def send_lotd(event, type = Level)
   # Parse params
   msg = parse_message(event)
-  mappack = parse_mappack(msg, parse_user(event.user), event.channel)
+  mappack = parse_mappack(event: event)
   type = Level if ![Level, Episode, Story].include?(type)
   ctp = mappack && mappack.code.upcase == 'CTP'
   period = type == Level ? 'day' : (type == Episode ? 'week' : 'month')

@@ -563,9 +563,17 @@ end
 
 # Parse a mappack explicitly from a message, or implicitly from the user or
 # channel defaults
+# event    - Parse everything from the Discordrb event
 # explicit - Disables implicit parsing
 # vanilla  - Converts Metanet mappack to nil (i.e. no mappack)
-def parse_mappack(msg, user = nil, channel = nil, explicit: false, vanilla: true)
+def parse_mappack(msg = nil, user = nil, channel = nil, event: nil, explicit: false, vanilla: true)
+  # Fetch params
+  if event
+    msg     = parse_message(event)
+    user    = parse_user(event.user)
+    channel = event.channel
+  end
+
   # Init params
   text = msg && !msg.strip.empty?
   term = parse_term(msg, quoted: [], final: ['for'])
