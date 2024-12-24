@@ -101,8 +101,8 @@ SERVER_WHITELIST = [
 ]
 
 # Application commands
-SUPPORTED_COMMANDS = [:screenshot]
-DISABLED_COMMANDS = []
+SUPPORTED_COMMANDS = []
+DISABLED_COMMANDS = [:screenshot]
 
 # Others
 BOT_STATUS   = 'online'             # Discord status for the bot

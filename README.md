@@ -1,228 +1,117 @@
 # inne++ - the N++ discord server chatbot
-***inne++*** is a chatbot for the N++ discord server #highscores channel. inne++ serves up a new level of the day in the channel at midnight MST (07:00 GMT) every night, as well as a new episode of the week every week on Friday at the same time.
+[![N++ Discord Server](https://img.shields.io/badge/N++-Discord-%235865F2.svg?logo=discord&logoColor=FFFFFF)](https://discord.gg/nplusplus)
 
-inne++ also provides a bunch of commands for players to get high score data about themselves or other players, such as displaying counts of your highscores by rank, finding levels you haven't finished yet, finding levels you can easily improve on, and displaying top-N rankings across all players. In order to do this, inne++ downloads the scores once every half hour. If you'd like inne++ to update the stored scores for a specific level or episode immediately, you can simply request the scores in discord and inne++ will download the latest scores (and display them to you).
+***inne++*** is a bot for the [Discord server](https://discord.gg/nplusplus) of the game [N++](https://www.metanetsoftware.com/games/nplusplus) by [Metanet Software](https://www.metanetsoftware.com/). It provides plenty of functionalities related to highscoring, userlevels, custom mappacks, and more; and even serves as a 3rd party server for N++.
 
-## Available commands
+### Table of contents
+- [For users](#for-users)
+    - [Basics](#basics)
+    - [Userlevel support](#userlevel-support)
+    - [Mappack support](#mappack-support)
+    - [Regular events](#regular-events)
+    - [More advanced parameters](#more-advanced-parameters)
+    - [Tips and Tricks](#tips-and-tricks)
+- [For developers](#for-developers)
+- [Credits](#credits)
 
-All commands can be sent to inne++ either via PM or in a public channel by mentioning @inne++ in the message. inne++ will respond via the same channel.
-Commands generally aren't case-sensitive, except for the usernames.
+## For users
 
-### Display the level of the day/episode of the week
-- *what's the lotd*
-- *what's the eotw*
+You can interact with the bot in the [server](https://discord.gg/nplusplus) directly by either pinging or DM'ing it _with natural language_, it understands plenty of commands. To get a complete list and better documentation, use the `help` (or `commands`) command.
 
-inne++ will respond with the level of the day or the episode of the week.
+### Basics
 
-### Display a screenshot of a level or episode
-- *screenshot of \<level\>*
+Here are only a few common examples to get you started. Most of them support many additional options to further refine the query (see the following sections):
 
-inne++ will respond with a picture of the requested level or episode.
+Command | Description
+------- | -----------
+`help` | Show command list, help and further documentation.
+`scores for SI-A-00-00` | Fetches the top20 highscores for the specified level.
+`top10 rank` | Computes the global Top10 player rankings.
+`userlevel rank` | Computes the global userlevel 0th rankings.
+`screenshot for the basics` | Generates a screenshot for a level _in the default palette_.
+`anim SI-A-00-00 0 1` | Generate an animated simulation of several runs in GIF format.
+`search for table` | Search (fuzzy) for all levels with "table" in the name.
+`stats for xela` | Returns some highscoring statistics and histogram.
+`how many for xela` | Query current 0th count for a player.
+`points` | Query total point count _for the currently identified player_.
+`bottom5 list for xela` | Fetch list of 15th-19th highscores for player xela.
+`lotd` | Query what the current Level of the Day is.
 
-'level' can be a level or episode ID (eg. SI-A-00, SI-A-00-00) or a level name (eg. supercomplexity).
+**Note**: All commands are case insensitive.
 
-### Display scores for a level or episode
-- *scores for \<level\>*
+### Userlevel support
 
-inne++ will respond with the high scores table for the given level or episode.
+There is broad userlevel support, and most highscoring commands (such as the ones above) can be used for userlevels simply by adding `userlevel` somewhere in the command. By default, all userlevels are considered, but this can also be narrowed down to only the latest 500 published userlevels (what the community considers to be "Newest") by also appending `newest`:
 
-'level' can be a level or episode ID (eg. SI-A-00, SI-A-00-00) or a level name (eg. supercomplexity).
+- `userlevel top20 rank`
+- `newest userlevel average rank for xela`
+- ...
 
-This will also force inne++ to update the scores with the latest results from N++ (rather than waiting for the default half-hour between updates).
+Individual userlevels can be referenced by their ID or by their name. If the name creates ambiguity, the list of matches will be printed instead:
 
-### Display time until a new episode or level
-- *when's the next lotd*
-- *when's the next eotw*
+- ` userlevel screenshot palette metoro for 71088`
+- `userlevel scores for bramble shamble 2: electric boogaloo`
 
-inne++ will respond with a rough estimate of how long until a new level or episode is posted.
+Additionally, you can browse or search userlevels, filtering the results by title, author, mode (Solo, Coop, Race) or tab (All, Featured, Hardest, etc), and ordering by many fields:
 
-### Identify yourself
-- *my name is \<username\>*
+- `search solo userlevels for "house" by "yefffef" order by -favs`
+- `browse hardest userlevels sort by date`
 
-inne++ will save your username, so you don't need to specify it when looking up high score data with the following commands.
-For any command that requires a username, if you don't specify a username, inne++ will use this one.
+This command, and many others, has components (buttons and select menus) to allow for better navigation and paging once the command has been issued.
 
-### Display rankings
-- *rankings*
-- *level rankings*
-- *rankings with ties*
-- *point rankings*
-- *score rankings*
-- *\<tab\> rankings*
-- *top 10 intro level rankings with ties*
-- *average points rankings*
-- *average rank rankings*
+### Mappack support
 
-inne++ will compute the overall number of top-N scores, total points, total score, average points, or average rank, for every player, and display the top 20.
+A mappack is a cohesive set of userlevels made by one or more members and published in the community under much fanfare. These maps replace part of the original vanilla campaign (often the intro tab, although larger mappacks do exist), and provide a fresh playing and highscoring experience for those than want more out of the game. It is recommended that a mappack always be played with a new savefile.
 
-If 'with ties' is specified, inne++ will consider a tie for the score to count towards the rankings, even if that means taking more than N rankings for the level.
+These mappacks are published in the [custom-tabs](https://discord.gg/E55W3qhBqW) forum of the N++ [Discord server](https://discord.gg/nplusplus). We have custom installers (see [this repo](https://github.com/edelkas/npp_mappacks)) that perform all the necessary patching for Windows, including but not limited to:
 
-If neither 'point', 'score', 'average' or a rank is specified, inne++ defaults to 0th rankings, no ties.
+- Replacing the map files.
+- Automatically swapping the savefile.
+- Enabling custom leaderboards by redirecting your game to our custom 3rd party server.
+- Implementing additional playing modes (speedrun and low-gold).
+- Optionally installing new custom palettes.
+- And some nice cosmetic changes to go along with the rest.
 
-### Display scores with the largest or smallest spread between 0th and Nth
-- *spread*
-- *spread 19th*
-- *smallest spread*
-- *level spread*
-- *\<tab\> spread*
-- *biggest intro level spread 10th*
+Mappacks are supported by the bot, and thus many of the aforementioned commands can be issued for mappacks as well (e.g. scores, rankings, screenshots, lists, etc). All mappacks have an associated 3 letter code. In order to specify a mappack, the code must be included somewhere in the command (e.g. `ctp rank`).
 
-inne++ will display the episodes or levels with smallest or largest spread between 0th and Nth.
+Use the `mappacks` command to get a list of all currently supported mappacks and their information. The backend of this bot also serves as the 3rd party server the patched games connect to for mappack support.
 
-If a number (eg. 10th, 19th) is not specified, inne++ defaults to spread between 0th and 1st.
+### Regular events
 
-If 'smallest' or 'biggest' is not specified, inne++ defaults to 'biggest'.
+There are several events or tasks which take place regularly during inne's operations, most often daily:
 
-If 'episode' or 'level' is not specified, inne++ defaults to 'level'.
+- The userlevel database gets updated every 5 minutes for new userlevels.
+- The entire highscore database for Metanet scores gets updated once **daily**. This means that you may need to wait up to a day for all changes to reflect in rankings and statistics. An individual leaderboard will also be automatically updated if you manually query the scores with the `scores` command.
+- The highscores for the newest 500 userlevels get updated **daily** in the database as well. Older userlevel scores get continuously updated in the background constantly and more slowly: it takes about 2 weeks for a full round trip across the currently published 100k+ userlevels, unless you manually query the scores.
+- Every day a new Level of the Day (lotd) gets published in the `#highscores` channel, and the highscoring activity for the previous one gets summarized, to encourage competition. This currently happens 2 hours after the highscore update.
+- Every sunday a new Episode of the Week is published.
+- Every 1st of the month a new Column of the Month is published.
+- The highscoring report is published **daily** in the `#highscores` channel, right after the new lotd. This summarizes information about the highscoring activity in the past 24h and in the past week.
+- The userlevel report is published **daily** in the `#userlevels` channel. This summarizes highscoring activity (mainly 0ths and points) _in the newest 500 userlevels_.
 
-### Display maxed or maxable levels or episodes
-- *(\<tab\>) maxed*
-- *(\<tab\>) maxable (for \<player\>)*
 
-'Maxed' levels are levels with 20 or more ties for 0th. Often this levels can't be improved unless innovated, hence the name. inne++ will display a list of all such levels (or episodes, if asked).
+### More advanced options
 
-On the other hand, 'maxable' levels are levels with many ties for 0th, hence being potentially unimprovable. inne++ will display a list of the 20 levels with the most ties for 0th, in descending order. If a player is also specified, then only those maxes not attained by said player will be displayed.
+Most commands support many additional options. For a full reference, check the relevant `help` command, or if documentation is not available yet, ask a member in the server. For instance:
 
-As usual, you can filter by tabs.
+- In highscoring commands, results can often be filtered by tab (SI, S, SL, SU, ?, !) and type (Level, Episode, Story), in any order. Thus, one can ask `how many top5 * ? ! level`, which will return how many level top5's the identified player has in the secret tabs (`? !`) which used to be 0th (`*`).
+- Furthermore, many commands support filtering by mappack, and even playing mode. Thus, one can say `ctp sr score si rank`, which will rank players (`rank`) by total score (`score`) in speedrun mode (`sr`) in the intro tab (`si`) of the CTP mappack (`ctp`).
 
-### Display cleanest or dirtiest episodes
-- *cleanest*
-- *dirtiest*
-- *\<tab\> cleanest*
-- *\<tab\> dirtiest*
+### Tips and tricks
 
-inne++ will display a list of the 20 episodes with the least difference between the episode 0th and the sum of all of its 5 level 0ths (for 'cleanest'), or the ones with the most difference ('dirtiest'). As usual, you can filter by tabs.
+Here are some nifty features to make using the bot simpler:
+- If you identify, you will be able to omit your player name in many commands. You can do this with the command `my name is PLAYERNAME`, changing `PLAYERNAME` with your actual N++ username. Now you can run `how many top20` and it will tell you _your_ top20 count.
+- Similarly, you can specify a default palette with `my palette is PALETTE`, which is be used by default when generating screenshots or animations.
+- Whenever you need to specify a name (player name, level name, palette name, etc) you can always put it at the end using the prefix `for` (e.g. `scores for the basics`), but you can also use quotes, which will help when there are multiple such terms. For instance, `browse userlevels for "house" by "yefffef"` will search for all userlevels by the author `yefffef` having the word "house" in their title.
+- You can refer to levels in up to 3 different ways: the ID (e.g. `S-C-19-04`), the name (e.g. `nonplusplussed`) and the alias (e.g. `-++`). Aliases are added manually by the botmaster. PLayers can also have aliases.
+- There is fuzzy searching for level names and palette names, which means that you can enter incomplete or approximate names and the closest matches will the found. If there's a single one, that one will be used. If there are multiple good matches, the list will be printed.
+- You can shorten level IDs by omitting the dashes and extra zeroes if there's no ambiguity. For instance, level `S-B-01-03` can be referred to as `sb13`. In case of ambiguity, levels take precedence, so episode `S-B-13` cannot be shortened to `sb13`, because it would be confused with the previous level. In this case, the dashes are needed.
 
-### Display episode ownages.
-- *ownages*
-- *\<tab\> ownages*
 
-An episode ownage occurs when the same player has the 0th for an episode and all of its 5 levels. inne++ will print a list of all ownages. As usual, you can filter by tab.
+## For developers
 
-### Display the community's total scores
-- *community*
-- *\<tab\> community*
+TO DO
 
-The community's total scores are the sum of all 0ths. inne++ will display some information regarding the community's total score, like the total level score, total episode score, the (adjusted) difference between both (to see, globally, how clean episodes are), and also, the averages per level of all of them. As usual, you can filter by tab.
- 
-### Find a level ID by level name
-- *level id for \<level\>*
+## Credits
 
-inne++ will tell you the level ID for the specified level (eg. S-D-15-04 for 'supercomplexity').
-
-### Find the name of a level by ID
-- *level name for \<level\>*
-
-inne++ will tell you the name of the specified level (eg. 'supercomplexity' for S-D-15-04)
-
-### Display your points
-- *points*
-- *level points*
-- *\<tab\> points*
-- *intro level points*
-
-inne++ will tell you how many points you have. Points are computed by giving 20 for 0th, 19 for 2nd, etc.
-
-### Display your total score
-- *total*
-- *\<tab\> total*
-
-inne++ will tell you your total score (see 'total score rankings' above).
-
-### Display your top N count
-- *how many*
-- *how many 0ths*
-- *how many with ties*
-- *how many \<tab\>*
-- *how many intro top 10s with ties*
-
-inne++ will display the number of top-N scores you have.
-
-If no rank is specified, defaults to 0ths.
-
-### Display your high score stats
-- *stats*
-- *\<tab\> stats*
-
-inne++ will display the total number of level and episode high scores for the specified user, broken down by rank, and also a histogram of the player's scores.
-
-### Display your most improvable scores
-- *worst*
-- *worst 20*
-- *worst 20 episodes*
-- *worst 20 \<tab\>*
-- *worst 20 intro levels*
-
-inne++ will display a list of your N most improvable level or episode scores (eg. your scores which are furthest from 0th), along with the spread for each. inne++ will also display a list of N levels or episodes on which you do not have a high score.
-
-If a number isn't specified, inne++ defaults to 10.
-
-If neither 'levels' or 'episodes' is specified, inne++ defaults to level scores.
-
-### Display a list of levels you haven't high scored
-- *missing*
-- *missing 0ths*
-- *missing episodes*
-- *missing \<tab\>*
-- *missing intro level top 10s*
-
-inne++ will send you a text file containing all levels and episodes you're below the specified rank on.
-
-If a rank isn't specified, inne++ defaults to top 20.
-
-### Display a list of all your high scores
-- *list*
-- *0th list*
-- *top n list*
-- *bottom n list*
-- *top m bottom n list*
-
-inne++ will send you a text file containing all level and episode high scores for the specified user listed by rank. You can filter only the 0ths, or only the top or bottom ones. You can use both options at the same time to obtain only the score between 2 ranks of your choice. As usual, you can filter by tabs.
-
-### Link a video of a level or episode
-- *video for \<level\>*
-- *video for \<level\> by \<user\>*
-- *\<challenge\> video for \<level\>*
-- *\<challenge\> video for \<level\> by \<user\>*
-
-### Analyze replays
-- *analysis for \<level-id\> \<rank a\> \<rank b\> ...*
-
-inne++ will download and analyze the inputs of a group of runs with ranks *\<rank a\>*, *\<rank b\>*... from level *\<level-id\>*. You can introduce as many ranks as you want, as long as they are separated by spaces. You need to introduce the level id (e.g. S-A-15-03) rather than its name (e.g. "neo tokyo") to avoid confusing inne with the also introduced ranks.
-
-### Userlevels
-- *userlevels browse all*
-- *userlevels browse oldest*
-- *userlevels browse best*
-- *userlevels browse featured*
-- *userlevels browse top*
-- *userlevels browse newest*
-- *userlevels browse hardest*
-- *userlevels search for "\<level\>"*
-- *userlevels search for "\<level\>" made by "\<author\>"*
-- *userlevel screenshot for \<levelid\>*
-- *userlevel screenshot for \<levelid\> palette "\<palette\>"*
-- *userlevel download \<levelid\>*
-
-### Initialize inne++
-- *hello*
-- *hi*
-
-When inne++ first joins a channel, in order to start sending levels and episodes of the day, you have to say hi. Note that if you run this in a private message before you run it in the channel, inne++ will send the levels/episodes to your PMs instead of the channel, so don't do that ;)
-
-### Display help
-- *help*
-- *commands*
-
-inne++ will send you a short form of this README file.
-
-## License and attributions
-This project is licensed under the terms of the MIT license (see LICENSE.txt in the root directory of the project).
-
-Special thanks to jg9000, eru_bahagon and EddyMataGallos from the N forums for their work on NHigh (https://forum.droni.es/viewtopic.php?f=79&t=10472), which inspired most of the high-scoring features in inne++, and provided key guidance on using the N high scores API.
-
-And thanks to the following contributors:
-- EddyMataGallos (@edelkas)
-- Toasters (@andrewhuntsmith)
-- poober (@jseakle)
-- systeminspired
+This bot was originally developed and maintained by [@liam-mitchell](https://github.com/liam-mitchell), check out the [original repo](https://github.com/liam-mitchell/inne). It built on ideas developed for the previous iteration of the game, [N](https://www.thewayoftheninja.org/n.html), notably [NHigh](https://forum.droni.es/viewtopic.php?f=79&t=10472) by jg9000, which was focused solely around highscoring.
