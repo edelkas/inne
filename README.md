@@ -20,7 +20,7 @@ You can interact with the bot in the [server](https://discord.gg/nplusplus) dire
 
 ### Basics
 
-Here are only a few common examples to get you started. Most of them support many additional options to further refine the query (see the following sections):
+Here are **only a few** common examples to get you started. Most of them support many additional options to further refine the query (see the following sections):
 
 Command | Description
 ------- | -----------
@@ -28,16 +28,36 @@ Command | Description
 `scores for SI-A-00-00` | Fetches the top20 highscores for the specified level.
 `top10 rank` | Computes the global Top10 player rankings.
 `userlevel rank` | Computes the global userlevel 0th rankings.
+`browse userlevels` | Browse the most recent userlevels.
 `screenshot for the basics` | Generates a screenshot for a level _in the default palette_.
-`anim SI-A-00-00 0 1` | Generate an animated simulation of several runs in GIF format.
+`trace SI-A-00-00` | Generate a PNG trace of the 0th run in SI-A-00-00.
+`anim SI-A-00-00 0 1` | Generate an animated GIF simulation of multiple runs.
 `search for table` | Search (fuzzy) for all levels with "table" in the name.
 `stats for xela` | Returns some highscoring statistics and histogram.
 `how many for xela` | Query current 0th count for a player.
 `points` | Query total point count _for the currently identified player_.
 `bottom5 list for xela` | Fetch list of 15th-19th highscores for player xela.
+`compare "xela" "jp27ace"` | Compare the highscores of two players.
+`top20 table` | Organizes all your top20 counts by tab and type.
 `lotd` | Query what the current Level of the Day is.
+`analysis 0 1 2 for -++` | Dissect the inputs (L, R, J) of the top 3 runs in -++ (S-C-19-04).
+`splits for sia0` | Compute the individual level splits for episode SI-A-00's 0th run.
+`sl top10 spread` | List SL levels with largest spread between 0th and 9th scores.
+`cleanest su` | Find the cleanest episode runs in SU tab.
+`missing top20 si` | Find your missing top20 scores in SI tab.
+`worst` | List scores losing more time with respect to the 0th.
+`download userlevel 22715` | Download a vanilla map or a userlevel.
+`maxed` | List all levels with a fully maxed top20 leaderboard.
+`maxable` | List all levels with many ties for 0th.
+`random 10 si` | Find 10 random levels in SI tab.
+`community` | Compute the current community total level and episode scores.
+`twitch` | List all current active N++-related Twitch streams.
 
-**Note**: All commands are case insensitive.
+#### Notes:
+- All commands are case insensitive.
+- If a player is not specified, the identified player (presumably yourself) will be used.
+- If tabs are not specified, all of them will be used.
+- If the type is not specified, levels and episodes will both be used.
 
 ### Userlevel support
 
@@ -49,7 +69,7 @@ There is broad userlevel support, and most highscoring commands (such as the one
 
 Individual userlevels can be referenced by their ID or by their name. If the name creates ambiguity, the list of matches will be printed instead:
 
-- ` userlevel screenshot palette metoro for 71088`
+- `userlevel screenshot palette metoro for 71088`
 - `userlevel scores for bramble shamble 2: electric boogaloo`
 
 Additionally, you can browse or search userlevels, filtering the results by title, author, mode (Solo, Coop, Race) or tab (All, Featured, Hardest, etc), and ordering by many fields:
@@ -80,7 +100,7 @@ Use the `mappacks` command to get a list of all currently supported mappacks and
 
 There are several events or tasks which take place regularly during inne's operations, most often daily:
 
-- The userlevel database gets updated every 5 minutes for new userlevels.
+- The userlevel database gets updated every **5 minutes** for new userlevels.
 - The entire highscore database for Metanet scores gets updated once **daily**. This means that you may need to wait up to a day for all changes to reflect in rankings and statistics. An individual leaderboard will also be automatically updated if you manually query the scores with the `scores` command.
 - The highscores for the newest 500 userlevels get updated **daily** in the database as well. Older userlevel scores get continuously updated in the background constantly and more slowly: it takes about 2 weeks for a full round trip across the currently published 100k+ userlevels, unless you manually query the scores.
 - Every day a new Level of the Day (lotd) gets published in the `#highscores` channel, and the highscoring activity for the previous one gets summarized, to encourage competition. This currently happens 2 hours after the highscore update.
@@ -88,11 +108,14 @@ There are several events or tasks which take place regularly during inne's opera
 - Every 1st of the month a new Column of the Month is published.
 - The highscoring report is published **daily** in the `#highscores` channel, right after the new lotd. This summarizes information about the highscoring activity in the past 24h and in the past week.
 - The userlevel report is published **daily** in the `#userlevels` channel. This summarizes highscoring activity (mainly 0ths and points) _in the newest 500 userlevels_.
+- The [N++ category](https://www.twitch.tv/directory/category/n-2015) in Twitch is checked **every minute** for new N++ streams, which are posted automatically in the `#n-content-creation` channel. You can also use the `@Voyeur` Discord role to be notified (pinged) of this.
+
+Some other regular events are omitted here due to their technical nature, such as monitor memory or database status. See the [Developer](#for-developers) section for more details.
 
 
 ### More advanced options
 
-Most commands support many additional options. For a full reference, check the relevant `help` command, or if documentation is not available yet, ask a member in the server. For instance:
+Most commands support many additional options. For a full reference, check the relevant `help` command, or if documentation is not yet available, ask a member in the server. For instance:
 
 - In highscoring commands, results can often be filtered by tab (SI, S, SL, SU, ?, !) and type (Level, Episode, Story), in any order. Thus, one can ask `how many top5 * ? ! level`, which will return how many level top5's the identified player has in the secret tabs (`? !`) which used to be 0th (`*`).
 - Furthermore, many commands support filtering by mappack, and even playing mode. Thus, one can say `ctp sr score si rank`, which will rank players (`rank`) by total score (`score`) in speedrun mode (`sr`) in the intro tab (`si`) of the CTP mappack (`ctp`).
