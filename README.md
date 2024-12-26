@@ -137,7 +137,7 @@ Here are some nifty features to make using the bot simpler:
 
 ## For developers
 
-Anyone looking forward to run their own fully featured version of outte, or even start contributing to it in a meaningful way, is advised to contact me through [Discord](https://discord.gg/nplusplus), as the initial setup process is complex enough to warrant it. Nevertheless, here are some pointers and things to look for.
+Anyone looking forward to run their own fully featured version of outte, or even start contributing to it in a meaningful way, is advised to contact me through [Discord](https://discord.gg/nplusplus), as the initial setup process is complex enough to warrant it. Nevertheless, here are some pointers and things to look for. If you haven't read the section [For Users](#for-users) I recommend to do so first.
 
 ### Requirements
 
@@ -145,7 +145,7 @@ Anyone looking forward to run their own fully featured version of outte, or even
 - [MySQL 5.7](https://dev.mysql.com/downloads/) or higher. Again, that's what I used until recently migrating to MySQL 8.0 while preserving backwards compatibility. For configuration, make sure to use `utf8mb4` for both encoding and collation, either server-wide or at least for outte's database. I recommend to use the [my.cnf](https://dev.mysql.com/doc/refman/8.4/en/option-files.html) configuration file provided in [./util/my.cnf](https://github.com/edelkas/inne/blob/master/util/my.cnf) for a tested configuration.
 - [Python 3](https://www.python.org/downloads/) for some auxiliary tools, notably SimVYo's [nclone](https://github.com/SimonV42/nclone) to simulate N++'s physics engine and trace or animate runs. Technically this is optional, if you don't have it you'll have to disable `FEATURE_NTRACE` (see [here](#configuring-the-bot)).
 - A **Discord bot** account. A bot is simply a particular type of application you can have associated to your Discord account, you can create and configure it in the [Developer Portal](https://discord.com/developers/applications). You'll need to get the bot invited to the server in order to have it authorized to operate, just like any other user. There are many tutorials for all this online. Finally, you'll need to take note of the _Application ID_ (also known as the  _Client ID_), which identifies your bot, and the _Token_ (also known as the _Client Secret_), which authenticates it. Needless to say, this last one is secret and should never be shared publicly, _nor included in the code base of inne_.
-* **Optionally but recommended**: I've done all development on _Linux_, and a few minor things are actually dependent on it (such as memory monitoring or SHA1 hashing). The rest should work (and those things could be adapted), but I haven't tested anything there in years.
+* **Optionally but recommended**: I've done all development on _Linux_, and a few minor things are actually dependent on it (such as memory monitoring or SHA1 hashing). The rest should work (and those things could be adapted), but I haven't tested anything there in years. When on Windows, I develop it via [WSL](https://learn.microsoft.com/en-us/windows/wsl/install). The bot itself is hosted in a Linux server I connect to via SSH (not covered here).
 
 ### Configuring your environment
 
