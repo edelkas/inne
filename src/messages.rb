@@ -1696,36 +1696,15 @@ def send_help2(event)
 end
 
 def send_help(event)
-  if (event.channel.type != 1)
-    event << "Hi! I'm **outte++**, the N++ Highscoring Bot and inne++'s evil cousin. I can do many tasks, like:\n"
-    event << "- Fetching **scores** and **screenshots** for any level or episode."
-    event << "- Performing highscore **rankings** of many sorts."
-    event << "- Elaborating varied highscoring **stats**."
-    event << "- Displaying a diverse assortment of interesting highscore **lists**."
-    event << "- Searching and downloading **userlevels**."
-    event << "- ... and many more things.\n"
-    event << "For more details and a list of commands, please DM me this question, so as to avoid spamming this channel."
-    return
-  end
-
-  msg = "Hi! I'm **outte++**, the N++ Highscoring Bot and inne++'s evil cousin. The commands I understand are:\n"
-
-  File.open('README.md').read.each_line do |line|
-    line = line.gsub("\n", "")
-    if line == " "
-      send_message(event, content: msg)
-      msg = "Commands continued...\n"
-    else
-      msg += "\n**#{line.gsub(/^### /, "")}**\n" if line =~ /^### /
-      msg += " *#{line.gsub(/^- /, "").gsub(/\*/, "")}*\n" if line =~ /^- \*/
-    end
-  end
-
-  send_message(event, content: msg)
-
-  event << "In any of these commands, if you see '<level>', replace that with either a level/episode ID (eg. SI-A-00-00) or a level name (eg. supercomplexity)"
-  event << "If you see '<tab>', you can replace that with any combination of SI/intro, S/N++, SU/ultimate, SL/legacy, ?/secret, and !/ultimate secret, or you can leave it off for overall totals."
-  event << "If the command is related to a specific player, you can specify it by ending your message with 'for <username>'. Otherwise, I'll use the one you specified earlier."
+  event << "Hi! I'm **outte++**, the N++ Chat Bot and inne++'s evil cousin. I can do many tasks, like:\n"
+  event << "- Fetching **scores** and **screenshots** for any level or episode."
+  event << "- Performing highscore **rankings** of many sorts."
+  event << "- Elaborating varied highscoring **stats**."
+  event << "- Displaying a diverse assortment of interesting highscore **lists**."
+  event << "- Searching and downloading **userlevels**."
+  event << "- Supporting custom mappacks."
+  event << "- ... and many more things.\n"
+  event << "A detailed help section is in the works. For now, check out [this readme](<https://github.com/edelkas/inne?tab=readme-ov-file#for-users>)."
 rescue => e
   lex(e, "Error sending help.", event: event)
 end
