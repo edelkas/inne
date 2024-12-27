@@ -777,6 +777,11 @@ def mdtext(str, header: 0, url: nil)
   str
 end
 
+# Format a link in MarkDown
+def mdurl(text, url)
+  "[#{text}](#{url})"
+end
+
 # Function to pad (and possibly truncate) a string according to different
 # padding methods, determined by the constants defined at the start.
 # It's a general function, but with a boolean we specify if we're formatting

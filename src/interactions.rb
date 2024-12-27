@@ -149,6 +149,26 @@ ensure
   return view
 end
 
+# Template ActionRow builder with Buttons for navigation (short version)
+def interaction_add_navigation_short(
+    view = nil,
+    labels:   ['Previous', 'Current', 'Next'],
+    disabled: [false, true, false],
+    ids:      ['button:nav:prev', 'button:nav:cur', 'button:nav:next'],
+    styles:   [:primary, :secondary, :primary],
+    emojis:   [nil, nil, nil]
+  )
+  view = Discordrb::Webhooks::View.new if !view
+  view.row{ |r|
+    r.button(label: labels[0], style: styles[0], disabled: disabled[0], custom_id: ids[0], emoji: emojis[0])
+    r.button(label: labels[1], style: styles[1], disabled: disabled[1], custom_id: ids[1], emoji: emojis[1])
+    r.button(label: labels[2], style: styles[2], disabled: disabled[2], custom_id: ids[2], emoji: emojis[2])
+  }
+ensure
+  return view
+end
+
+
 # ActionRow builder with Buttons for standard page navigation
 def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000, func: nil)
   interaction_add_navigation(
@@ -162,6 +182,16 @@ def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 100000
       "button:nav:1#{func ? ':' + func : ''}",
       "button:nav:#{offset}#{func ? ':' + func : ''}"
     ]
+  )
+end
+
+# ActionRow builder with Buttons for standard page navigation
+def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil)
+  suf = func ? ':' + func : ''
+  interaction_add_navigation_short(
+    view,
+    labels: ["❮", "#{page} / #{pages}", "❯"],
+    ids: ["button:nav:-1#{suf}", "button:nav:page", "button:nav:1#{suf}"]
   )
 end
 

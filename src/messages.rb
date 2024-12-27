@@ -1953,6 +1953,59 @@ rescue => e
   lex(e, "Error fetching denubbed scores.", event: event)
 end
 
+def send_tip(event, page: nil)
+  tips = [
+    "If you identify, you will be able to omit your player name in many highscoring commands. "\
+    "You can do this with the command `my name is` followed by your N++ (Steam) username. "\
+    "Now you can run e.g. `how many top20` and it will respond with your top20 count.",
+
+    "You can choose a default palette with the command `my palette is`, followed by the palette "\
+    "name (e.g. `my palette is retro`). This palette will be used by default when generating "\
+    "screenshots or animations. All 123 official palettes are supported, see the full list "\
+    "#{mdurl('here', '<https://github.com/edelkas/inne/blob/aecd0261e88f67f3d82614be889cf576065e1de4/src/maps.rb#L117-L149>')}.",
+
+    "You can refer to levels in up to 3 different ways: the _ID_ (e.g. `S-C-19-04`), the _name_ "\
+    "(e.g. `nonplusplussed`) and the _alias_ (e.g. `-++`). Not all levels have aliases, they are "\
+    "added manually by the botmaster. Players can also have aliases. You can use the `aliases` "\
+    "command to see the full list.",
+
+    "You can shorten level IDs by omitting the dashes and extra zeroes if there's no ambiguity. "\
+    "For instance, level `S-B-01-03` can be referred to as simply `sb13`. In case of ambiguity, "\
+    "levels take precedence, so episode `S-B-13` cannot be shortened to `sb13`, because it would "\
+    "be confused with the previous level. In this case, the dashes are needed.",
+
+    "Whenever you need to specify a name (player name, level name, palette name, etc) you can "\
+    "always put it at the end using the prefix **for** (e.g. `scores for the basics`), but you "\
+    "can also use quotes, which will specially help when there are multiple such terms. For "\
+    "instance, `browse userlevels for \"house\" by \"yefffef\"` will search for all userlevels "\
+    "by the author `yefffef` having the word `house` in the title.",
+
+    "There is fuzzy searching for level names and palette names, which means that you can enter "\
+    "incomplete or approximate names and the closest matches will the found. If there's a single "\
+    "one, it will be used. If there are multiple good matches, the list will be printed.",
+
+    "You can choose a default mappack with the command `my mappack is` followed by the mappack's "\
+    "name or 3 letter code. That mappack will be used by default from then on in all DM commands. "\
+    "Use the `mappacks` command to find out the list of all supported mappacks.",
+
+    "You can use outte++ as a 3rd party userlevel **search engine** for N++ with many more "\
+    "features than the vanilla game (search by author, custom sorting, etc). To do this, "\
+    "simply perform any userlevel search in outte "\
+    "and click the green button that says \"Play\". Then go to the game and search `outte`, and "\
+    "those levels will appear instead! For this to work, you need to patch your game, see "\
+    "#{mdurl('here', 'https://discord.com/channels/197765375503368192/221721273405800458/1185641339254222991')}"\
+    " for instructions.",
+
+    "outte++ is open source and you can find its code in #{mdurl('Github', '<https://github.com/edelkas/inne>')}. "\
+    "You are welcome to peruse it and, if you develop enough understanding of it, contribute to it as well."
+  ]
+  msg = parse_message(event)
+  tip = page ? (parse_page(msg, page, false, event.message.components) - 1) % tips.size : rand(tips.size)
+  str = mdtext("🔎 __Did you know...__\n", header: 1) + tips[tip]
+  components = interaction_add_button_navigation_short(nil, tip + 1, tips.size, 'send_tip')
+  send_message(event, content: str, components: components)
+end
+
 # Handle responses to new reactions
 def respond_reaction(event)
   # Only have tasks for reactions to outte messages
@@ -2044,6 +2097,7 @@ def respond(event)
   return send_denubbed(event)        if msg =~ /\bdenubbed\b/i
   return hello(event)                if msg =~ /\bhello\b/i || msg =~ /\bhi\b/i
   return thanks(event)               if msg =~ /\bthank you\b/i || msg =~ /\bthanks\b/i
+  return send_tip(event)             if msg =~/\btip\b/i
 
   # If we get to this point, no command was executed
   action_dec('commands')
