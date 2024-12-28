@@ -1636,75 +1636,45 @@ else
   GlobalProperty.set_avatar(new_avatar)
 end
 
-def send_help2(event)
-  cols = 3
-
-  msg = "Hi! I'm **outte++**, the N++ Highscoring Bot and inne++'s evil cousin."
-  msg += "I can do many tasks, like fetching **scores** and **screenshots** of any level, "
-  msg += "performing **rankings** and **stats**, retrieving **lists**, "
-  msg += "browsing and downloading **userlevels**, etc."
-  event << msg
-
-  commands = [
-    "lotd",
-    "eotw",
-    "cotm",
-    "userlevel",
-    "rank",
-    "community",
-    "cleanest",
-    "dirtiest",
-    "ownage",
-    "help",
-    "random",
-    "what",
-    "when",
-    "points",
-    "spread",
-    "average points",
-    "average rank",
-    "average lead",
-    "scores",
-    "total",
-    "how many",
-    "stats",
-    "screenshot",
-    "worst",
-    "list",
-    "missing",
-    "maxable",
-    "maxed",
-    "level name",
-    "level id",
-    "analysis",
-    "splits",
-    "my name is",
-    "my steam id is",
-    "video",
-    "unique holders",
-    "z"
+def send_help(event, section: nil, subsection: nil, page: nil)
+  # Main sections of the help
+  root = Doc.new('Help')
+  sect_names = [
+    'Introduction', 'Commands', 'Userlevels', 'Mappacks', 'Events & Tasks',
+    'History', 'For Developers', 'Credits'
   ]
+  sects = sect_names.map{ |name| [name, Doc.new(name)] }.to_h
+  sects.each{ |_, sect| root << sect }
 
-  commands.sort!
-  commands.push("") until commands.size % cols == 0
-  col_s = commands.size / cols
-  row = commands[0..col_s - 1]
-  (1..cols - 1).each{ |i| row.zip(commands[i * col_s .. (i + 1) * col_s - 1]) }
-  rows = row.flatten.compact.each_slice(cols).to_a
-  event << format_block(make_table(rows, "COMMAND LIST"))
+  # Sec. 1 - Introduction
+  emoji = (find_emoji('moleHi') || '👋').to_s
+  str = "Hi #{emoji} I'm **outte++**, the N++ Discord chatbot and inne++'s evil cousin. "
+  str << "I provide functionality related to many aspects of the game, such as *highscoring*, *userlevels*, custom *mappacks*, and more. "
+  str << "The help is broken down into sections (and possibly subsections) and pages. "
+  str << "Use the menus below to navigate the sections, and the buttons to navigate the pages of each section. "
+  str << "Finally, if in doubt, don't hesitate to ask my good friend *Eddy* for help!"
+  sects['Introduction'].write(str)
 
-end
+  # Parse section and page numbers
+  reset_page = !!section || !!subsection
+  msg = parse_message(event)
+  pages = 1
+  page = parse_page(msg, page, reset_page, event.message.components) % pages + 1
+  indices = msg[/\[(.+)\]/, 1]
+  indices = indices ? indices.split('.').map{ |i| i.to_i - 1 } : [0]
+  msg = root.render(*indices)
 
-def send_help(event)
-  event << "Hi! I'm **outte++**, the N++ Chat Bot and inne++'s evil cousin. I can do many tasks, like:\n"
-  event << "- Fetching **scores** and **screenshots** for any level or episode."
-  event << "- Performing highscore **rankings** of many sorts."
-  event << "- Elaborating varied highscoring **stats**."
-  event << "- Displaying a diverse assortment of interesting highscore **lists**."
-  event << "- Searching and downloading **userlevels**."
-  event << "- Supporting custom mappacks."
-  event << "- ... and many more things.\n"
-  event << "A detailed help section is in the works. For now, check out [this readme](<https://github.com/edelkas/inne?tab=readme-ov-file#for-users>)."
+  # Format message
+  view = interaction_add_button_navigation_short(nil, page, 1, 'send_help')
+  view.row do |row|
+    row.select_menu(custom_id: 'menu:help_sect', placeholder: 'Section', max_values: 1) do |menu|
+      sect_names.each do |name|
+        val = name.tr(' ', '_').downcase
+        menu.option(label: name, value: "menu:help_sect:#{val}", default: false)
+      end
+    end
+  end
+  send_message(event, content: msg, components: view)
 rescue => e
   lex(e, "Error sending help.", event: event)
 end

@@ -906,6 +906,66 @@ def string_distance_list_mixed(word, list, min: 1, max: 3, max2: 2, th: 3, soft_
   matches.values.flatten(1).take(to_take)
 end
 
+# This class represents each unit of a document, it's used primarily for building
+# the documentation that's shown with the "help" command. Each Doc can have sections,
+# which are Docs themselves, thus building the entire documentation in book fashion.
+class Doc
+  attr_accessor :parent
+  attr_writer :index, :level
+  attr_reader :sections
+
+  def initialize(title, content = '')
+    @title    = title
+    @content  = content
+    @sections = []
+    @index    = 0
+    @parent   = nil
+    @level    = 1
+  end
+
+  def <<(doc)
+    @sections << doc
+    doc.index = @sections.length
+    doc.parent = self
+    doc.level = @level + 1
+    self
+  end
+
+  def write(content)
+    @content << content
+  end
+
+  def leaf?
+    @sections.empty?
+  end
+
+  def root?
+    @index == 0
+  end
+
+  def seq
+    return '' if root?
+    (@parent.root? ? '' : @parent.seq + '.') + @index.to_s
+  end
+
+  def breadcrumbs
+    (@parent ? @parent.breadcrumbs + ' > ' : '') + @title
+  end
+
+  def to_s
+    "## 📄 [#{seq}] #{breadcrumbs}\n#{@content}"
+  end
+
+  def render(*sects)
+    node = self
+    sects.each do |idx|
+      break if node.leaf?
+      node = node.sections[idx]
+    end
+    node.to_s
+  end
+end
+
 # <---------------------------------------------------------------------------->
 # <------                      BINARY MANIPULATION                       ------>
 # <---------------------------------------------------------------------------->
