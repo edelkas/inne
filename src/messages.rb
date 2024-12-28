@@ -305,8 +305,8 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     view = Discordrb::Webhooks::View.new
     interaction_add_button_navigation(view, pag[:page], pag[:pages])
     interaction_add_type_buttons(view, type, ties)
-    interaction_add_select_menu_rtype(view, rtype)
-    interaction_add_select_menu_metanet_tab(view, tab)
+    interaction_add_select_menu_rtype(view, 'rank', rtype)
+    interaction_add_select_menu_metanet_tab(view, 'rank', tab)
     send_message(event, content: header + "\n" + format_block(rank), components: view)
   else
     event << header
@@ -1651,9 +1651,23 @@ def send_help(event, section: nil, subsection: nil, page: nil)
   str = "Hi #{emoji} I'm **outte++**, the N++ Discord chatbot and inne++'s evil cousin. "
   str << "I provide functionality related to many aspects of the game, such as *highscoring*, *userlevels*, custom *mappacks*, and more. "
   str << "The help is broken down into sections (and possibly subsections) and pages. "
-  str << "Use the menus below to navigate the sections, and the buttons to navigate the pages of each section. "
-  str << "Finally, if in doubt, don't hesitate to ask my good friend *Eddy* for help!"
+  str << root.toc
+  str << "Use the menus below to navigate the sections, and the buttons to navigate the pages of each section, if any. "
+  str << "Finally, if in doubt, don't hesitate to ask my good friend *Eddy* for help!\n"
   sects['Introduction'].write(str)
+
+  # Sec. 8 - Credits
+  str = <<~STR
+    This bot was originally developed and maintained by **CCS**, check out the
+     #{mdurl('original repo', '<https://github.com/liam-mitchell/inne>')}. It's currently maintained
+     by **Eddy**, check out the #{mdurl('current repo', '<https://github.com/edelkas/inne>')}.
+     This bot built on ideas developed for the previous iteration of the game,
+     #{mdurl('N','<https://www.thewayoftheninja.org/n.html>')}, notably
+     #{mdurl('NHigh', '<https://forum.droni.es/viewtopic.php?f=79&t=10472>')} by **jg9000**,
+     which was focused solely around highscoring. To learn more details about the history,
+     check out the _History_ section below.
+  STR
+  sects['Credits'].write(str.tr("\n", ''))
 
   # Parse section and page numbers
   reset_page = !!section || !!subsection
@@ -1662,19 +1676,19 @@ def send_help(event, section: nil, subsection: nil, page: nil)
   page = parse_page(msg, page, reset_page, event.message.components) % pages + 1
   indices = msg[/\[(.+)\]/, 1]
   indices = indices ? indices.split('.').map{ |i| i.to_i - 1 } : [0]
+  indices[0] = section.to_i if section
+  indices[1] = subsection.to_i if subsection
+  cur_name = sect_names[indices.first]
   msg = root.render(*indices)
 
   # Format message
-  view = interaction_add_button_navigation_short(nil, page, 1, 'send_help')
-  view.row do |row|
-    row.select_menu(custom_id: 'menu:help_sect', placeholder: 'Section', max_values: 1) do |menu|
-      sect_names.each do |name|
-        val = name.tr(' ', '_').downcase
-        menu.option(label: name, value: "menu:help_sect:#{val}", default: false)
-      end
-    end
-  end
+  view = Discordrb::Webhooks::View.new
+  interaction_add_button_navigation_short(view, page, pages, 'send_help') unless pages == 1
+  interaction_add_select_menu(view, 'help:sect', sect_names, cur_name)
   send_message(event, content: msg, components: view)
+
+  # TODO:
+  #   - Add pages to Doc class
 rescue => e
   lex(e, "Error sending help.", event: event)
 end

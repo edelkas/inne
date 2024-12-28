@@ -912,7 +912,7 @@ end
 class Doc
   attr_accessor :parent
   attr_writer :index, :level
-  attr_reader :sections
+  attr_reader :sections, :title
 
   def initialize(title, content = '')
     @title    = title
@@ -952,8 +952,15 @@ class Doc
     (@parent ? @parent.breadcrumbs + ' > ' : '') + @title
   end
 
+  def toc
+    return '' if @sections.empty?
+    toc = ANSI.bold + ANSI.under + ANSI.blue + "Table of Contents\n" + ANSI.clear + ANSI.blue
+    toc << @sections.map.with_index{ |s, i| "  %d. %s" % [i + 1, s.title] }.join("\n") + ANSI.clear
+    format_block(toc)
+  end
+
   def to_s
-    "## 📄 [#{seq}] #{breadcrumbs}\n#{@content}"
+    "## 📄 [#{seq}] #{breadcrumbs}\n#{@content}\n#{toc}"
   end
 
   def render(*sects)

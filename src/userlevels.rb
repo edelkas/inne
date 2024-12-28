@@ -1032,9 +1032,9 @@ def send_userlevel_browse(
   if !(initial && count == 0)
     cur_emoji = initial ? nil : get_emoji(event, 'button:play:')
     interaction_add_action_navigation(view, pag[:page], pag[:pages], 'play', 'Play', (EMOJIS_FOR_PLAY - [cur_emoji]).sample)
-    interaction_add_select_menu_order(view, order_str, cat != QT_NEWEST)
-    interaction_add_select_menu_tab(view, USERLEVEL_TABS[cat][:name])
-    interaction_add_select_menu_mode(view, MODES[mode], false)
+    interaction_add_select_menu_order(view, 'browse', order_str, cat != QT_NEWEST)
+    interaction_add_select_menu_tab(view, 'browse', USERLEVEL_TABS[cat][:name])
+    interaction_add_select_menu_mode(view, 'browse', MODES[mode], false)
   end
 
   send_message(event, content: output, components: view)

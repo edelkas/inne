@@ -11,15 +11,29 @@ def initialize_components
   $components = Discordrb::Webhooks::View.new
 end
 
+# ActionRow builder for a generic Select Menu
+def interaction_add_select_menu(view = nil, id = 'menu', names = [], default = '', placeholder = 'Section')
+  view = Discordrb::Webhooks::View.new if !view
+  view.row do |row|
+    row.select_menu(custom_id: id, placeholder: placeholder, max_values: 1) do |menu|
+      names.each.with_index do |name, i|
+        menu.option(label: name, value: i.to_s, default: name == default)
+      end
+    end
+  end
+ensure
+  return view
+end
+
 # ActionRow builder with a Select Menu for the mode
 #   mode: Name of mode that is currently selected
 #   all:  Whether to allow an "All" option
-def interaction_add_select_menu_mode(view = nil, mode = nil, all = true)
+def interaction_add_select_menu_mode(view = nil, id = '', mode = nil, all = true)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
-    r.select_menu(custom_id: 'menu:mode', placeholder: 'Mode', max_values: 1){ |m|
+    r.select_menu(custom_id: "#{id}:mode", placeholder: 'Mode', max_values: 1){ |m|
       MODES.reject{ |k, v| all ? false : v == 'all' }.each{ |k, v|
-        m.option(label: "Mode: #{v.capitalize}", value: "menu:mode:#{v}", default: v == mode)
+        m.option(label: "Mode: #{v.capitalize}", value: v, default: v == mode)
       }
     }
   }
@@ -28,12 +42,12 @@ ensure
 end
 
 # ActionRow builder with a Select Menu for the tab
-def interaction_add_select_menu_tab(view = nil, tab = nil)
+def interaction_add_select_menu_tab(view = nil, id = '', tab = nil)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
-    r.select_menu(custom_id: 'menu:tab', placeholder: 'Tab', max_values: 1){ |m|
+    r.select_menu(custom_id: "#{id}:tab", placeholder: 'Tab', max_values: 1){ |m|
       USERLEVEL_TABS.each{ |t, v|
-        m.option(label: "Tab: #{v[:fullname]}", value: "menu:tab:#{v[:name]}", default: v[:name] == tab)
+        m.option(label: "Tab: #{v[:fullname]}", value: v[:name], default: v[:name] == tab)
       }
     }
   }
@@ -44,12 +58,12 @@ end
 # ActionRow builder with a Select Menu for the order
 #   order:   The name of the current ordering
 #   default: Whether to plug "Default" option at the top
-def interaction_add_select_menu_order(view = nil, order = nil, default = true)
+def interaction_add_select_menu_order(view = nil, id = '', order = nil, default = true)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
-    r.select_menu(custom_id: 'menu:order', placeholder: 'Order', max_values: 1){ |m|
+    r.select_menu(custom_id: "#{id}:order", placeholder: 'Order', max_values: 1){ |m|
       ["default", "title", "date", "favs"][(default ? 0 : 1) .. -1].each{ |b|
-        m.option(label: "Sort by: #{b.capitalize}", value: "menu:order:#{b}", default: b == order)
+        m.option(label: "Sort by: #{b.capitalize}", value: b, default: b == order)
       }
     }
   }
@@ -66,7 +80,7 @@ def interaction_add_select_menu_type(view = nil, type = nil)
     r.select_menu(custom_id: 'menu:type', placeholder: 'Type', max_values: 1){ |m|
       ['overall', 'level', 'episode', 'story'].each{ |b|
         label = b == 'overall' ? 'Levels + Episodes' : b.capitalize.pluralize
-        m.option(label: "Type: #{label}", value: "menu:type:#{b}", default: b == type)
+        m.option(label: "Type: #{label}", value: b, default: b == type)
       }
     }
   }
@@ -76,14 +90,14 @@ end
 
 # ActionRow builder with a Select menu for the highscorable tabs
 # (All, SI, S, SU, SL, SS, SS2)
-def interaction_add_select_menu_metanet_tab(view = nil, tab = nil)
+def interaction_add_select_menu_metanet_tab(view = nil, id = '', tab = nil)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
-    r.select_menu(custom_id: 'menu:tab', placeholder: 'Tab', max_values: 1){ |m|
+    r.select_menu(custom_id: "#{id}:tab", placeholder: 'Tab', max_values: 1){ |m|
       ['all', 'si', 's', 'su', 'sl', 'ss', 'ss2'].each{ |t|
         m.option(
           label:   t == 'all' ? 'All tabs' : format_tab(t.upcase.to_sym) + ' tab',
-          value:   "menu:tab:#{t}",
+          value:   t,
           default: t == tab
         )
       }
@@ -97,14 +111,14 @@ end
 # (0th, Top5, Top10, Top20, Average rank,
 # 0th (w/ ties), Tied 0ths, Singular 0ths, Plural 0ths, Average 0th lead
 # Maxed, Maxable, Score, Points, Average points)
-def interaction_add_select_menu_rtype(view = nil, rtype = nil)
+def interaction_add_select_menu_rtype(view = nil, id = '', rtype = nil)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
-    r.select_menu(custom_id: 'menu:rtype', placeholder: 'Ranking type', max_values: 1){ |m|
+    r.select_menu(custom_id: "#{id}:rtype", placeholder: 'Ranking type', max_values: 1){ |m|
       RTYPES.each{ |t|
         m.option(
           label:   "#{format_rtype(t).gsub(/\b(\w)/){ $1.upcase }}",
-          value:   "menu:rtype:#{t}",
+          value:   t,
           default: t == rtype
         )
       }
@@ -118,9 +132,9 @@ end
 def interaction_add_select_menu_alias_type(view = nil, type = nil)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
-    r.select_menu(custom_id: 'menu:alias', placeholder: 'Alias type', max_values: 1){ |m|
+    r.select_menu(custom_id: 'alias:type', placeholder: 'Alias type', max_values: 1){ |m|
       ['level', 'player'].each{ |b|
-        m.option(label: "#{b.capitalize} aliases", value: "menu:alias:#{b}", default: b == type)
+        m.option(label: "#{b.capitalize} aliases", value: b, default: b == type)
       }
     }
   }
@@ -511,32 +525,35 @@ def respond_interaction_button(event)
 end
 
 def respond_interaction_menu(event)
-  keys   = event.custom_id.to_s.split(':')       # Component parameters
-  values = event.values.map{ |v| v.split(':') }  # Component option parameters
-  type   = parse_message(event)[/\w+/i].downcase # Source message type
-  return if keys[0] != 'menu'                    # Only listen to select menus
+  keys = event.custom_id.to_s.split(':') # Component parameters
+  val  = event.values.first              # Identifier of selected option
 
-  case type
-  when 'browsing' # Select Menus for the userlevel browse function
+  case keys[0]
+  when 'alias'    # Select Menus for the alias list function
+    case keys[1]
+    when 'type'   # Change type of alias (level, player)
+      send_aliases(event, type: val)
+    end
+  when 'browse'   # Select Menus for the userlevel browse function
     case keys[1]
     when 'order'  # Reorder userlevels (by title, author, date, favs)
-      send_userlevel_browse(event, order: values.first.last)
+      send_userlevel_browse(event, order: val)
     when 'tab'    # Change tab (all, best, featured, top, hardest)
-      send_userlevel_browse(event, tab: values.first.last)
+      send_userlevel_browse(event, tab: val)
     when 'mode'   # Change mode (all, solo, coop, race)
-      send_userlevel_browse(event, mode: values.first.last)
+      send_userlevel_browse(event, mode: val)
     end
-  when 'aliases'  # Select Menus for the alias list function
+  when 'help'     # Select Menus for the help function
     case keys[1]
-    when 'alias'  # Change type of alias (level, player)
-      send_aliases(event, type: values.first.last)
+    when 'sect'   # Change section (Introduction, Commands, etc)
+      send_help(event, section: val)
     end
-  when 'rankings' # Select Menus for the rankings function
+  when 'rank'     # Select Menus for the rankings function
     case keys[1]
     when 'rtype'  # Change rankings type (0th rankings, top20 rankings, etc)
-      send_rankings(event, rtype: values.first.last)
+      send_rankings(event, rtype: val)
     when 'tab'    # Change highscoreable tab (all, si, s, su, sl, ss, ss2)
-      send_rankings(event, tab: values.first.last)
+      send_rankings(event, tab: val)
     end
   end
 end
