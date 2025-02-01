@@ -1222,11 +1222,11 @@ end
 #   <t:TIMESTAMP:STYLE> or <t:TIMESTAMP>
 # Supported styles:
 #   t  16:20                         Short Time
-#   T	 16:20:30                      Long  Time
-#   d	 20/04/2021                    Short Date
-#   D	 20 April 2021                 Long  Date
+#   T  16:20:30                      Long  Time
+#   d  20/04/2021                    Short Date
+#   D  20 April 2021                 Long  Date
 #   f  20 April 2021 16:20           Short DateTime
-#   F	 Tuesday, 20 April 2021 16:20  Long  DateTime
+#   F  Tuesday, 20 April 2021 16:20  Long  DateTime
 #   R  2 months ago                  Rel.  Time
 # Default: f
 def format_timestamp(t, time: false, date: false, full: false, rel: false, long: false)

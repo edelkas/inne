@@ -861,7 +861,7 @@ end
 # <---                           MESSAGES                                   --->
 # <---------------------------------------------------------------------------->
 
-def format_userlevels(maps, page, color = false)
+def format_userlevels(maps, page, pagesize: PAGE_SIZE, color: false)
   return "" if maps.size == 0
   maps = Userlevel::serial(maps)
 
@@ -870,7 +870,7 @@ def format_userlevels(maps, page, color = false)
   min_padding = {n: 1, id: 2, title:  5, author:  6, date: 16, favs: 2 }
   def_padding = {n: 3, id: 6, title: 25, author: 16, date: 16, favs: 2 }
   if !maps.nil? && !maps.empty?
-    n_padding =      [ [ (PAGE_SIZE * (page - 1) + maps.size).to_s.length,  max_padding[:n]     ].min, min_padding[:n]      ].max
+    n_padding =      [ [ (pagesize * (page - 1) + maps.size).to_s.length,   max_padding[:n]     ].min, min_padding[:n]      ].max
     id_padding =     [ [ maps.map{ |map| map[:id].to_i }.max.to_s.length,   max_padding[:id]    ].min, min_padding[:id]     ].max
     title_padding  = [ [ maps.map{ |map| map[:title].to_s.length }.max,     max_padding[:title] ].min, min_padding[:title]  ].max
     author_padding = [ [ maps.map{ |map| map[:author].to_s.length }.max,    max_padding[:title] ].min, min_padding[:author] ].max
@@ -900,7 +900,7 @@ def format_userlevels(maps, page, color = false)
   else
     maps.each_with_index{ |m, i|
       line = color ? ANSI.red : ''
-      line += "%#{padding[:n]}.#{padding[:n]}s " % (PAGE_SIZE * (page - 1) + i + 1).to_s
+      line += "%#{padding[:n]}.#{padding[:n]}s " % (pagesize * (page - 1) + i + 1).to_s
       line += ANSI.reset if color
       padding.reject{ |k, v| k == :n  }.each{ |k, v|
         line += colors[k] if color
@@ -1012,7 +1012,7 @@ def send_userlevel_browse(
     output += " by #{verbatim(author.name[0...64])} (author id #{verbatim(author.id)})" if !author.nil?
     output += " for #{verbatim(search[0...64])}" if !search.empty?
     output += " sorted by #{invert ? "-" : ""}#{!order_str.empty? ? order : (is_tab ? "default" : "date")}."
-    output += format_userlevels(maps, pag[:page])
+    output += format_userlevels(maps, pag[:page], pagesize: pagesize)
     output += count == 0 ? "\nNo results :shrug:" : "Page: **#{pag[:page]}** / **#{pag[:pages]}**. Results: **#{count}**."
   else
     output = event.message.content
