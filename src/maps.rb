@@ -1075,6 +1075,7 @@ module Map
   end
 
   # Render the timbars with names and scores on top of animated GIFs
+  # TODO: Implement for static episode traces
   def self.render_timebars(image, update, colors, gif: nil, info: nil)
     dim = 4 * gif[:ppc]
     n = info[:names].length
@@ -1126,19 +1127,22 @@ module Map
   end
 
   # Render some informative text, such as the level ID and name like in the game
-  def self.render_legend(image, gif, info, colors)
-    dim = 4 * gif[:ppc]
+  # TODO: Implement for static episode traces
+  def self.render_legend(image, gif, info, colors, i: nil)
+    # Parse highscoreable
+    h = info[:h]
+    return if h.is_episode? && !i
+    h = h.levels[i] if h.is_episode?
 
     # Level ID at the bottom left
+    dim = 4 * gif[:ppc]
     x = dim
     y = (ROWS + 2) * dim - 6
-    text = info[:h].name
-    txt2gif(text, image, gif[:font], x, y, colors[:legend])
+    txt2gif(h.name, image, gif[:font], x, y, colors[:legend])
 
     # Level name at the bottom right
     x = (COLUMNS + 1) * dim
-    text = info[:h].longname
-    txt2gif(text, image, gif[:font], x, y, colors[:legend], align: :right)
+    txt2gif(h.longname, image, gif[:font], x, y, colors[:legend], align: :right)
   end
 
   # Calculates the bounding box of an object's sprite based on the object data
@@ -1420,7 +1424,7 @@ module Map
   end
 
   # Render the full initial background of the GIF
-  def self.render_gif(png, gif, info, anim: false, blank: false)
+  def self.render_gif(png, gif, info, anim: false, blank: false, i: nil)
     gif[:background].destroy if gif[:background]
 
     # Convert PNG screenshot to GIF with specified palette
@@ -1435,8 +1439,9 @@ module Map
       text:   gif[:colors][:ninja],
       legend: gif[:palette][text_color >> 8]
     }
-    render_timebars(background, [true] * info[:n], colors, gif: gif, info: info) unless blank || !anim && !info[:h].is_level?
-    render_legend(background, gif, info, colors)
+    skip_details = blank || !anim && !info[:h].is_level?
+    render_timebars(background, [true] * info[:n], colors, gif: gif, info: info) unless skip_details
+    render_legend(background, gif, info, colors, i: i) unless skip_details
 
     # No trace -> Write first frame to disk
     if anim
@@ -1625,7 +1630,7 @@ module Map
 
         # Routes to trace -> Convert to GIF
         context_gif = init_gif(context_png, context_info, filename, anim, delay) if !context_gif
-        res = render_gif(context_png, context_gif, context_info, anim: anim, blank: blank)
+        res = render_gif(context_png, context_gif, context_info, anim: anim, blank: blank, i: multi ? i : nil)
         convert_atlases(context_png, context_gif) if anim
         if BENCH_IMAGES
           bench(:step, 'GIF init', pad_str: 12, pad_num: 9)
