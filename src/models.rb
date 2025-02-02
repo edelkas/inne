@@ -849,6 +849,10 @@ module Highscoreable
     self.is_a?(Storyish)
   end
 
+  def is_userlevel?
+    self.is_a?(Userlevel)
+  end
+
   # Protected levels have secret replays
   def is_protected?
     return false if self.class == Userlevel

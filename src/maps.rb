@@ -1138,11 +1138,13 @@ module Map
     dim = 4 * gif[:ppc]
     x = dim
     y = (ROWS + 2) * dim - 6
-    txt2gif(h.name, image, gif[:font], x, y, colors[:legend])
+    text = h.is_userlevel? ? h.author.name.to_s : h.name
+    txt2gif(text, image, gif[:font], x, y, colors[:legend])
 
     # Level name at the bottom right
     x = (COLUMNS + 1) * dim
-    txt2gif(h.longname, image, gif[:font], x, y, colors[:legend], align: :right)
+    text = h.is_userlevel? ? h.name.to_s : h.longname
+    txt2gif(text, image, gif[:font], x, y, colors[:legend], align: :right)
   end
 
   # Calculates the bounding box of an object's sprite based on the object data
@@ -1779,8 +1781,10 @@ module Map
 
       # Plot legend at the bottom
       y = (ROWS + 2) * UNITS - 5
-      mpl.text(UNITS, y, h.name, ha: 'left', va: 'baseline', color: text_color, size: 'x-small')
-      mpl.text((COLUMNS + 1) * UNITS, y, h.longname, ha: 'right', va: 'baseline', color: text_color, size: 'x-small')
+      text = h.is_userlevel? ? h.author.name.to_s : h.name
+      mpl.text(UNITS, y, text, ha: 'left', va: 'baseline', color: text_color, size: 'x-small')
+      text = h.is_userlevel? ? h.name.to_s : h.longname
+      mpl.text((COLUMNS + 1) * UNITS, y, text, ha: 'right', va: 'baseline', color: text_color, size: 'x-small')
       bench(:step, 'Trace texts', pad_str: 11) if BENCH_IMAGES
 
       # Plot traces
