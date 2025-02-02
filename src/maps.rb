@@ -147,10 +147,24 @@ module Map
     "void",           "waka",            "witchy",        "wizard",
     "wyvern",         "xenon",           "yeti"
   ]
-  # Challenge: Figure out what the following constant encodes ;)
-  BORDERS = "100FF87E1781E0FC3F03C0FC3F03C0FC3F03C078370388FC7F87C0EC1E01C1FE3F13E"
-  DEFAULT_PALETTE = "vasquez"
+
+  # Palette file and X offsets for the main sections
   PALETTE = ChunkyPNG::Image.from_file(PATH_PALETTES)
+  COLOR_OFFSET_TILES         =   0
+  COLOR_OFFSET_ENTITIES      =   6
+  COLOR_OFFSET_HEADBANDS     =  91
+  COLOR_OFFSET_EXPLOSIONS    = 108
+  COLOR_OFFSET_TIMEBAR       = 112
+  COLOR_OFFSET_TIMEBAR_RACE  = 120
+  COLOR_OFFSET_FX_NINJA      = 137
+  COLOR_OFFSET_FX_DRONE      = 139
+  COLOR_OFFSET_FX_FLOORGUARD = 141
+  COLOR_OFFSET_MENU          = 143
+  COLOR_OFFSET_EDITOR        = 185
+
+  # Challenge: Figure out what the following constant encodes ;)
+  DEFAULT_PALETTE = "vasquez"
+  BORDERS = "100FF87E1781E0FC3F03C0FC3F03C0FC3F03C078370388FC7F87C0EC1E01C1FE3F13E"
   ROWS    = 23
   COLUMNS = 42
   UNITS   = 24               # Game units per tile
@@ -1111,6 +1125,22 @@ module Map
     }
   end
 
+  # Render some informative text, such as the level ID and name like in the game
+  def self.render_legend(image, gif, info, colors)
+    dim = 4 * gif[:ppc]
+
+    # Level ID at the bottom left
+    x = dim
+    y = (ROWS + 2) * dim - 6
+    text = info[:h].name
+    txt2gif(text, image, gif[:font], x, y, colors[:legend])
+
+    # Level name at the bottom right
+    x = (COLUMNS + 1) * dim
+    text = info[:h].longname
+    txt2gif(text, image, gif[:font], x, y, colors[:legend], align: :right)
+  end
+
   # Calculates the bounding box of an object's sprite based on the object data
   # and the image's scale. It is returned in image coords, not game coords.
   def self.find_object_bbox(o, atlas, ppc)
@@ -1398,12 +1428,15 @@ module Map
     background = png2gif(png[:image], gif[:palette], bg_color)
 
     # Add timebars and legend
+    text_color = PALETTE[COLOR_OFFSET_MENU + 28, png[:palette_idx]]
     colors = {
-      fg:   gif[:colors][:ninja],
-      bg:   [gif[:palette][bg_color >> 8]] * info[:n],
-      text: gif[:colors][:ninja]
+      fg:     gif[:colors][:ninja],
+      bg:     [gif[:palette][bg_color >> 8]] * info[:n],
+      text:   gif[:colors][:ninja],
+      legend: gif[:palette][text_color >> 8]
     }
     render_timebars(background, [true] * info[:n], colors, gif: gif, info: info) unless blank || !anim && !info[:h].is_level?
+    render_legend(background, gif, info, colors)
 
     # No trace -> Write first frame to disk
     if anim

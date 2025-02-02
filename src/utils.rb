@@ -2239,7 +2239,7 @@ end
 
 # Add a string of text to a Gifenc::Image using a BMFont
 # TODO: Implement bound checks, wrapping logic, limit text to a certain bbox,
-#   rolling text (usng modulo)... and add to Gifenc
+#   rolling text (usng modulo), vertical text... and add to Gifenc
 def txt2gif(str, image, font, x, y, color, pad_x: 0, pad_y: 0, wrap: false, align: :left, max_length: nil, max_lines: nil, max_width: nil, max_height: nil)
   # Parse GIF image and font texture
   image_width    = image.width
