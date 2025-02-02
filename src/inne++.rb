@@ -157,6 +157,7 @@ def initialize_vars
   $sql_status      = {}
   $sql_conns       = []
   $trace_context   = {
+    h:       nil,
     theme:   "",
     bg:      nil,
     nsim:    [],

@@ -1682,9 +1682,9 @@ module Map
   # Note: This function is forked to a new process to immediately free up all
   # the used memory.
   def self.mpl_trace(
+      h:       nil,             # The highscoreable
       theme:   DEFAULT_PALETTE, # Palette to generate screenshot in
       bg:      nil,             # Background image (screenshot) file object
-      animate: false,           # Animate trace instead of still image
       nsim:    nil,             # NSim objects (simulation results)
       texts:   [],              # Names for the legend
       markers: { jump: true, left: false, right: false} # Mark changes in replays
@@ -1702,6 +1702,7 @@ module Map
       n = [nsim.count, MAX_TRACES].min
       texts = texts.take(n)
       colors = n.times.map{ |i| ChunkyPNG::Color.to_hex(PALETTE[OBJECTS[0][:pal] + i, palette_idx]) }
+      text_color = ChunkyPNG::Color.to_hex(PALETTE[COLOR_OFFSET_MENU + 28, palette_idx])
       Matplotlib.use('agg')
       mpl = Matplotlib::Pyplot
       mpl.ioff
@@ -1756,7 +1757,7 @@ module Map
       }
       bench(:step, 'Trace input', pad_str: 11) if BENCH_IMAGES
 
-      # Plot legend
+      # Plot timebars at the top
       n.times.each{ |i|
         break if texts[i].nil?
         name, score = texts[i].match(/(.*)-(.*)/).captures.map(&:strip)
@@ -1775,6 +1776,11 @@ module Map
         mpl.text(x + ddx, y, name, ha: 'left', va: 'baseline', color: colors[i], size: 'x-small')
         mpl.text(x + dx - ddx, y, score, ha: 'right', va: 'baseline', color: colors[i], size: 'x-small')
       }
+
+      # Plot legend at the bottom
+      y = (ROWS + 2) * UNITS - 5
+      mpl.text(UNITS, y, h.name, ha: 'left', va: 'baseline', color: text_color, size: 'x-small')
+      mpl.text((COLUMNS + 1) * UNITS, y, h.longname, ha: 'right', va: 'baseline', color: text_color, size: 'x-small')
       bench(:step, 'Trace texts', pad_str: 11) if BENCH_IMAGES
 
       # Plot traces
@@ -1949,6 +1955,7 @@ module Map
       screenshot = h.map.screenshot(palette, file: true, blank: blank)
       perror('Failed to render screenshot') if screenshot.nil?
       $trace_context = {
+        h:       h,
         theme:   palette,
         bg:      screenshot,
         nsim:    res.first,
