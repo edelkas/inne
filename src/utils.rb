@@ -1946,9 +1946,9 @@ def progress_bar(cur, tot, size: 20, style: :split, single: true)
   end
 
   if single
-    bar = empty_char * [full, size - 1].min + full_char + empty_char * [(size - full - 1), 0].max
+    empty_char * [full, size - 1].min + full_char + empty_char * [(size - full - 1), 0].max
   else
-    bar = full_char * full + empty_char * (size - full)
+    full_char * full + empty_char * (size - full)
   end
 end
 

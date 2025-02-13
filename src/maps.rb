@@ -1301,13 +1301,11 @@ module Map
     nsim.count.times.reverse_each{ |i|
       next if nsim.finished?(i, frame, trace: false)
 
-      # Save bbox to clear marker next frame
+      # Draw marker and save bbox to clear it on the next frame
       marker_bbox = find_marker_bbox(frame, step, i, nsim, inputs)
-      markers << marker_bbox[:points]
-
-      # Draw marker
       p = Gifenc::Geometry.transform([marker_bbox[:center]], bbox)[0]
-      image.circle(p, rad, nil, colors[i])
+      image.circle(p, rad, nil, colors[i]) rescue next
+      markers << marker_bbox[:points]
 
       # Draw input display (inputs are offset by 1 frame)
       next if !(input = marker_bbox[:input])
@@ -1488,7 +1486,7 @@ module Map
 
     # Write previous frame to disk and create new frame
     gif_bbox = [0, 0, gif[:gif].width, gif[:gif].height]
-    bbox = bbox_intersect([bbox, gif_bbox], round: true)
+    bbox = bbox_intersect([bbox, gif_bbox], round: true) || [0, 0, 1, 1]
     image = Gifenc::Image.new(
       bbox:        bbox,
       color:       gif[:palette][TRANSPARENT_COLOR >> 8],

@@ -51,7 +51,8 @@ def get_emoji(event, label)
       emoji = c.emoji.name if c.custom_id == label
     }
   }
-  event.message.components.first.to_a[2].emoji.name
+  #event.message.components.first.to_a[2].emoji.name
+  emoji
 rescue
   nil
 end

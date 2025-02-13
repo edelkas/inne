@@ -1253,7 +1253,6 @@ def send_userlevel_rankings(event)
   global = format_global(global)
   ties   = format_ties(ties)
   header = "Userlevel #{full} #{global} #{type} #{ties} rankings #{format_author(author)} #{format_max(max)} #{format_time}"
-  length = header.length + top.length
   event << format_header(header)
   count <= 20 ? event << format_block(top) : send_file(event, top, "userlevel-rankings.txt", false)
   event << footer if footer

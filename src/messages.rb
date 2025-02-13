@@ -596,8 +596,7 @@ def send_stats(event)
   histogram = make_histogram(full_counts.map(&:first).each_with_index.to_a.map(&:reverse))
 
   # Format response
-  header1 = "Player #{format_tabs(tabs)} highscore counts for #{player.print_name}:".squish
-  header2 = "Player #{format_tabs(tabs)} highscore histogram for #{player.print_name}:".squish
+  header  = "Player #{format_tabs(tabs)} highscore counts for #{player.print_name}:".squish
   widths  = [5, 4, 4, 4, 4]
   pads_d  = widths.map{ |w| "%#{w}d" }.join(' ')
   pads_s  = widths.map{ |w| "%#{w}s" }.join(' ')
@@ -611,7 +610,7 @@ def send_stats(event)
   sep2    = '─' * 4 + '┼' + '─' * (tot.size - 5)
   stats << sep1 << "\n " << counts << "\n" << sep2 << "\n" << tot << "\n" << max << "\n" << per
 
-  send_message(event, content: header1 + format_block(stats))
+  send_message(event, content: header + format_block(stats))
   sleep(0.25)
   send_message(event, content: format_block(histogram))
 rescue => e
@@ -1696,7 +1695,6 @@ end
 # Send info about current and next lotd/eotw/cotm
 def send_lotd(event, type = Level)
   # Parse params
-  msg = parse_message(event)
   mappack = parse_mappack(event: event)
   type = Level if ![Level, Episode, Story].include?(type)
   ctp = mappack && mappack.code.upcase == 'CTP'
