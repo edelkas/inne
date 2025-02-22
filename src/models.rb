@@ -613,6 +613,7 @@ module Downloadable
     pname = verbatim(player.name.remove('`'))
 
     # Construct replay data
+    frames = replays.map(&:size).sum
     replays = replays.map{ |replay| replay.pack('C*') }
     replays = self.dump_demo(replays)
     replays = Zlib::Deflate.deflate(replays, 9)
@@ -653,6 +654,8 @@ module Downloadable
       err("Failed to submit score by #{pname} to #{fname} (inactive Steam ID).", discord: log)
       return
     end
+    args = [score.to_i / 1000.0, frames, player.name, player.metanet_id, self.class.to_s.downcase, self.name, self.id]
+    dbg("Submitted score %.3f (%df) by %s (%d) to %s %s (%d)" % args)
     JSON.parse(res)
   rescue => e
     lex(e, "Failed to submit score by #{pname} to #{fname}.", discord: log)
@@ -1524,31 +1527,34 @@ module Scorish
   end
 
   # TODO: Rely on NSim class here
-  # TODO: Implement sr
-  # TODO: Test thoroughly
-  # TODO: Use in send_splits and fix_episode
-  def splits
+  def splits(board = 'hs', event: nil)
     return if !highscoreable.is_episode?
-    file = nil
-    valid = [false] * 5
-    splits = []
-    scores = []
+
+    # Speedrun splits do not require nsim
+    if board == 'sr'
+      scores = Demo.decode(demo.demo, true).map(&:size)
+      splits = splits_from_scores(scores, start: 0, factor: 1, offset: 0)
+      return { valid:  [true] * 5, scores: scores, splits: splits }
+    end
+    return if !FEATURE_NTRACE
 
     # Execute ntrace in mutex
-    wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
+    TmpMsg.update(event, '-# Queued...') if event && $mutex[:ntrace].locked?
     $mutex[:ntrace].synchronize do
-      wait_msg.delete if !wait_msg.nil? rescue nil
+      TmpMsg.update(event, '-# Running simulation...') if event
 
       # Export input files
       File.binwrite(NTRACE_INPUTS_E, demo.demo)
-      levels.each_with_index{ |l, i|
+      highscoreable.levels.each_with_index{ |l, i|
         map = !l.is_a?(Map) ? MappackLevel.find(l.id) : l
         File.binwrite(NTRACE_MAP_DATA_E % i, map.dump_level)
       }
       python(PATH_NTRACE)
+      FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
 
       # Parse output files
       file = File.binread(NTRACE_OUTPUT_E) rescue nil
+      FileUtils.rm_f([NTRACE_OUTPUT_E])
       return if !file
       valid = file.scan(/True|False/).map{ |b| b == 'True' }
       splits = file.split(/True|False/)[1..-1].map{ |d|
@@ -1558,9 +1564,6 @@ module Scorish
 
       { valid: valid, splits: splits, scores: scores }
     end
-  ensure
-    # Cleanup
-    FileUtils.rm_f([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*'), NTRACE_OUTPUT_E])
   end
 end
 

@@ -1361,7 +1361,7 @@ end
 # Use SimVYo's tool to trace the replay of a run based on the map data and
 # the demo data: still image.
 def send_trace(event)
-  perror("Sorry, tracing is disabled.") if !FEATURE_NTRACE
+  perror("Sorry, NSim is disabled.") if !FEATURE_NTRACE
   msg = parse_message(event)
   wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
   $mutex[:ntrace].synchronize do
@@ -1380,57 +1380,28 @@ def send_splits(event)
   # Parse message parameters
   msg = parse_message(event)
   ep = parse_highscoreable(event, mappack: true)
-  ep = ep.episode if ep.is_a?(Levelish)
-  perror("Sorry, columns can't be analyzed yet.") if ep.is_a?(Storyish)
-  mappack = ep.is_a?(MappackHighscoreable)
+  perror("Splits can only be computed for episodes.") if !ep.is_episode?
+  mappack = ep.is_mappack?
   board = parse_board(msg, 'hs')
-  perror("Sorry, speedrun mode isn't available for Metanet levels yet.") if !mappack && board == 'sr'
-  perror("Sorry, episode splits are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
+  perror("Speedrun mode isn't available for Metanet levels yet.") if !mappack && board == 'sr'
+  perror("Splits are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
   scores = ep.leaderboard(board, pluck: false)
-  rank = parse_range(msg)[0].clamp(0, scores.size - 1)
+  rank = parse_range(msg)[0]
   ntrace = board == 'hs' # Requires ntrace
+  score = scores[rank]
+  perror("No score in #{ep.name} with rank #{rank.ordinalize}") if !score
+  warnings = []
 
-  # Calculate episode splits
-  if board == 'sr'
-    valid = [true] * 5
-    ep_scores = Demo.decode(scores[rank].demo.demo, true).map(&:size)
-    ep_splits = splits_from_scores(ep_scores, start: 0, factor: 1, offset: 0)
-  elsif FEATURE_NTRACE
-    file = nil
-    valid = [false] * 5
-    ep_splits = []
-    ep_scores = []
-
-    # Execute ntrace in mutex
-    wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
-    $mutex[:ntrace].synchronize do
-      wait_msg.delete if !wait_msg.nil? rescue nil
-
-      # Export input files
-      File.binwrite(NTRACE_INPUTS_E, scores[rank].demo.demo)
-      ep.levels.each_with_index{ |l, i|
-        map = !l.is_a?(Map) ? MappackLevel.find(l.id) : l
-        File.binwrite(NTRACE_MAP_DATA_E % i, map.dump_level)
-      }
-      python(PATH_NTRACE)
-
-      # Read output files
-      file = File.binread(NTRACE_OUTPUT_E) rescue nil
-      if !file.nil?
-        valid = file.scan(/True|False/).map{ |b| b == 'True' }
-        ep_splits = file.split(/True|False/)[1..-1].map{ |d|
-          round_score(d.strip.to_i.to_f / 60.0)
-        }
-        ep_scores = scores_from_splits(ep_splits, offset: 90.0)
-        FileUtils.rm([NTRACE_OUTPUT_E])
-      end
-
-      # Cleanup
-      FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
-    end
+  # Episode splits and scores
+  res = score.splits(board, event: event)
+  success = !!res
+  if success
+    valid, ep_splits, ep_scores = res[:valid], res[:splits], res[:scores]
+  else
+    valid, ep_splits, ep_scores = [false] * 5, [0] * 5, [0] * 5
   end
 
-  # Calculate IL splits
+  # Level splits and scores
   lvl_splits = ep.splits(rank, board: board)
   if lvl_splits.nil?
     event << "Sorry, that rank doesn't seem to exist for at least some of the levels."
@@ -1441,39 +1412,40 @@ def send_splits(event)
   lvl_scores = ep.levels.map{ |l| l.leaderboard(board)[rank][scoref] / factor }
 
   # Calculate differences
-  full = !ntrace || (FEATURE_NTRACE && !file.nil?)
-  event << "ntrace failed." if ntrace && file.nil?
-
+  full = !ntrace || success
   if full
     errors = valid.count(false)
     if errors > 0
       wrong = valid.each_with_index.map{ |v, i| !v ? i.to_s : nil }.compact.to_sentence
-      event << "Warning: Couldn't calculate episode splits (error in #{'level'.pluralize(errors)} #{wrong})."
+      warnings << "-# **Warning**: Couldn't calculate episode splits (error in #{'level'.pluralize(errors)} #{wrong})."
       full = false
+    else
+      diff_splits = lvl_splits.each_with_index.map{ |ls, i|
+        mappack && board == 'sr' ? ep_splits[i] - ls : ls - ep_splits[i]
+      }
+      diff_scores = diff_splits.each_with_index.map{ |d, i|
+        round_score(i == 0 ? d : d - diff_splits[i - 1])
+      }
     end
-
-    cum_diffs = lvl_splits.each_with_index.map{ |ls, i|
-      mappack && board == 'sr' ? ep_splits[i] - ls : ls - ep_splits[i]
-    }
-    diffs = cum_diffs.each_with_index.map{ |d, i|
-      round_score(i == 0 ? d : d - cum_diffs[i - 1])
-    }
+  else
+    reason = !FEATURE_NTRACE ? 'NSim is disabled' : 'NSim failed.'
+    warnings << "-# **Warning**: Episode splits and diffs aren't available. Reason: #{reason}."
   end
 
   # Format response
   rows = []
   rows << ['', '00', '01', '02', '03', '04']
   rows << :sep
-  rows << ['Ep splits',  *ep_splits]  if full
+  rows << ['Ep splits',  *ep_splits]   if full
   rows << ['Lvl splits', *lvl_splits]
-  rows << ['Total diff', *cum_diffs]  if full
-  rows << :sep                        if full
-  rows << ['Ep scores',  *ep_scores]  if full
+  rows << ['Total diff', *diff_splits] if full
+  rows << :sep                         if full
+  rows << ['Ep scores',  *ep_scores]   if full
   rows << ['Lvl scores', *lvl_scores]
-  rows << ['Ind diffs',  *diffs]      if full
+  rows << ['Ind diffs',  *diff_scores] if full
 
   event << "#{rank.ordinalize} #{format_board(board)} splits for episode #{ep.name}:"
-  event << "(Episode splits aren't available because ntrace is disabled)." if ntrace && !FEATURE_NTRACE
+  warnings.each{ |w| event << w }
   event << format_block(make_table(rows))
 rescue => e
   lex(e, "Error calculating splits.", event: event)
