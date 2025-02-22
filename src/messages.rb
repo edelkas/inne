@@ -1397,7 +1397,7 @@ def send_splits(event)
     ep_splits = splits_from_scores(ep_scores, start: 0, factor: 1, offset: 0)
   elsif FEATURE_NTRACE
     file = nil
-    valid = valid = [false] * 5
+    valid = [false] * 5
     ep_splits = []
     ep_scores = []
 
@@ -1477,6 +1477,20 @@ def send_splits(event)
   event << format_block(make_table(rows))
 rescue => e
   lex(e, "Error calculating splits.", event: event)
+end
+
+# Look for unsubmitted level scores in episode runs and resubmit them
+# TODO: What happens if we don't know the users Steam ID?
+def fix_episode(event)
+  msg = parse_message(event)
+  ep = parse_highscoreable(event)
+  perror("You have to specify an episode.") if !ep.is_a?(Episode)
+  player = parse_player(event, enforce: true)
+  score = ep.scores.find_by(player: player)
+  perror("#{player.name} doesn't have a score in #{ep.format_name}") if !score
+
+  # We might want to download the episode and level scores with the player's
+  # ID in order to find non-highscores.
 end
 
 # Command to allow SimVYo to dynamically update his ntrace tool by sending the

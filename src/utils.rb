@@ -1626,6 +1626,7 @@ end
 # It may contain multiple simulations for the same level, since they're all traced
 # together.
 # TODO: Make splits use this as well.
+# TODO: The :ntrace mutex should probably be handled by this class automatically
 class NSim
 
   attr_reader :count, :success, :correct, :valid, :valid_flags, :complexity
@@ -2042,7 +2043,7 @@ def make_histogram(
     color_text:  ANSI.green     # ANSI color for the axes labels
   )
   max_y = values.max_by(&:last).last
-  min_y = values.min_by(&:last).last
+  min_y = 0 #values.min_by(&:last).last
   range_y = max_y - min_y
   if range_y <= steps
     step = 1

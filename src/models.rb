@@ -1522,6 +1522,46 @@ module Scorish
     h['name'] = player.print_name if !h.key?('name')
     Scorish.format(name_padding, score_padding, cools: cools, mode: mode, t_rank: t_rank, mappack: self.is_a?(MappackScore), h: h)
   end
+
+  # TODO: Rely on NSim class here
+  # TODO: Implement sr
+  # TODO: Test thoroughly
+  # TODO: Use in send_splits and fix_episode
+  def splits
+    return if !highscoreable.is_episode?
+    file = nil
+    valid = [false] * 5
+    splits = []
+    scores = []
+
+    # Execute ntrace in mutex
+    wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
+    $mutex[:ntrace].synchronize do
+      wait_msg.delete if !wait_msg.nil? rescue nil
+
+      # Export input files
+      File.binwrite(NTRACE_INPUTS_E, demo.demo)
+      levels.each_with_index{ |l, i|
+        map = !l.is_a?(Map) ? MappackLevel.find(l.id) : l
+        File.binwrite(NTRACE_MAP_DATA_E % i, map.dump_level)
+      }
+      python(PATH_NTRACE)
+
+      # Parse output files
+      file = File.binread(NTRACE_OUTPUT_E) rescue nil
+      return if !file
+      valid = file.scan(/True|False/).map{ |b| b == 'True' }
+      splits = file.split(/True|False/)[1..-1].map{ |d|
+        round_score(d.strip.to_i.to_f / 60.0)
+      }
+      scores = scores_from_splits(splits, offset: 90.0)
+
+      { valid: valid, splits: splits, scores: scores }
+    end
+  ensure
+    # Cleanup
+    FileUtils.rm_f([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*'), NTRACE_OUTPUT_E])
+  end
 end
 
 class Score < ActiveRecord::Base
