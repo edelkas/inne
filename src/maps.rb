@@ -174,6 +174,26 @@ module Map
   WIDTH   = DIM * (COLUMNS + 2)
   HEIGHT  = DIM * (ROWS + 2)
 
+  # N v1.4
+  NV14_ROWS            = 23
+  NV14_COLUMNS         = 31
+  NV14_UNITS           = 24
+  NV14_TILEMAP         = "01PONQ5432=<;:9876A@?>EDCBIHGFMLKJ".each_char.with_index.to_h
+  NV14_USERLEVELS_FILE = "userlevels.txt"
+  NV14_ID_GOLD         =  0
+  NV14_ID_BOUNCEBLOCK  =  1
+  NV14_ID_LAUNCHPAD    =  2
+  NV14_ID_GAUSS        =  3
+  NV14_ID_FLOORGUARD   =  4
+  NV14_ID_NINJA        =  5
+  NV14_ID_DRONE        =  6
+  NV14_ID_ONEWAY       =  7
+  NV14_ID_THWUMP       =  8
+  NV14_ID_DOOR         =  9
+  NV14_ID_ROCKET       = 10
+  NV14_ID_EXIT         = 11
+  NV14_ID_MINE         = 12
+
   # TODO: Perhaps store object data without transposing, hence being able to skip
   #       the decoding when dumping
   # TODO: Or better yet, store the entire map data in a single field, Zlibbed, for
@@ -299,6 +319,102 @@ module Map
     maps
   rescue => e
     lex(e, "Error parsing Metanet map file #{fn} for #{pack}")
+    nil
+  end
+
+  # Parse a raw N v1.4 map
+  def self.parse_nv14_map(tile_data, object_data, errors, warnings)
+    header = "Map #{i} (#{title}) -"
+    xoffset = 6
+    stride = NV14_UNITS / 4
+
+    # Parse tile data
+    tile_count = tile_data.size
+    if tile_count != NV14_ROWS * NV14_COLUMNS
+      errors << "#{header} Incorrect number of tiles (#{tile_count})"
+      return
+    end
+    err_tile_unknown = 0
+    tiles = Array.new(ROWS){ Array.new(COLUMNS, 1) }
+    tile_data.each_char.with_index{ |c, i|
+      tiles[i % ROWS][i / ROWS + xoffset] = NV14_TILEMAP[c] || (err_tile_unknown += 1; 0)
+    }
+    warnings << "#{header} Skipped #{err_tile_unknown} unrecognized tiles" if err_tile_unknown > 0
+
+    # Parse object data
+    err_obj_malformed = 0
+    err_obj_unknown   = 0
+    err_obj_params    = 0
+    err_obj_zsnap     = 0
+    err_obj_outbounds = 0
+    # TODO: We probably want to use each instead of map, for doors
+    # TODO: Handle out of bounds objects
+    objects = object_data.split('!').map{ |obj|
+      # Integrity checks
+      next (err_malformed += 1; nil) if obj.strip !~ /^(\d+)\s*\^\s*([\d\.\-,]+)$/
+      id, params = $1.to_i, $2.split(',').map(&:to_f)
+      next (err_unknown += 1; nil) if !id.between?(0, 12)
+
+      # Coordinates (warn and round Z-snapped)
+      next (err_params += 1; nil) if params.count < 2
+      x, y = params[0] + xoffset * NV14_UNITS, params[1]
+      err_zsnap += 1 if (x % stride).abs > 1E-6 || (y % stride).abs > 1E-6
+      x, y = (x / stride).round, (y / stride).round
+
+      # Specific params
+      case id
+      when NV14_ID_LAUNCHPAD
+      when NV14_ID_DRONE
+      when NV14_ID_ONEWAY
+      when NV14_ID_THWUMP
+      when NV14_ID_DOOR
+      when NV14_ID_EXIT
+      else
+        o = 0
+        m = 0
+      end
+
+      [id, x, y, o, m]
+    }.compact
+
+    # Save warnings
+    warnings << "#{header} Skipped #{err_tile_unknown} unrecognized tiles"        if err_tile_unknown > 0
+    warnings << "#{header} Skipped #{err_obj_malformed} malformed objects"        if err_obj_malformed > 0
+    warnings << "#{header} Skipped #{err_obj_unknown} unrecognized objects"       if err_obj_unknown > 0
+    warnings << "#{header} Skipped #{err_obj_params} objects with bad parameters" if err_obj_params > 0
+    warnings << "#{header} Rounded #{err_obj_zsnap} Z-snapped objects"            if err_obj_zsnap > 0
+    warnings << "#{header} Skipped #{err_obj_outbounds} out of bounds objects"    if err_obj_outbounds > 0
+
+    # TODO: Add warnings and errors here
+  end
+
+  # Parse an N v1.4 userlevels file
+  def self.parse_nv14_file(file)
+    return if !File.file?(file)
+    file = File.read(file)
+    start = f.rindex('&userdata=')
+    warnings = ""
+    errors = ""
+    maps = file[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
+    count = maps.count
+    maps = maps.each_with_index.map{ |map_data, i|
+      dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
+
+      # Parse metadata
+      title, author, comments, data = *map_data
+      tile_data, object_data, mods = data.split('|').map(&:strip)
+      if !tile_data
+        tile_data = '0' * (NV14_ROWS * NV14_COLUMNS)
+        warnings << "Map #{i} (#{title}) - Empty tile data\n"
+      end
+      warnings << "Map #{i} (#{title}) - Empty object data\n" if !object_data
+      warnings << "Map #{i} (#{title}) - Ignored NReality data\n" if !!mods
+
+      # Parse map data
+      parse_nv14_file(tile_data, object_data, errors, warnings)
+    }
+  rescue => e
+    lex(e, "Error parsing N v1.4 userlevels file")
     nil
   end
 
