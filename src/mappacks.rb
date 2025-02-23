@@ -1445,7 +1445,7 @@ class MappackScoresTweak < ActiveRecord::Base
   # Returns the score if success, nil otherwise
   def self.tweak(score, player, level, header)
     # Not in episode, not tweaking
-    return score if header[:type] != 1
+    return score if header.type != 1
 
     # Create or fetch tweak
     index = level.inner_id % 5
@@ -1467,12 +1467,12 @@ class MappackScoresTweak < ActiveRecord::Base
     end
 
     # Tweak if necessary
-    if header[:id] == level.inner_id # Tweak
+    if header.id == level.inner_id # Tweak
       score += tw.tweak
-      tw.tweak += header[:framecount] - 1
+      tw.tweak += header.framecount - 1
       tw.save
     else # Don't tweak, reset tweak for later
-      tw.update(tweak: header[:framecount] - 1)
+      tw.update(tweak: header.framecount - 1)
     end
 
     # Prepare tweak for next level

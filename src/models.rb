@@ -363,8 +363,9 @@ module Downloadable
       count_new = h.update_completions(log: false, discord: false, global: global)
 
       while !count_new
+        acquire_connection # In case we spend too long here, we may've disconnected
         if retries == 0 || attempt < retries
-          concurrent_edit(event, msgs, "Stopped updating at #{current} (waiting for outte++, attempt #{attempt + 1} / #{retries}).")
+          concurrent_edit(event, msgs, "Stopped updating at #{current} (waiting for outte++).") if attempt == 0
           attempt += 1
           sleep(5)
           count_new = h.update_completions(log: false, discord: false, global: global)
@@ -2056,6 +2057,54 @@ class Player < ActiveRecord::Base
     return nil
   end
 
+  # Perform a request to N++'s server using this player's Steam ID
+  def request(type, log: true, discord: false)
+    case type
+    when :scores
+      res = Net::HTTP.get_response(scores_uri(steam_id))
+      if !res || !(200..299).include?(res.code.to_i)
+        err("HTTP request failed (#{!!res ? res.code : '?'})") if log
+        perror("Failed to fetch scores from server, try again later") if discord
+        return
+      end
+      if res.body == INVALID_RESP
+        err("Steam ID #{steam_id} is inactive") if log
+        perror("Your Steam account isn't active, please open N++") if discord
+        return
+      end
+    end
+    res
+  end
+
+  def get_score(h, log: true, discord: false)
+    return if !steam_id
+
+    # Perform HTTP request. We also update the scores.
+    res = request(:scores, log: log, discord: discord)
+    return if !res
+    json = JSON.parse(res.body)
+    scores = correct_ties(clean_scores(json['scores']))
+    save_scores(scores)
+
+    # First, try to find personal score in global leaderboard.
+    score, rank = scores.each_with_index.find{ |s, i| s['user_id'] == metanet_id }
+    return { score: score['score'] / 1000.0, rank: rank, replay_id: score['replay_id'] } if score
+
+    # Then, try to find it in the personal field
+    score = json['userInfo']
+    return { score: score['my_score'] / 1000.0, rank: score['my_rank'], replay_id: score['my_replay_id'] } if score
+
+    # No personal score found
+    err("Player #{metanet_id} has no server score in #{h.name}") if log
+    perror("#{format_name} has no #{h.name} score in the server") if discord
+    nil
+  end
+
+  # TODO: Implement
+  def get_replay(id, log: true, discord: false)
+
+  end
+
   def users(array: true)
     list = User.where(player_id: id)
     array ? list.to_a : list
@@ -2817,7 +2866,7 @@ end
 #     4B - Game mode      (0, 1, 2, 4)                                         |
 #     4B - Unknown        (0)                                                  |
 #     1B - Ninja mask     (1, 3)                                               |
-#     4B - Static data    (0xFFFFFFFF)                                         |
+#     4B - Static data    (0xFFFFFFFF per ninja)                               |
 #   Rest - Demo                                                                |
 #------------------------------------------------------------------------------#
 # EPISODE DEMO DATA FORMAT:                                                    |
@@ -2839,6 +2888,9 @@ class Demo < ActiveRecord::Base
   include Demoish
   belongs_to :archive, foreign_key: :id
 
+  HEADER_SIZE = 26 # CLLLLLLC
+  Header = Struct.new(:type, :size, :version, :framecount, :id, :mode, :unknown, :mask)
+
   def self.encode(replay)
     replay = [replay] if replay.class == String
     Zlib::Deflate.deflate(replay.join('&'), 9)
@@ -2856,39 +2908,30 @@ class Demo < ActiveRecord::Base
     demos
   end
 
-  # Parse 30 byte header of a level demo
-  def self.parse_header(replay)
-    replay = Zlib::Inflate.inflate(replay)[0...30]
-    ret = {}
-    ret[:type]       = replay[0].unpack('C')[0]
-    ret[:size]       = replay[1..4].unpack('l<')[0]
-    ret[:version]    = replay[5..8].unpack('l<')[0]
-    ret[:framecount] = replay[9..12].unpack('l<')[0]
-    ret[:id]         = replay[13..16].unpack('l<')[0]
-    ret[:mode]       = replay[17..20].unpack('l<')[0]
-    ret[:unknown]    = replay[21..24].unpack('l<')[0]
-    ret[:mask]       = replay[25].unpack('C')[0]
-    ret[:static]     = replay[26..29].unpack('l<')[0]
-    ret
+  # Parse 26 byte header of a level demo
+  def self.parse_header(replay, inflate: true)
+    replay = Zlib::Inflate.inflate(replay) if inflate
+    Header.new(*replay.unpack('Cl<6C'))
   end
 
-  # Parse a demo, return array with inputs for each level
-  def self.parse(replay, htype)
-    data   = Zlib::Inflate.inflate(replay)
-    header = { 'Level' => 0, 'Episode' =>  4, 'Story' =>   8 }[htype]
-    offset = { 'Level' => 0, 'Episode' => 24, 'Story' => 108 }[htype]
-    count  = { 'Level' => 1, 'Episode' =>  5, 'Story' =>  25 }[htype]
+  # Parse a demo, return array with inputs for each level as binary strings
+  def self.parse(data, htype)
+    # Parse header
+    data = Zlib::Inflate.inflate(data)
+    length_offset = { 'Level' => 1, 'Episode' =>  4, 'Story' =>   8 }[htype]
+    offset        = { 'Level' => 0, 'Episode' => 24, 'Story' => 108 }[htype]
+    header = Demo.parse_header(data[offset, HEADER_SIZE], inflate: false)
+    ninja_count = header.mask.to_s(2).count('1')
+    inputs_start = HEADER_SIZE + 4 * ninja_count
 
-    mode  = _unpack(data[offset + 17..offset + 20])
-    start = mode == 1 ? 34 : 30
-
-    lengths = (0...count).map{ |d| _unpack(data[header + 4 * d...header + 4 * (d + 1)]) }
-    lengths = [_unpack(data[1..4])] if htype == 'Level'
-    lengths.map{ |l|
-      raw_replay = data[offset...offset + l]
-      offset += l
-      raw_replay[start..-1]
+    # Extract raw inputs
+    replays = []
+    lengths = data.unpack('x%dl<%d' % [length_offset, TYPES[htype][:size]])
+    lengths.each{ |length|
+      replays << data[offset + inputs_start, length - inputs_start]
+      offset += length
     }
+    replays
   end
 
   def qt

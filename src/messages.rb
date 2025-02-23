@@ -1456,13 +1456,21 @@ end
 def fix_episode(event)
   msg = parse_message(event)
   ep = parse_highscoreable(event)
-  perror("You have to specify an episode.") if !ep.is_a?(Episode)
+  perror("You have to specify an episode.") if !ep.is_episode?
   player = parse_player(event, enforce: true)
-  score = ep.scores.find_by(player: player)
-  perror("#{player.name} doesn't have a score in #{ep.format_name}") if !score
+  perror("I don't know #{player.name}'s Steam ID.") if !player.steam_id
 
-  # We might want to download the episode and level scores with the player's
-  # ID in order to find non-highscores.
+  # Get player's episode and level scores from the server
+  ep_score = player.get_score(ep, discord: true)
+  return if !score
+  ep_replay = player.get_replay(ep_score[:replay_id], discord: true)
+  return if !replay
+  lvl_scores = ep.levels.map{ |lvl| player.get_score(lvl) }
+  lvl_replay = lvl_scores.map{ |h| player.get_replay(h[:replay_id]) }
+
+  # TODO: Resubmit runs where episode score > level score (or level score is nil)
+  # TODO: Log what happened to Discord (old vs new ranks and scores, if they changed)
+
 end
 
 # Command to allow SimVYo to dynamically update his ntrace tool by sending the
