@@ -2498,6 +2498,47 @@ end
 # <------                             MATHS                              ------>
 # <---------------------------------------------------------------------------->
 
+# Floating point precision. It's the minimum threshold to consider two floats different.
+FLT_PREC = 1E-7
+
+# Convert an arbitrary vector given by its two components to a direction scalar
+# ranging from -4 to 4. If it's an integer, it means the direction is a perfect
+# multiple of PI/4.
+def vec2dir(x, y)
+  4 * Math::atan2(y, x) / Math::PI
+end
+
+# Convert a direction (float, -4 to 4) to an orientation (integer, 0 to 7), which
+# is how N++ represents orientations in map data.
+def dir2or(dir)
+  dir.round % 8
+end
+
+# Convert a vector to an orientation
+def vec2or(x, y)
+  dir2or(vec2dir(x, y))
+end
+
+# Compute the Euclidean norm of a vector
+def vecnorm(x, y)
+  Math::sqrt(x * x + y * y)
+end
+
+# Check if two numbers are equal, up to the floating precision
+def num_eql?(x, y)
+  (x - y).abs < FLT_PREC
+end
+
+# Check if a vector is unitary
+def is_unit(x, y)
+  num_eql?(x * x + y * y, 1)
+end
+
+# Check if a floating point number is an integer
+def is_int(x)
+  num_eql?(x, x.round)
+end
+
 # Weighted average
 def wavg(arr, w)
   return -1 if arr.size != w.size

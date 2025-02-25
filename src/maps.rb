@@ -322,79 +322,111 @@ module Map
     nil
   end
 
-  # Parse a raw N v1.4 map
-  def self.parse_nv14_map(tile_data, object_data, errors, warnings)
-    header = "Map #{i} (#{title}) -"
-    xoffset = 6
-    stride = NV14_UNITS / 4
+  # Parse a raw N v1.4 map. It's a robust implementation that never fails no matter
+  # how corrupt the map data is, instead making the necessary changes and warnings.
+  # Any of these warnings should be carefully considered by the user, because it
+  # indicates anything in the range from unsupported things to corrupt map data.
+  # Possible changes made by this function:
+  # - Tile data:
+  #   * If it's shorter than necessary, it'll be padded.
+  #   * If it's longer than necessary, it'll be truncated.
+  #   * Unrecognized tiles are swapped by an empty tile.
+  # - Object data:
+  #   * Malformed objects (with an incorrect format) are skipped.
+  #   * Unrecognized objects (with an incorrect ID) are skipped.
+  #   * Objects with malformed parameters are skipped.
+  #   * Z-snapped objects are rounded.
+  #   * Out of bounds objects are kept (but warned), unless they exceed the available
+  #     range (0-255), in which case they are skipped too.
+  # TODO: Add optional verbose warnings for each individual object, for extra info.
+  def self.parse_nv14_map(tile_data, object_data, warnings)
+    # Prepare some params
+    header  = "Map #{i} (#{title}) -" # Header for error and warning messages
+    xoffset = 6                       # Amount of empty columns to add on the left (center map)
+    stride  = NV14_UNITS / 4          # Units per coordinate (1/4th grid)
+    oob_th  = 2                       # Coordinates past the walls for an obj to be considered outbounds
+    x_range = (4 - oob_th + 1 .. 4 * (COLUMNS + 1) + oob_th - 1) # Horizontal range of inbounds objects
+    y_range = (4 - oob_th + 1 .. 4 * (ROWS    + 1) + oob_th - 1) # Vertical range of inbounds objects
+    prec    = 1E-6                    # Precision threshold for floating point operations
 
     # Parse tile data
     tile_count = tile_data.size
-    if tile_count != NV14_ROWS * NV14_COLUMNS
-      errors << "#{header} Incorrect number of tiles (#{tile_count})"
-      return
+    canvas_size = NV14_ROWS * NV14_COLUMNS
+    if tile_count < canvas_size
+      warnings << "#{header} Padded tile data with #{canvas_size - tile_count} extra tiles.\n"
+      tile_data = tile_data.ljust(canvas_size, '0')
+    elsif tile_count > canvas_size
+      warnings << "#{header} Truncated tile data by #{tile_count - canvas_size} tiles.\n"
+      tile_data = tile_data[0, canvas_size]
     end
     err_tile_unknown = 0
     tiles = Array.new(ROWS){ Array.new(COLUMNS, 1) }
     tile_data.each_char.with_index{ |c, i|
       tiles[i % ROWS][i / ROWS + xoffset] = NV14_TILEMAP[c] || (err_tile_unknown += 1; 0)
     }
-    warnings << "#{header} Skipped #{err_tile_unknown} unrecognized tiles" if err_tile_unknown > 0
+    warnings << "#{header} Skipped #{err_tile_unknown} unrecognized tiles\n" if err_tile_unknown > 0
 
     # Parse object data
     err_obj_malformed = 0
     err_obj_unknown   = 0
     err_obj_params    = 0
     err_obj_zsnap     = 0
-    err_obj_outbounds = 0
-    # TODO: We probably want to use each instead of map, for doors
-    # TODO: Handle out of bounds objects
-    objects = object_data.split('!').map{ |obj|
-      # Integrity checks
-      next (err_malformed += 1; nil) if obj.strip !~ /^(\d+)\s*\^\s*([\d\.\-,]+)$/
+    err_obj_oob       = 0
+    err_obj_oob_skip  = 0
+    err_obj_lp        = 0
+    objects = []
+    object_data.split('!').each{ |obj|
+      # General integrity checks
+      next err_malformed += 1 if obj.strip !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
       id, params = $1.to_i, $2.split(',').map(&:to_f)
-      next (err_unknown += 1; nil) if !id.between?(0, 12)
+      next err_unknown += 1 if !id.between?(0, 12)
 
-      # Coordinates (warn and round Z-snapped)
-      next (err_params += 1; nil) if params.count < 2
+      # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
+      next err_params += 1 if params.count < 2
       x, y = params[0] + xoffset * NV14_UNITS, params[1]
-      err_zsnap += 1 if (x % stride).abs > 1E-6 || (y % stride).abs > 1E-6
+      err_zsnap += 1 if (x % stride).abs > prec || (y % stride).abs > prec
       x, y = (x / stride).round, (y / stride).round
+      if !x_range.cover?(x) || !y_range.cover?(y)
+        err_obj_oob += 1
+        next err_obj_oob_skip += 1 if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
+      end
 
-      # Specific params
+      # Specific params for each object type
+      o, m = 0, 0
       case id
       when NV14_ID_LAUNCHPAD
+        # Normalize edited launchpads
+        next err_params += 1 if params.count < 4
+        dir = vec2dir(*params[2, 2])
+        err_obj_lp += 1 if !is_unit(*params[2, 2]) || !is_int(dir)
+        o = dir2or(dir)
       when NV14_ID_DRONE
       when NV14_ID_ONEWAY
       when NV14_ID_THWUMP
       when NV14_ID_DOOR
       when NV14_ID_EXIT
-      else
-        o = 0
-        m = 0
       end
 
-      [id, x, y, o, m]
+      objects << [id, x, y, o, m]
     }.compact
 
     # Save warnings
-    warnings << "#{header} Skipped #{err_tile_unknown} unrecognized tiles"        if err_tile_unknown > 0
-    warnings << "#{header} Skipped #{err_obj_malformed} malformed objects"        if err_obj_malformed > 0
-    warnings << "#{header} Skipped #{err_obj_unknown} unrecognized objects"       if err_obj_unknown > 0
-    warnings << "#{header} Skipped #{err_obj_params} objects with bad parameters" if err_obj_params > 0
-    warnings << "#{header} Rounded #{err_obj_zsnap} Z-snapped objects"            if err_obj_zsnap > 0
-    warnings << "#{header} Skipped #{err_obj_outbounds} out of bounds objects"    if err_obj_outbounds > 0
-
-    # TODO: Add warnings and errors here
+    
+    warnings << "#{header} Skipped #{err_obj_malformed} malformed objects\n"        if err_obj_malformed > 0
+    warnings << "#{header} Skipped #{err_obj_unknown} unrecognized objects\n"       if err_obj_unknown > 0
+    warnings << "#{header} Skipped #{err_obj_params} objects with bad parameters\n" if err_obj_params > 0
+    warnings << "#{header} Rounded #{err_obj_zsnap} Z-snapped objects\n"            if err_obj_zsnap > 0
+    warnings << "#{header} Found #{err_obj_oob} out of bounds objects (skipped #{err_obj_oob_skip})\n" if err_obj_oob > 0
+    warnings << "#{header} Normalized #{err_obj_lp} edited launchpads\n"            if err_obj_lp > 0
   end
 
   # Parse an N v1.4 userlevels file
+  # TODO: Support a more flexible format, such as the one returned by Ned line by line
   def self.parse_nv14_file(file)
     return if !File.file?(file)
     file = File.read(file)
     start = f.rindex('&userdata=')
     warnings = ""
-    errors = ""
     maps = file[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
@@ -402,17 +434,20 @@ module Map
 
       # Parse metadata
       title, author, comments, data = *map_data
-      tile_data, object_data, mods = data.split('|').map(&:strip)
+      tile_data, object_data, mod_data = data.split('|').map(&:strip)
       if !tile_data
         tile_data = '0' * (NV14_ROWS * NV14_COLUMNS)
         warnings << "Map #{i} (#{title}) - Empty tile data\n"
       end
       warnings << "Map #{i} (#{title}) - Empty object data\n" if !object_data
-      warnings << "Map #{i} (#{title}) - Ignored NReality data\n" if !!mods
+      warnings << "Map #{i} (#{title}) - Ignored NReality data\n" if !!mod_data
 
       # Parse map data
-      parse_nv14_file(tile_data, object_data, errors, warnings)
+      tiles, objects = parse_nv14_file(tile_data.to_s, object_data.to_s, warnings)
+      { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
+    Log.clear
+    maps
   rescue => e
     lex(e, "Error parsing N v1.4 userlevels file")
     nil
