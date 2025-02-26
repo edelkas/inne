@@ -348,9 +348,9 @@ module Map
   #   * Out of bounds objects are kept (but warned), unless they exceed the available
   #     range (0-255), in which case they are skipped too.
   # TODO: Add optional verbose warnings for each individual object, for extra info.
+  # TODO: Can we handle NaN's?
   def self.parse_nv14_map(tile_data, object_data, warnings)
     # Prepare some params
-    header  = "Map #{i} (#{title}) -" # Header for error and warning messages
     xoffset = 6                       # Amount of empty columns to add on the left (center map)
     stride  = NV14_UNITS / 4          # Units per coordinate (1/4th grid)
     oob_th  = 2                       # Coordinates past the walls for an obj to be considered outbounds
@@ -363,17 +363,16 @@ module Map
     tile_count = tile_data.size
     canvas_size = NV14_ROWS * NV14_COLUMNS
     if tile_count < canvas_size
-      warnings << "#{header} Padded tile data with #{canvas_size - tile_count} extra tiles.\n"
+      warnings << "Padded tile data with #{canvas_size - tile_count} extra tiles."
       tile_data = tile_data.ljust(canvas_size, '0')
     elsif tile_count > canvas_size
-      warnings << "#{header} Truncated tile data by #{tile_count - canvas_size} tiles.\n"
+      warnings << "Truncated tile data by #{tile_count - canvas_size} tiles."
       tile_data = tile_data[0, canvas_size]
     end
     tiles = Array.new(ROWS){ Array.new(COLUMNS, 1) }
     tile_data.each_char.with_index{ |c, i|
       tiles[i % ROWS][i / ROWS + xoffset] = NV14_TILEMAP[c] || (counts[:unknown_tile] += 1; 0)
     }
-    warnings << "#{header} Skipped #{counts[:unknown_tile]} unrecognized tiles\n" if counts[:unknown_tile] > 0
 
     # Parse object data
     objects = []
@@ -421,16 +420,12 @@ module Map
           next counts[:drone_invalid] += 1
         end
 
-        # Orientation
-        if !direction.between?(0, 3)
-          direction = 0
-          counts[:drone_dir] += 1
-        end
-        o = direction
+        # Orientation (RDLU, mod 4 is taken in v1.4)
+        o = direction % 4 * 2
 
         # Pathing
         if !path.between?(0, 3)
-          path = 0
+          path = 3
           counts[:drone_path] += 1
         end
         m = path
@@ -443,13 +438,23 @@ module Map
       objects << [id, x, y, o, m]
     }.compact
 
-    # Save object warnings
-    warnings << "#{header} Skipped #{counts[:malformed_obj]} malformed objects\n"        if counts[:malformed_obj] > 0
-    warnings << "#{header} Skipped #{counts[:unknown_obj]} unrecognized objects\n"       if counts[:unknown_obj] > 0
-    warnings << "#{header} Skipped #{counts[:bad_params]} objects with bad parameters\n" if counts[:bad_params] > 0
-    warnings << "#{header} Rounded #{counts[:zsnap]} Z-snapped objects\n"                if counts[:zsnap] > 0
-    warnings << "#{header} Found #{counts[:oob]} out of bounds objects (skipped #{counts[:oob_skip]})\n" if counts[:oob] > 0
-    warnings << "#{header} Normalized #{counts[:launchpad]} edited launchpads\n"         if counts[:launchpad] > 0
+    # Format and save warnings
+    counts.each{ |key, count|
+      warnings << case key
+      when :unknown_tile  then "Skipped #{count} unrecognized tiles"
+      when :malformed_obj then "Skipped #{count} malformed objects"
+      when :unknown_obj   then "Skipped #{count} unrecognized objects"
+      when :bad_params    then "Skipped #{count} objects with bad parameters"
+      when :zsnap         then "Rounded #{count} Z-snapped objects"
+      when :oob           then "Found #{count} out of bounds objects (skipped #{counts[:oob_skip]})"
+      when :oob_skip      then nil
+      when :launchpad     then "Normalized #{count} edited launchpads"
+      when :drone_invalid then "Skipped #{count} invalid drones"
+      when :drone_path    then "Normalized #{count} invalid drone pathings to Dumb CCW"
+      else "Unknown error happened"
+      end
+    }
+    warnings.compact!
 
     # Sort objects by ID, preserving ties and excluding locked/trap switches
     objects = objects.stable_sort_by{ |o| o[0] == 7 ? 6 : o[0] == 9 ? 8 : o[0] }
@@ -458,30 +463,36 @@ module Map
   # Parse an N v1.4 userlevels file
   # TODO: Support a more flexible format, such as the one returned by Ned line by line
   def self.parse_nv14_file(file)
+    # Read file and skip till map data begins
     return if !File.file?(file)
     file = File.read(file)
     start = f.rindex('&userdata=')
-    warnings = ""
+    log = []
+
+    # Parse each map
     maps = file[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
+      warnings = []
 
       # Parse metadata
       title, author, comments, data = *map_data
       tile_data, object_data, mod_data = data.split('|').map(&:strip)
       if !tile_data
         tile_data = '0' * (NV14_ROWS * NV14_COLUMNS)
-        warnings << "Map #{i} (#{title}) - Empty tile data\n"
+        warnings << "Empty tile data"
       end
-      warnings << "Map #{i} (#{title}) - Empty object data\n" if !object_data
-      warnings << "Map #{i} (#{title}) - Ignored NReality data\n" if !!mod_data
+      warnings << "Empty object data" if !object_data
+      warnings << "Ignored NReality data" if !!mod_data
 
       # Parse map data
       tiles, objects = parse_nv14_file(tile_data.to_s, object_data.to_s, warnings)
+      log << warnings.map{ |w| "Map #{i} (#{title}) - #{w}" }.join("\n")
       { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
     Log.clear
+    log = log.join("\n")
     maps
   rescue => e
     lex(e, "Error parsing N v1.4 userlevels file")

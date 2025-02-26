@@ -1465,8 +1465,8 @@ def fix_episode(event)
   return if !score
   ep_replay = player.get_replay(ep_score[:replay_id], discord: true)
   return if !replay
+  # TODO: Do these in parallel, together with running NSim (using .join on the threads)
   lvl_scores = ep.levels.map{ |lvl| player.get_score(lvl) }
-  lvl_replay = lvl_scores.map{ |h| player.get_replay(h[:replay_id]) }
 
   # TODO: Resubmit runs where episode score > level score (or level score is nil)
   # TODO: Log what happened to Discord (old vs new ranks and scores, if they changed)
