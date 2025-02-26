@@ -2519,9 +2519,15 @@ def vec2or(x, y)
   dir2or(vec2dir(x, y))
 end
 
+# Convert an N++ orientation (0 to 7) to the correspoding unit direction vector
+def or2vec(or)
+  r = 2 ** 0.5
+  [[1, 0], [r, r], [0, 1], [-r, r], [-1, 0], [-r, -r], [0, -1], [r, -r]][or]
+end
+
 # Compute the Euclidean norm of a vector
 def vecnorm(x, y)
-  Math::sqrt(x * x + y * y)
+  (x * x + y * y) ** 0.5
 end
 
 # Check if two numbers are equal, up to the floating precision

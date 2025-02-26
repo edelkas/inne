@@ -344,9 +344,15 @@ module Map
   #   * Malformed objects (with an incorrect format) are skipped.
   #   * Unrecognized objects (with an incorrect ID) are skipped.
   #   * Objects with malformed parameters are skipped.
-  #   * Z-snapped objects are rounded.
+  #   * Z-snapped objects are rounded to the nearest coordinate.
   #   * Out of bounds objects are kept (but warned), unless they exceed the available
   #     range (0-255), in which case they are skipped too.
+  # - Object parameters:
+  #   * Objects with fewer parameters than required are skipped.
+  #   * Invalid launchpad powers (e.g. teleporters) are normalized and rounded.
+  #   * Invalid drones are skipped. Invalid pathings are defaulted to Dumb CCW (3).
+  #   * Invalid one-way directions are defaulted to Up (3).
+  #   * Invalid thwump directions are defaulted to Down (1).
   # TODO: Add optional verbose warnings for each individual object, for extra info.
   # TODO: Can we handle NaN's?
   def self.parse_nv14_map(tile_data, object_data, warnings)
@@ -356,7 +362,6 @@ module Map
     oob_th  = 2                       # Coordinates past the walls for an obj to be considered outbounds
     x_range = (4 - oob_th + 1 .. 4 * (COLUMNS + 1) + oob_th - 1) # Horizontal range of inbounds objects
     y_range = (4 - oob_th + 1 .. 4 * (ROWS    + 1) + oob_th - 1) # Vertical range of inbounds objects
-    prec    = 1E-6                    # Precision threshold for floating point operations
     counts  = Hash.new(0)             # Counters for each type of warning for this map
 
     # Parse tile data
@@ -385,9 +390,9 @@ module Map
 
       # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
       next counts[:bad_params] += 1 if params.count < 2
-      x, y = params[0] + xoffset * NV14_UNITS, params[1]
-      counts[:zsnap] += 1 if (x % stride).abs > prec || (y % stride).abs > prec
-      x, y = (x / stride).round, (y / stride).round
+      x, y = (params[0] + xoffset * NV14_UNITS) / stride, params[1] / stride
+      counts[:zsnap] += 1 if !is_int(x) || !is_int(y)
+      x, y = x.round, y.round
       if !x_range.cover?(x) || !y_range.cover?(y)
         counts[:oob] += 1
         next counts[:oob_skip] += 1 if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
@@ -397,15 +402,19 @@ module Map
       o, m = 0, 0
       case old_id
       when NV14_ID_LAUNCHPAD
-        # Normalize edited launchpads
         next counts[:bad_params] += 1 if params.count < 4
+
+        # In v1.4, launchpad power was present in the map data, which could be
+        # used to make e.g. teleporters in arbitrary directions.
+        # Here we round them to the closest direction.
         vel = params[2, 2]
         dir = vec2dir(*vel)
         counts[:launchpad] += 1 if !is_unit(*vel) || !is_int(dir)
         o = dir2or(dir)
       when NV14_ID_DRONE
-        # Parse params, we handle invalid ones gracefully
         next counts[:bad_params] += 1 if params.count < 6
+
+        # Parse params, we handle invalid ones gracefully
         path, seeking, type, direction = params[2, 4].map(&:round)
 
         # Type
@@ -423,14 +432,37 @@ module Map
         # Orientation (RDLU, mod 4 is taken in v1.4)
         o = direction % 4 * 2
 
-        # Pathing
+        # Pathing.
+        # v1.4 has 2 pathings unsupported in N++ (alternate and random).
+        # Also, for invalid pathings:
+        #   v1.4 defaults to an immobile drone.
+        #   N++ defaults to Dumb CCW (3).
         if !path.between?(0, 3)
           path = 3
           counts[:drone_path] += 1
         end
         m = path
       when NV14_ID_ONEWAY
+        next counts[:bad_params] += 1 if params.count < 3
+
+        # Invalid one-way directions in v1.4 default to Up (3)
+        direction = params[2]
+        direction = 3 if !is_int(direction) || !direction.between(0, 3)
+        o = 2 * direction.round
+
+        # In v1.4, the position indicates the center of the tile that contains
+        # the one-way, whereas in N++ it indicates the center of the actual
+        # one-way, so we adjust half a tile in the direction the one-way faces.
+        vec = or2vec(o)
+        x += 2 * vec[0]
+        y += 2 * vec[1]
       when NV14_ID_THWUMP
+        next counts[:bad_params] += 1 if params.count < 3
+
+        # Invalid thwump directions in v1.4 default to Down (1)
+        direction = params[2]
+        direction = 3 if !is_int(direction) || !direction.between(0, 3)
+        o = 2 * direction.round
       when NV14_ID_DOOR
       when NV14_ID_EXIT
       end
