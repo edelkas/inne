@@ -114,6 +114,8 @@ module Map
     ID_DRONE_ZAP,  ID_DRONE_CHASER, ID_DEATHBALL, ID_MICRODRONE
   ]
 
+  # Palette stuff
+  DEFAULT_PALETTE = "vasquez"
   THEMES = [
     "acid",           "airline",         "argon",         "autumn",
     "BASIC",          "berry",           "birthday cake", "bloodmoon",
@@ -162,8 +164,7 @@ module Map
   COLOR_OFFSET_MENU          = 143
   COLOR_OFFSET_EDITOR        = 185
 
-  # Challenge: Figure out what the following constant encodes ;)
-  DEFAULT_PALETTE = "vasquez"
+  # Map properties. Challenge: Figure out what the following constant encodes ;)
   BORDERS = "100FF87E1781E0FC3F03C0FC3F03C0FC3F03C078370388FC7F87C0EC1E01C1FE3F13E"
   ROWS    = 23
   COLUMNS = 42
@@ -178,7 +179,6 @@ module Map
   NV14_ROWS            = 23
   NV14_COLUMNS         = 31
   NV14_UNITS           = 24
-  NV14_TILEMAP         = "01PONQ5432=<;:9876A@?>EDCBIHGFMLKJ".each_char.with_index.to_h
   NV14_USERLEVELS_FILE = "userlevels.txt"
   NV14_ID_GOLD         =  0
   NV14_ID_BOUNCEBLOCK  =  1
@@ -193,6 +193,15 @@ module Map
   NV14_ID_ROCKET       = 10
   NV14_ID_EXIT         = 11
   NV14_ID_MINE         = 12
+  NV14_TILEMAP = "01PONQ5432=<;:9876A@?>EDCBIHGFMLKJ".each_char.with_index.to_h
+  NV14_IDMAP = [
+    ID_GOLD,   ID_BOUNCEBLOCK, ID_LAUNCHPAD, ID_GAUSS,  ID_FLOORGUARD,
+    ID_NINJA,  ID_DRONE_ZAP,   ID_ONEWAY,    ID_THWUMP, ID_DOOR_REGULAR,
+    ID_ROCKET, ID_EXIT,        ID_MINE
+  ]
+  NV14_DRONE_TYPE_ZAP      = 0
+  NV14_DRONE_TYPE_LASER    = 1
+  NV14_DRONE_TYPE_CHAINGUN = 2
 
   # TODO: Perhaps store object data without transposing, hence being able to skip
   #       the decoding when dumping
@@ -348,6 +357,7 @@ module Map
     x_range = (4 - oob_th + 1 .. 4 * (COLUMNS + 1) + oob_th - 1) # Horizontal range of inbounds objects
     y_range = (4 - oob_th + 1 .. 4 * (ROWS    + 1) + oob_th - 1) # Vertical range of inbounds objects
     prec    = 1E-6                    # Precision threshold for floating point operations
+    counts  = Hash.new(0)             # Counters for each type of warning for this map
 
     # Parse tile data
     tile_count = tile_data.size
@@ -359,48 +369,71 @@ module Map
       warnings << "#{header} Truncated tile data by #{tile_count - canvas_size} tiles.\n"
       tile_data = tile_data[0, canvas_size]
     end
-    err_tile_unknown = 0
     tiles = Array.new(ROWS){ Array.new(COLUMNS, 1) }
     tile_data.each_char.with_index{ |c, i|
-      tiles[i % ROWS][i / ROWS + xoffset] = NV14_TILEMAP[c] || (err_tile_unknown += 1; 0)
+      tiles[i % ROWS][i / ROWS + xoffset] = NV14_TILEMAP[c] || (counts[:unknown_tile] += 1; 0)
     }
-    warnings << "#{header} Skipped #{err_tile_unknown} unrecognized tiles\n" if err_tile_unknown > 0
+    warnings << "#{header} Skipped #{counts[:unknown_tile]} unrecognized tiles\n" if counts[:unknown_tile] > 0
 
     # Parse object data
-    err_obj_malformed = 0
-    err_obj_unknown   = 0
-    err_obj_params    = 0
-    err_obj_zsnap     = 0
-    err_obj_oob       = 0
-    err_obj_oob_skip  = 0
-    err_obj_lp        = 0
     objects = []
     object_data.split('!').each{ |obj|
-      # General integrity checks
-      next err_malformed += 1 if obj.strip !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
-      id, params = $1.to_i, $2.split(',').map(&:to_f)
-      next err_unknown += 1 if !id.between?(0, 12)
+      # General integrity checks and ID
+      next counts[:malformed_obj] += 1 if obj.strip !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
+      old_id, params = $1.to_i, $2.split(',').map(&:to_f)
+      next counts[:unknown_obj] += 1 if !id.between?(0, 12)
+      id = NV14_IDMAP[old_id]
 
       # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
-      next err_params += 1 if params.count < 2
+      next counts[:bad_params] += 1 if params.count < 2
       x, y = params[0] + xoffset * NV14_UNITS, params[1]
-      err_zsnap += 1 if (x % stride).abs > prec || (y % stride).abs > prec
+      counts[:zsnap] += 1 if (x % stride).abs > prec || (y % stride).abs > prec
       x, y = (x / stride).round, (y / stride).round
       if !x_range.cover?(x) || !y_range.cover?(y)
-        err_obj_oob += 1
-        next err_obj_oob_skip += 1 if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
+        counts[:oob] += 1
+        next counts[:oob_skip] += 1 if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
       end
 
       # Specific params for each object type
       o, m = 0, 0
-      case id
+      case old_id
       when NV14_ID_LAUNCHPAD
         # Normalize edited launchpads
-        next err_params += 1 if params.count < 4
-        dir = vec2dir(*params[2, 2])
-        err_obj_lp += 1 if !is_unit(*params[2, 2]) || !is_int(dir)
+        next counts[:bad_params] += 1 if params.count < 4
+        vel = params[2, 2]
+        dir = vec2dir(*vel)
+        counts[:launchpad] += 1 if !is_unit(*vel) || !is_int(dir)
         o = dir2or(dir)
       when NV14_ID_DRONE
+        # Parse params, we handle invalid ones gracefully
+        next counts[:bad_params] += 1 if params.count < 6
+        path, seeking, type, direction = params[2, 4].map(&:round)
+
+        # Type
+        case type
+        when NV14_DRONE_TYPE_ZAP
+          id = seeking == 0 ? ID_DRONE_ZAP : ID_DRONE_CHASER
+        when NV14_DRONE_TYPE_LASER
+          id = ID_DRONE_LASER
+        when NV14_DRONE_TYPE_CHAINGUN
+          id = ID_DRONE_CHAINGUN
+        else
+          next counts[:drone_invalid] += 1
+        end
+
+        # Orientation
+        if !direction.between?(0, 3)
+          direction = 0
+          counts[:drone_dir] += 1
+        end
+        o = direction
+
+        # Pathing
+        if !path.between?(0, 3)
+          path = 0
+          counts[:drone_path] += 1
+        end
+        m = path
       when NV14_ID_ONEWAY
       when NV14_ID_THWUMP
       when NV14_ID_DOOR
@@ -410,14 +443,16 @@ module Map
       objects << [id, x, y, o, m]
     }.compact
 
-    # Save warnings
-    
-    warnings << "#{header} Skipped #{err_obj_malformed} malformed objects\n"        if err_obj_malformed > 0
-    warnings << "#{header} Skipped #{err_obj_unknown} unrecognized objects\n"       if err_obj_unknown > 0
-    warnings << "#{header} Skipped #{err_obj_params} objects with bad parameters\n" if err_obj_params > 0
-    warnings << "#{header} Rounded #{err_obj_zsnap} Z-snapped objects\n"            if err_obj_zsnap > 0
-    warnings << "#{header} Found #{err_obj_oob} out of bounds objects (skipped #{err_obj_oob_skip})\n" if err_obj_oob > 0
-    warnings << "#{header} Normalized #{err_obj_lp} edited launchpads\n"            if err_obj_lp > 0
+    # Save object warnings
+    warnings << "#{header} Skipped #{counts[:malformed_obj]} malformed objects\n"        if counts[:malformed_obj] > 0
+    warnings << "#{header} Skipped #{counts[:unknown_obj]} unrecognized objects\n"       if counts[:unknown_obj] > 0
+    warnings << "#{header} Skipped #{counts[:bad_params]} objects with bad parameters\n" if counts[:bad_params] > 0
+    warnings << "#{header} Rounded #{counts[:zsnap]} Z-snapped objects\n"                if counts[:zsnap] > 0
+    warnings << "#{header} Found #{counts[:oob]} out of bounds objects (skipped #{counts[:oob_skip]})\n" if counts[:oob] > 0
+    warnings << "#{header} Normalized #{counts[:launchpad]} edited launchpads\n"         if counts[:launchpad] > 0
+
+    # Sort objects by ID, preserving ties and excluding locked/trap switches
+    objects = objects.stable_sort_by{ |o| o[0] == 7 ? 6 : o[0] == 9 ? 8 : o[0] }
   end
 
   # Parse an N v1.4 userlevels file
