@@ -351,8 +351,8 @@ module Map
   #   * Objects with fewer parameters than required are skipped.
   #   * Invalid launchpad powers (e.g. teleporters) are normalized and rounded.
   #   * Invalid drones are skipped. Invalid pathings are defaulted to Dumb CCW (3).
-  #   * Invalid one-way directions are defaulted to Up (3).
-  #   * Invalid thwump directions are defaulted to Down (1).
+  #   * Invalid one-way directions (glitch) are defaulted to Down (1).
+  #   * Invalid thwump directions (glitch) are defaulted to Right (0).
   # TODO: Add optional verbose warnings for each individual object, for extra info.
   # TODO: Can we handle NaN's?
   def self.parse_nv14_map(tile_data, object_data, warnings)
@@ -445,9 +445,13 @@ module Map
       when NV14_ID_ONEWAY
         next counts[:bad_params] += 1 if params.count < 3
 
-        # Invalid one-way directions in v1.4 default to Up (3)
+        # Invalid one-way directions in v1.4 result in a glitch one-way,
+        # facing up but with collision facing down (1)
         direction = params[2]
-        direction = 3 if !is_int(direction) || !direction.between(0, 3)
+        if !is_int(direction) || !direction.between(0, 3)
+          counts[:oneway] += 1
+          direction = 1
+        end
         o = 2 * direction.round
 
         # In v1.4, the position indicates the center of the tile that contains
@@ -459,9 +463,13 @@ module Map
       when NV14_ID_THWUMP
         next counts[:bad_params] += 1 if params.count < 3
 
-        # Invalid thwump directions in v1.4 default to Down (1)
+        # Invalid thwump directions in v1.4 result in a glitch static thwump,
+        # facing down but with a deadly right side (0)
         direction = params[2]
-        direction = 3 if !is_int(direction) || !direction.between(0, 3)
+        if !is_int(direction) || !direction.between(0, 3)
+          counts[:thwump] += 1
+          direction = 0
+        end
         o = 2 * direction.round
       when NV14_ID_DOOR
       when NV14_ID_EXIT
@@ -483,6 +491,8 @@ module Map
       when :launchpad     then "Normalized #{count} edited launchpads"
       when :drone_invalid then "Skipped #{count} invalid drones"
       when :drone_path    then "Normalized #{count} invalid drone pathings to Dumb CCW"
+      when :oneway        then "Normalized #{count} glitch one-way platforms"
+      when :thwump        then "Normalized #{count} glitch thwumps"
       else "Unknown error happened"
       end
     }
