@@ -1549,6 +1549,20 @@ def scores_from_splits(splits, offset: 90.0)
   }
 end
 
+# Convert N v1.4 coordinates to N++ coordinates. Since map sizes differ, we
+# may want to offset the map data by an integer number of tiles (normally,
+# ox = 6, oy = 0, to center it). If the object is out of bounds but still within
+# valid range, we set a boolean. If it doesn't even fit in a byte,
+# we set another boolean.
+def nv14_coord(x, y, ox, oy)
+  x, y = 4 * x / NV14_UNITS + 4 * ox, 4 * y / NV14_UNITS + 4 * oy
+  zsnap = true if !is_int(x) || !is_int(y)
+  x, y = x.round, y.round
+  oob = true if !x.between?(4, 4 * (COLUMNS + 1)) || !y.between?(4, 4 * (ROWS + 1))
+  skip = true if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
+  [x, y, zsnap, oob, skip]
+end
+
 # Computes the name of a highscoreable based on the ID and type, e.g.:
 # Type = 0, ID = 2637 ---> SU-C-09-02
 # The complexity of this function lies in:
@@ -2520,9 +2534,9 @@ def vec2or(x, y)
 end
 
 # Convert an N++ orientation (0 to 7) to the correspoding unit direction vector
-def or2vec(or)
+def or2vec(o)
   r = 2 ** 0.5
-  [[1, 0], [r, r], [0, 1], [-r, r], [-1, 0], [-r, -r], [0, -1], [r, -r]][or]
+  [[1, 0], [r, r], [0, 1], [-r, r], [-1, 0], [-r, -r], [0, -1], [r, -r]][o]
 end
 
 # Compute the left normal vector

@@ -335,6 +335,7 @@ module Map
   # how corrupt the map data is, instead making the necessary changes and warnings.
   # Any of these warnings should be carefully considered by the user, because it
   # indicates anything in the range from unsupported things to corrupt map data.
+  #
   # Possible changes made by this function:
   # - Tile data:
   #   * If it's shorter than necessary, it'll be padded.
@@ -354,15 +355,15 @@ module Map
   #   * Invalid one-way directions (glitch) are defaulted to Down (1).
   #   * Invalid thwump directions (glitch) are defaulted to Right (0).
   #   * Invalid door orientations (glitch) are defaulted to Vertical (0).
-  # TODO: Add optional verbose warnings for each individual object, for extra info.
-  # TODO: Can we handle NaN's?
+  #   * Non-grid-aligned doors don't show (moved to 0,0), the switches do show.
+  #
+  # TODO:
+  #   * Add optional verbose warnings for each individual object, for extra info.
+  #   * Handle corrupt parameters properly (e.g. using to_f to begin with eliminates NaN's).
+  #   * When you have more parameters than necessary the data is typically corrupt as well.
   def self.parse_nv14_map(tile_data, object_data, warnings)
     # Prepare some params
     xoffset = 6                       # Amount of empty columns to add on the left (center map)
-    stride  = NV14_UNITS / 4          # Units per coordinate (1/4th grid)
-    oob_th  = 2                       # Coordinates past the walls for an obj to be considered outbounds
-    x_range = (4 - oob_th + 1 .. 4 * (COLUMNS + 1) + oob_th - 1) # Horizontal range of inbounds objects
-    y_range = (4 - oob_th + 1 .. 4 * (ROWS    + 1) + oob_th - 1) # Vertical range of inbounds objects
     counts  = Hash.new(0)             # Counters for each type of warning for this map
 
     # Parse tile data
@@ -391,17 +392,14 @@ module Map
 
       # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
       next counts[:bad_params] += 1 if params.count < 2
-      x, y = (params[0] + xoffset * NV14_UNITS) / stride, params[1] / stride
-      counts[:zsnap] += 1 if !is_int(x) || !is_int(y)
-      x, y = x.round, y.round
-      if !x_range.cover?(x) || !y_range.cover?(y)
-        counts[:oob] += 1
-        next counts[:oob_skip] += 1 if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
-      end
+      x, y, zsnap, oob, skip = nv14_coord(*params[0, 2], xoffset, 0)
+      next counts[:oob_skip] += 1 if skip
+      counts[:zsnap] += 1 if zsnap
+      counts[:oob]   += 1 if oob
 
       # Specific params for each object type
       o, m = 0, 0
-      key = nil
+      switch = nil
       case old_id
       when NV14_ID_LAUNCHPAD
         next counts[:bad_params] += 1 if params.count < 4
@@ -484,10 +482,10 @@ module Map
         # Door type and switch. Locked boolean takes precedence over trap boolean
         if locked
           id = ID_DOOR_LOCKED
-          key = [ID_DOOR_LOCKED_SWITCH, x, y, 0, 0]
+          switch = [ID_DOOR_LOCKED_SWITCH, x, y, 0, 0]
         elsif trap
           id = ID_DOOR_TRAP
-          key = [ID_DOOR_TRAP_SWITCH, x, y, 0, 0]
+          switch = [ID_DOOR_TRAP_SWITCH, x, y, 0, 0]
         else
           id = ID_DOOR_REGULAR
         end
@@ -495,7 +493,7 @@ module Map
         # Invalid door directions in v1.4 result in a glitch door, with vertical
         # graphics but with very buggy collision
         if dir != 0 && dir != 1
-          counts[:door] += 1
+          counts[:door_dir] += 1
           dir = 0
         end
         o = dir.round * 2
@@ -508,14 +506,27 @@ module Map
         #   cx/cy: Index of the grid cell, whose bottom-right corner is the anchor point of the door
         #   tx/ty: Translation that needs to be applied to the index
         #          (0, 0) for R and D, (-1, 0) for L, and (0, -1) for U
-        vx, vy = lnorm(or2vec(o))
-        ax, ay = xoffset + cx + tx + 1, cy + ty + 1
-        x, y = (4 * (ax + vx)).round, (4 * (ay + vy)).round
+        # Non-grid-aligned doors disappear (but their switch remains)
+        if !is_int(cx) || !is_int(cy) || !is_int(tx) || !is_int(ty)
+          cx, cy, tx, ty = 0, 0, 0, 0
+          counts[:door_pos] += 1
+        end
+        vx, vy = lnorm(or2vec(o)) # Direction vector of door, from anchor towards center.
+        ax, ay = (xoffset + cx + tx + 1).round, (cy + ty + 1).round
+        x, y = (4 * (ax + 0.5 * vx)).round, (4 * (ay + 0.5 * vy)).round
       when NV14_ID_EXIT
+        next counts[:bad_params] += 1 if params.count < 4
+
+        # Switch position (again, round Z-snap and skip if fully OOB)
+        sx, sy, zsnap, oob, skip = nv14_coord(*params[2, 2], xoffset, 0)
+        next counts[:oob_skip] += 1 if skip
+        counts[:zsnap] += 1 if zsnap
+        counts[:oob]   += 1 if oob
+        switch = [ID_EXIT_SWITCH, sx, sy, 0, 0]
       end
 
       objects << [id, x, y, o, m]
-      objects << key if key
+      objects << switch if switch
     }.compact
 
     # Format and save warnings
@@ -533,7 +544,8 @@ module Map
       when :drone_path    then "Normalized #{count} invalid drone pathings to Dumb CCW"
       when :oneway        then "Defaulted #{count} glitch one-way platforms to Down"
       when :thwump        then "Defaulted #{count} glitch thwumps to Right"
-      when :door          then "Defaulted #{count} glitch doors to Vertical"
+      when :door_dir      then "Defaulted #{count} glitch doors to Vertical"
+      when :door_pos      then "Found #{count} non-grid-aligned doors which won't show"
       else "Unknown error happened"
       end
     }
@@ -541,6 +553,8 @@ module Map
 
     # Sort objects by ID, preserving ties and excluding locked/trap switches
     objects = objects.stable_sort_by{ |o| o[0] == 7 ? 6 : o[0] == 9 ? 8 : o[0] }
+
+    [tiles, objects]
   end
 
   # Parse an N v1.4 userlevels file
