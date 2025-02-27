@@ -1402,6 +1402,35 @@ rescue
   nil
 end
 
+# Download the files attached to a Discord message
+# TODO: Use this for update_ntrace
+def fetch_attachments(event, filter: nil, limit_size: 5 * 1024 ** 2, limit_files: 10, log: true)
+  # Fetch attachment list, filter by name pattern, and truncate
+  files = event.message.attachments
+  files.select!{ |f| f.filename =~ filter } if filter
+  if files.size > limit_files
+    event << "-# **Warning**: Only reading the first #{limit_files} files (too many files)" if log
+    files.pop(files.size - limit_files)
+  end
+
+  files.map{ |f|
+    # Skip files over the size limit
+    if f.size > limit_size
+      event << "-# **Warning**: File #{f.filename} skipped (too large)" if log
+      next
+    end
+
+    # Skip corrupt files
+    body = Net::HTTP.get(URI(f.url)) rescue nil
+    if !body || body.size != f.size
+      event << "-# **Warning**: File #{f.filename} skipped (corrupt data received)" if log
+      next
+    end
+
+    [f.filename, body]
+  }.compact.to_h
+end
+
 # <---------------------------------------------------------------------------->
 # <------                         N++ SPECIFIC                           ------>
 # <---------------------------------------------------------------------------->
