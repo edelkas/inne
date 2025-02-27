@@ -2525,6 +2525,16 @@ def or2vec(or)
   [[1, 0], [r, r], [0, 1], [-r, r], [-1, 0], [-r, -r], [0, -1], [r, -r]][or]
 end
 
+# Compute the left normal vector
+def lnorm(x, y)
+  [-y, x]
+end
+
+# Compute the right normal vector
+def rnorm(x, y)
+  [y, -x]
+end
+
 # Compute the Euclidean norm of a vector
 def vecnorm(x, y)
   (x * x + y * y) ** 0.5

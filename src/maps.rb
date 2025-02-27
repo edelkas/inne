@@ -353,6 +353,7 @@ module Map
   #   * Invalid drones are skipped. Invalid pathings are defaulted to Dumb CCW (3).
   #   * Invalid one-way directions (glitch) are defaulted to Down (1).
   #   * Invalid thwump directions (glitch) are defaulted to Right (0).
+  #   * Invalid door orientations (glitch) are defaulted to Vertical (0).
   # TODO: Add optional verbose warnings for each individual object, for extra info.
   # TODO: Can we handle NaN's?
   def self.parse_nv14_map(tile_data, object_data, warnings)
@@ -400,6 +401,7 @@ module Map
 
       # Specific params for each object type
       o, m = 0, 0
+      key = nil
       case old_id
       when NV14_ID_LAUNCHPAD
         next counts[:bad_params] += 1 if params.count < 4
@@ -472,10 +474,48 @@ module Map
         end
         o = 2 * direction.round
       when NV14_ID_DOOR
+        next counts[:bad_params] += 1 if params.count < 9
+
+        # Parse params
+        dir, trap, cx, cy, locked, tx, ty = params[2, 7]
+        trap   = trap   != 0
+        locked = locked != 0
+
+        # Door type and switch. Locked boolean takes precedence over trap boolean
+        if locked
+          id = ID_DOOR_LOCKED
+          key = [ID_DOOR_LOCKED_SWITCH, x, y, 0, 0]
+        elsif trap
+          id = ID_DOOR_TRAP
+          key = [ID_DOOR_TRAP_SWITCH, x, y, 0, 0]
+        else
+          id = ID_DOOR_REGULAR
+        end
+
+        # Invalid door directions in v1.4 result in a glitch door, with vertical
+        # graphics but with very buggy collision
+        if dir != 0 && dir != 1
+          counts[:door] += 1
+          dir = 0
+        end
+        o = dir.round * 2
+
+        # Compute door position. It is anchored at:
+        #   v1.4 - The bottom-right corner of the cell that contains the door.
+        #   N++  - The center of the door, like any other object.
+        # In v1.4 we have the following elements:
+        #   x/y:   Coordinates of the switch
+        #   cx/cy: Index of the grid cell, whose bottom-right corner is the anchor point of the door
+        #   tx/ty: Translation that needs to be applied to the index
+        #          (0, 0) for R and D, (-1, 0) for L, and (0, -1) for U
+        vx, vy = lnorm(or2vec(o))
+        ax, ay = xoffset + cx + tx + 1, cy + ty + 1
+        x, y = (4 * (ax + vx)).round, (4 * (ay + vy)).round
       when NV14_ID_EXIT
       end
 
       objects << [id, x, y, o, m]
+      objects << key if key
     }.compact
 
     # Format and save warnings
@@ -491,8 +531,9 @@ module Map
       when :launchpad     then "Normalized #{count} edited launchpads"
       when :drone_invalid then "Skipped #{count} invalid drones"
       when :drone_path    then "Normalized #{count} invalid drone pathings to Dumb CCW"
-      when :oneway        then "Normalized #{count} glitch one-way platforms"
-      when :thwump        then "Normalized #{count} glitch thwumps"
+      when :oneway        then "Defaulted #{count} glitch one-way platforms to Down"
+      when :thwump        then "Defaulted #{count} glitch thwumps to Right"
+      when :door          then "Defaulted #{count} glitch doors to Vertical"
       else "Unknown error happened"
       end
     }
