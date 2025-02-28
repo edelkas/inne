@@ -175,6 +175,9 @@ module Map
   WIDTH   = DIM * (COLUMNS + 2)
   HEIGHT  = DIM * (ROWS + 2)
 
+  # Map file properties
+  HEADER_SIZE = 0xB8
+
   # N v1.4
   NV14_ROWS            = 23
   NV14_COLUMNS         = 31
@@ -527,7 +530,7 @@ module Map
 
       objects << [id, x, y, o, m]
       objects << switch if switch
-    }.compact
+    }
 
     # Format and save warnings
     counts.each{ |key, count|
@@ -559,41 +562,89 @@ module Map
 
   # Parse an N v1.4 userlevels file
   # TODO: Support a more flexible format, such as the one returned by Ned line by line
-  def self.parse_nv14_file(file)
+  def self.parse_nv14_file(file, warnings)
     # Read file and skip till map data begins
     return if !File.file?(file)
     file = File.read(file)
     start = f.rindex('&userdata=')
-    log = []
 
     # Parse each map
     maps = file[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
-      warnings = []
+      lvl_warnings = []
 
       # Parse metadata
       title, author, comments, data = *map_data
       tile_data, object_data, mod_data = data.split('|').map(&:strip)
       if !tile_data
         tile_data = '0' * (NV14_ROWS * NV14_COLUMNS)
-        warnings << "Empty tile data"
+        lvl_warnings << "Empty tile data"
       end
-      warnings << "Empty object data" if !object_data
-      warnings << "Ignored NReality data" if !!mod_data
+      lvl_warnings << "Empty object data" if !object_data
+      lvl_warnings << "Ignored NReality data" if !!mod_data
 
       # Parse map data
-      tiles, objects = parse_nv14_file(tile_data.to_s, object_data.to_s, warnings)
-      log << warnings.map{ |w| "Map #{i} (#{title}) - #{w}" }.join("\n")
+      tiles, objects = parse_nv14_file(tile_data.to_s, object_data.to_s, lvl_warnings)
+      lvl_warnings.each{ |w| warnings << "Map #{i} (#{title}) - #{w}" }
       { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
     Log.clear
-    log = log.join("\n")
     maps
   rescue => e
     lex(e, "Error parsing N v1.4 userlevels file")
     nil
+  end
+
+  # Convert an N v1.4 userlevels file to N++ map files, optionally zipping them
+  # if there's more than one
+  def self.convert_nv14_file(file, warnings, zip: true)
+    levels = parse_nv14_file(file, warnings)
+    return if !levels
+
+    # TODO: Finish
+  end
+
+  # Dump map data into N++ binary userlevel format (most kwargs can normally be ignored)
+  # TODO: Finish, we need to figure out how to pass the original object data and counts
+  #       but still allow for object data completion for hash computation
+  def self.dump_level(
+      tiles,               # Matrix of tiles
+      objects,             # List of objects
+      query:     false,    # Use format for userlevel queries (minor differences)
+      hash:      false,    # Recursively fetches object data from next level, to compute hash later
+      version:   nil,      # Version of the map (for mappacks we may hold multiple edits)
+      magic:     0,        # Magic number at the start of the file (not in query mode)
+      title:     '',       # Title of the map, ASCII only padded to 128 chars
+      author:    '',       # Author name, ASCII only padded to 16 chars, normally unset
+      author_id: -1,       # Author ID, normally unset to -1 except in query mode
+      level_id:  -1,       # Level ID, normally unset to -1
+      mode:       0,       # Playing mode (0 solo, 1 coop, 2 race)
+      qt:        QT_UNSET, # Query type, normally unset to 37
+      favs:      0,        # Favourite count, normally unset to 0
+      time:      ''        # Time of publishing (10 bytes), normally unset to 0, I don't even know its format
+    )
+    size = HEADER_SIZE + ROWS * COLUMNS + 40 * 2 + 5 * objects.size
+    header = ""
+
+    # Miniheader only present in userlevel files, but not in queries
+    header << [magic, size].pack('l<2') unless query
+
+    # Regular header, padded at the end (it's 8 bytes aligned)
+    header << [level_id, mode, qt, author_id, favs].pack('l<5')
+    header << [time, to_ascii(title), to_ascii(author), 0].pack('a10a128a16s')
+
+    # Map data (UNFISIHED!)
+    tile_data = tiles.map{ |a| a.pack('C*') }.join
+    object_counts = Map.object_counts(objects)
+    object_counts[7] = 0 unless hash
+    object_counts[9] = 0 unless hash
+    object_data = objects.map{ |o| o.pack('C5') }.join
+    return nil if hash && !complete_object_data(object_data, object_counts[6] + object_counts[8])
+    object_counts = object_counts.pack('S<*')
+
+    (header + tile_data + object_counts + object_data).force_encoding("ascii-8bit")
   end
 
   def self.object_counts(objects)

@@ -355,6 +355,7 @@ QT_SEARCH_BY_AUTHOR_2                  = 33 # (Not used)
 QT_SEARCH_BY_AUTHOR_3                  = 34 # (Not used)
 QT_SEARCH_BY_AUTHOR_4                  = 35 # (Not used)
 QT_SEARCH_BY_TITLE                     = 36
+QT_UNSET                               = 37
 
 # Mapping for each QT we care about
 #     'name'     - Internal name used to identify each tab.

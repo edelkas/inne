@@ -1857,6 +1857,18 @@ rescue => e
   lex(e, "Error fetching aliases.", event: event)
 end
 
+# Convert N v1.4 maps to N++ maps
+def send_convert(event)
+  msg = parse_message(event)
+  nv14 = !!msg[/n?v1\.?4/i]
+  nv2 = !!msg[/n?v2/i]
+  perror("nv2 map conversion is not supported yet") if nv2
+
+  # TODO: Finish
+rescue => e
+  lex(e, "Error converting maps.", event: event)
+end
+
 # Function to autogenerate screenshots of the userlevels for the dMMc contest
 # in random palettes, zip them, and upload them.
 def send_dmmc(event)
@@ -2074,6 +2086,7 @@ def respond(event)
   return hello(event)                if msg =~ /\bhello\b/i || msg =~ /\bhi\b/i
   return thanks(event)               if msg =~ /\bthank you\b/i || msg =~ /\bthanks\b/i
   return send_tip(event)             if msg =~/\btip\b/i
+  return send_convert(event)         if msg =~ /\bconvert\b/
 
   # If we get to this point, no command was executed
   action_dec('commands')
