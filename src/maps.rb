@@ -78,6 +78,8 @@ module Map
     ID_SHOVE_THWUMP       => { pref:  2, att: 2, old: 25, pal: 88, states: 3 }
   }
 
+  OBJECT_COUNT = 40
+
   # Objects that do not admit sprite rotations at all
   ID_LIST_FIXED = [
     ID_NINJA,       ID_MINE,               ID_GOLD,             ID_EXIT,
@@ -606,15 +608,27 @@ module Map
     # TODO: Finish
   end
 
-  # Dump map data into N++ binary userlevel format (most kwargs can normally be ignored)
-  # TODO: Finish, we need to figure out how to pass the original object data and counts
-  #       but still allow for object data completion for hash computation
+  #            \\\ Dump map data into N++ binary userlevel format ///
+  # The object counts are automatically computed if not specified. But having the
+  #   parameter is useful for object count hacks, as well as for hashing (which requires
+  #   modifying the object data in a certain way, see complete_object_data). Also,
+  #   note that the counts for locked / trap door switches are set to 0, which
+  #   is also what the game does, except when hashing (counts should be provided
+  #   in that case anyway).
+  # Data can be dumped in query mode, which is the format used in userlevel queries.
+  #   It differs mainly in that it lacks an 8 byte mini header that individual
+  #   map files do contain.
+  # Most keyword arguments relative to the map data can normally be ignored:
+  #   - Recommendable ones are mode and title.
+  #   - In query mode, the author ID is set as well.
+  #   - All the others are normally unset to the default values in the game.
+  # For hashing, only set the mode and title, and no query mode.
   def self.dump_level(
       tiles,               # Matrix of tiles
       objects,             # List of objects
+      counts =   nil,      # Optional list of object counts
+      output:    nil,      # Optional IO object to pipe binary output to (using <<), otherwise a new string is used
       query:     false,    # Use format for userlevel queries (minor differences)
-      hash:      false,    # Recursively fetches object data from next level, to compute hash later
-      version:   nil,      # Version of the map (for mappacks we may hold multiple edits)
       magic:     0,        # Magic number at the start of the file (not in query mode)
       title:     '',       # Title of the map, ASCII only padded to 128 chars
       author:    '',       # Author name, ASCII only padded to 16 chars, normally unset
@@ -623,33 +637,34 @@ module Map
       mode:       0,       # Playing mode (0 solo, 1 coop, 2 race)
       qt:        QT_UNSET, # Query type, normally unset to 37
       favs:      0,        # Favourite count, normally unset to 0
-      time:      ''        # Time of publishing (10 bytes), normally unset to 0, I don't even know its format
+      time:      ''        # Time of creation (10 bytes), normally unset to 0, I don't even know its format
     )
-    size = HEADER_SIZE + ROWS * COLUMNS + 40 * 2 + 5 * objects.size
-    header = ""
+    output = "".b unless output
 
     # Miniheader only present in userlevel files, but not in queries
-    header << [magic, size].pack('l<2') unless query
+    if !query
+      size = HEADER_SIZE + ROWS * COLUMNS + OBJECT_COUNT * 2 + 5 * objects.size
+      output << [magic, size].pack('l<2')
+    end
 
     # Regular header, padded at the end (it's 8 bytes aligned)
-    header << [level_id, mode, qt, author_id, favs].pack('l<5')
-    header << [time, to_ascii(title), to_ascii(author), 0].pack('a10a128a16s')
+    output << [level_id, mode, qt, author_id, favs].pack('l<5')
+    output << [time, to_ascii(title), to_ascii(author), 0].pack('a10a128a16s')
 
-    # Map data (UNFISIHED!)
-    tile_data = tiles.map{ |a| a.pack('C*') }.join
-    object_counts = Map.object_counts(objects)
-    object_counts[7] = 0 unless hash
-    object_counts[9] = 0 unless hash
-    object_data = objects.map{ |o| o.pack('C5') }.join
-    return nil if hash && !complete_object_data(object_data, object_counts[6] + object_counts[8])
-    object_counts = object_counts.pack('S<*')
-
-    (header + tile_data + object_counts + object_data).force_encoding("ascii-8bit")
+    # Map data
+    output << tiles.map{ |a| a.pack('C*') }.join
+    if !counts
+      counts = object_counts(objects)
+      counts[ID_DOOR_LOCKED_SWITCH] = 0
+      counts[ID_DOOR_TRAP_SWITCH] = 0
+    end
+    output << counts.pack("S<#{OBJECT_COUNT}")
+    output << objects.map{ |o| o.pack('C5') }.join
   end
 
   def self.object_counts(objects)
-    object_counts = [0] * 40
-    objects.each{ |o| object_counts[o[0]] += 1 if o[0] < 40 }
+    object_counts = [0] * OBJECT_COUNT
+    objects.each{ |o| object_counts[o[0]] += 1 if o[0] < OBJECT_COUNT }
     object_counts
   end
 
@@ -686,17 +701,15 @@ module Map
   # successfully. Userlevels aren't completed (their hashes aren't checked
   # by the server anyways).
   #  Params:
-  # - data: Current object data
+  # - list: Current list of objects
   # - n:    Count of remaining objects needed to complete data
-  def complete_object_data(data, n)
-    return true if n == 0 || self.is_a?(Userlevel)
+  def complete_object_data(list, n)
+    return true if n == 0 || is_userlevel?
     successor = next_h(tab: false)
     return false if successor == self
-    objs = successor.objects.take(n).map{ |o| o.pack('C5') }
-    count = objs.count
-    data << objs.join
-    return true if count == n
-    successor.complete_object_data(data, n - count)
+    objs = successor.objects.take(n)
+    list.push(*objs)
+    successor.complete_object_data(list, n - objs.count)
   end
 
   # Generate a file with the usual userlevel format
@@ -704,37 +717,23 @@ module Map
   #   - hash:    Recursively fetches object data from next level to compute hash later
   #   - version: Version of the map (for mappacks we may hold multiple edits)
   def dump_level(query: false, hash: false, version: nil)
-    # HEADER
-    header = ""
-    objs = self.objects(version: version)
-    if !query
-      header << _pack(0, 4)                    # Magic number
-      header << _pack(1230 + 5 * objs.size, 4) # Filesize
+    # Header params (the rest are left unset)
+    mode      = is_mappack? ? self.mode      : Userlevel.modes[self.mode]
+    title     = is_mappack? ? self.longname  : self.title
+    author_id = query       ? self.author_id : -1
+
+    # Map data (counts are manually computed when hashing, as obj data may change)
+    tiles   = self.tiles(version: version)
+    objects = self.objects(version: version)
+    counts  = nil
+    if hash
+      counts = Map.object_counts(objects)
+      door_count = counts[ID_DOOR_LOCKED] + counts[ID_DOOR_TRAP]
+      return nil unless complete_object_data(objects, door_count)
     end
-    mode = self.is_a?(MappackLevel) ? self.mode : Userlevel.modes[self.mode]
-    author_id = query ? self.author_id : -1
-    title = self.is_a?(MappackLevel) ? self.longname : self.title
-    title = to_ascii(title.to_s)[0...127].ljust(128, "\x00")
-    header << _pack(-1, 'l<')        # Level ID (unset)
-    header << _pack(mode, 4)         # Game mode
-    header << _pack(37, 4)           # QT (unset, max is 36)
-    header << _pack(author_id, 'l<') # Author ID
-    header << _pack(0, 4)            # Fav count (unset)
-    header << _pack(0, 10)           # Date SystemTime (unset)
-    header << title                  # Title
-    header << _pack(0, 16)           # Author name (unset)
-    header << _pack(0, 2)            # Padding
 
-    # MAP DATA
-    tile_data = Zlib::Inflate.inflate(tile_data(version: version))
-    object_counts = Map.object_counts(objs)
-    object_counts[7] = 0 unless hash
-    object_counts[9] = 0 unless hash
-    object_data = objs.map{ |o| o.pack('C5') }.join
-    return nil if hash && !complete_object_data(object_data, object_counts[6] + object_counts[8])
-    object_counts = object_counts.pack('S<*')
-
-    (header + tile_data + object_counts + object_data).force_encoding("ascii-8bit")
+    # Dump raw binary data
+    Map.dump_level(tiles, objects, counts, mode: mode, title: title, author_id: author_id)
   end
 
   # Computes the level's hash, which the game uses for integrity verifications
@@ -926,7 +925,7 @@ module Map
   # (e.g. joining overlapping boxes into one).
   def self.think(object_dict, object_grid, nsim, f, step, gif)
     bboxes = []
-    saved_bboxes = 40.times.map{ |id| [id, []] }.to_h
+    saved_bboxes = OBJECT_COUNT.times.map{ |id| [id, []] }.to_h
 
     # For the last frame in the range, move entities to new position
     nsim.movements(f, step, ppc: 0).each{ |mov|
@@ -1007,7 +1006,7 @@ module Map
 
     # Perform convenience modifications and sanity checks
     objects.each{ |map|
-      counts = [0] * 40
+      counts = [0] * OBJECT_COUNT
       map.each{ |o|
         # Remove glitched orientations and non-zero orientations for still objects
         o[3] = 0 if o[3] > 7 || ID_LIST_FIXED.include?(o[0])
@@ -1045,7 +1044,7 @@ module Map
     }
 
     # Build another object dictionary, this time keyed by id and index
-    object_dict = maps.map{ 40.times.map{ |i| [i, {}] }.to_h }
+    object_dict = maps.map{ OBJECT_COUNT.times.map{ |i| [i, {}] }.to_h }
     objects.each_with_index{ |map, i|
       map.each{ |o|
         object_dict[i][o[0]][o[5]] = o
