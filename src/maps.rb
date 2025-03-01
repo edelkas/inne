@@ -1,7 +1,7 @@
 # This file contains the generic Map module, that encapsulates a lot of the
 # properties of an N++ map (map data parsing and formatting, screenshot,
 # trace and animation generation, etc). Three classes implement this module:
-# Level, Userlevel, and MappackLevel.
+# Level, Userlevel, and MappackLevel (the former by first calling .map).
 
 #require 'chunky_png'
 require 'oily_png'    # C wrapper for ChunkyPNG
@@ -178,7 +178,9 @@ module Map
   HEIGHT  = DIM * (ROWS + 2)
 
   # Map file properties
-  HEADER_SIZE = 0xB8
+  HEADER_LEN = 0xB8
+  HEADER_LEN_TITLE = 128
+  HEADER_LEN_AUTHOR = 16
 
   # N v1.4
   NV14_ROWS            = 23
@@ -562,16 +564,18 @@ module Map
     [tiles, objects]
   end
 
-  # Parse an N v1.4 userlevels file
+  # Parse an N v1.4 userlevels file (or data buffer)
   # TODO: Support a more flexible format, such as the one returned by Ned line by line
-  def self.parse_nv14_file(file, warnings)
+  def self.parse_nv14_file(filename: nil, content: nil, warnings: nil)
     # Read file and skip till map data begins
-    return if !File.file?(file)
-    file = File.read(file)
-    start = f.rindex('&userdata=')
+    if !content
+      return if !File.file?(filename)
+      content = File.read(filename)
+    end
+    start = content.rindex('&userdata=')
 
     # Parse each map
-    maps = file[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
+    maps = content[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
@@ -589,7 +593,7 @@ module Map
 
       # Parse map data
       tiles, objects = parse_nv14_file(tile_data.to_s, object_data.to_s, lvl_warnings)
-      lvl_warnings.each{ |w| warnings << "Map #{i} (#{title}) - #{w}" }
+      lvl_warnings.each{ |w| warnings << "Map %3d (%-24.24s) - %s" % [i, title, w] } if warnings
       { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
     Log.clear
@@ -599,13 +603,22 @@ module Map
     nil
   end
 
-  # Convert an N v1.4 userlevels file to N++ map files, optionally zipping them
-  # if there's more than one
-  def self.convert_nv14_file(file, warnings, zip: true)
-    levels = parse_nv14_file(file, warnings)
+  # Convert an N v1.4 userlevels file to N++ map files, zipping them if there's more than one
+  def self.convert_nv14_file(filename: nil, content: nil, warnings: nil, burn_author: false, burn_comments: false)
+    levels = parse_nv14_file(filename: file, content: content, warnings: warnings)
     return if !levels
-
-    # TODO: Finish
+    return { count: 0 } if levels.empty?
+    levels = levels.map{ |lvl|
+      title = lvl[:title]
+      title << ' // ' << lvl[:author] if burn_author
+      title << ' // ' << lvl[:comments] if burn_comments
+      [
+        sanitize_filename(lvl[:title]),
+        dump_level(lvl[:tiles], lvl[:objects], title: title)
+      ]
+    }.to_h
+    return { count: 1, name: levels.keys.first, file: levels.values.first } if levels.size == 1
+    { count: levels.size, name: sanitize_filename(file), file: zip(levels) }
   end
 
   #            \\\ Dump map data into N++ binary userlevel format ///
@@ -634,7 +647,7 @@ module Map
       author:    '',       # Author name, ASCII only padded to 16 chars, normally unset
       author_id: -1,       # Author ID, normally unset to -1 except in query mode
       level_id:  -1,       # Level ID, normally unset to -1
-      mode:       0,       # Playing mode (0 solo, 1 coop, 2 race)
+      mode:      0,        # Playing mode (0 solo, 1 coop, 2 race)
       qt:        QT_UNSET, # Query type, normally unset to 37
       favs:      0,        # Favourite count, normally unset to 0
       time:      ''        # Time of creation (10 bytes), normally unset to 0, I don't even know its format
@@ -643,7 +656,7 @@ module Map
 
     # Miniheader only present in userlevel files, but not in queries
     if !query
-      size = HEADER_SIZE + ROWS * COLUMNS + OBJECT_COUNT * 2 + 5 * objects.size
+      size = HEADER_LEN + ROWS * COLUMNS + OBJECT_COUNT * 2 + 5 * objects.size
       output << [magic, size].pack('l<2')
     end
 
@@ -739,7 +752,7 @@ module Map
   # Computes the level's hash, which the game uses for integrity verifications
   #   c   - Use the C SHA1 implementation (vs. the default Ruby one)
   #   v   - Map version to hash
-  #   pre - Serve precomputed hash stored in BadHash table
+  #   pre - Serve precomputed hash stored in MappackHash table
   def _hash(c: false, v: nil, pre: false)
     stored = l.hashes.where(v ? "`version` <= #{v}" : '').order(:version).last rescue nil
     return stored if pre && stored

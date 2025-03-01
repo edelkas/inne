@@ -1859,12 +1859,52 @@ end
 
 # Convert N v1.4 maps to N++ maps
 def send_convert(event)
+  # Parse message
   msg = parse_message(event)
   nv14 = !!msg[/n?v1\.?4/i]
   nv2 = !!msg[/n?v2/i]
   perror("nv2 map conversion is not supported yet") if nv2
+  attachments = fetch_attachments(event)
+  perror("You need to attach at least one userlevels text file!") if attachments.empty?
 
-  # TODO: Finish
+  # Parse files
+  event << mdhdr1("#{find_emoji('gear') || '⚙'} Converter: N v1.4 ➤ N++")
+  event << "Found **#{attachments.size}** files."
+  attachments.each{ |name, body|
+    event << mdhdr2("§ Converting file: #{name}")
+    warnings = []
+    res = Map.convert_nv14_file(content: body, warnings: warnings)
+
+    # Error parsing file
+    if !res
+      event << "- Status: ❌"
+      event << "- Error: Failed to parse the file"
+      next
+    end
+
+    # No maps found in file
+    if res[:count] == 0
+      event << "- Status: ❌"
+      event << "- Error: No maps found in the file. Ensure they follow the format:}"
+      col1 = ANSI.yellow
+      col2 = ANSI.cyan
+      col3 = ANSI.none
+      header = "#{col1}title#{col3}##{col1}author#{col3}##{col1}comments#{col3}"
+      map_data = "#{col2}tiles#{col3}|#{col2}objects#{col3}"
+      event << format_block("$#{header}##{map_data}#")
+      next
+    end
+
+    # Maps found and converted
+    event << "- Status: ✅"
+    event << "- Maps: #{res[:count]}"
+    event << "- Errors: None"
+    event << "- Warnings: #{warnings.size == 0 ? 'None' : warnings.size}"
+
+    # Attach map file (ZIP if multiple) and warnings if any
+    send_file(res[:file], res[:name], binary: true)
+    send_file(warnings.join("\n"), res[:name] + '_warnings.txt') if !warnings.empty?
+  }
 rescue => e
   lex(e, "Error converting maps.", event: event)
 end

@@ -646,7 +646,7 @@ end
 # - Substituting Windows' reserved characters by an underscore
 def sanitize_filename(str)
   reserved = "\"*/:<>?\\|"
-  to_ascii(str).tr(reserved, '')
+  to_ascii(str).tr(reserved, '_')
 end
 
 # Sanitize a string so that it is safe within an SQL LIKE statement
@@ -777,10 +777,12 @@ def mdtext(str, header: 0, url: nil)
   str
 end
 
-# Format a link in MarkDown
-def mdurl(text, url)
-  "[#{text}](#{url})"
-end
+# MarkDown shotcuts
+def mdurl(text, url) "[#{text}](#{url})" end
+def mkhdr1(text) '# ' + text end
+def mkhdr2(text) '## ' + text end
+def mkhdr3(text) '### ' + text end
+def mksub(text) '-# ' + text end
 
 # Function to pad (and possibly truncate) a string according to different
 # padding methods, determined by the constants defined at the start.
