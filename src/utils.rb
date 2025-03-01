@@ -643,10 +643,12 @@ end
 
 # Make a string safe for filenames, by:
 # - Leaving only printable ASCII characters
-# - Substituting Windows' reserved characters by an underscore
+# - Replacing Windows' reserved characters by underscores
+# - Replacing trailing period and spaces by underscores
+# TODO: Handle reserved names (e.g. CON, COM1, LPT1, etc)
 def sanitize_filename(str)
   reserved = "\"*/:<>?\\|"
-  to_ascii(str).tr(reserved, '_')
+  to_ascii(str).tr(reserved, '_').sub(/[\.\s]+$/) { |s| '_' * s.length }
 end
 
 # Sanitize a string so that it is safe within an SQL LIKE statement
@@ -779,10 +781,10 @@ end
 
 # MarkDown shotcuts
 def mdurl(text, url) "[#{text}](#{url})" end
-def mkhdr1(text) '# ' + text end
-def mkhdr2(text) '## ' + text end
-def mkhdr3(text) '### ' + text end
-def mksub(text) '-# ' + text end
+def mdhdr1(text) '# ' + text end
+def mdhdr2(text) '## ' + text end
+def mdhdr3(text) '### ' + text end
+def mdsub(text) '-# ' + text end
 
 # Function to pad (and possibly truncate) a string according to different
 # padding methods, determined by the constants defined at the start.
@@ -1586,10 +1588,10 @@ end
 # valid range, we set a boolean. If it doesn't even fit in a byte,
 # we set another boolean.
 def nv14_coord(x, y, ox, oy)
-  x, y = 4 * x / NV14_UNITS + 4 * ox, 4 * y / NV14_UNITS + 4 * oy
+  x, y = 4 * (x / Map::NV14_UNITS + ox), 4 * (y / Map::NV14_UNITS + oy)
   zsnap = true if !is_int(x) || !is_int(y)
   x, y = x.round, y.round
-  oob = true if !x.between?(4, 4 * (COLUMNS + 1)) || !y.between?(4, 4 * (ROWS + 1))
+  oob = true if !x.between?(4, 4 * (Map::COLUMNS + 1)) || !y.between?(4, 4 * (Map::ROWS + 1))
   skip = true if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
   [x, y, zsnap, oob, skip]
 end

@@ -364,6 +364,9 @@ module Map
   #   * Invalid door orientations (glitch) are defaulted to Vertical (0).
   #   * Non-grid-aligned doors don't show (moved to 0,0), the switches do show.
   #
+  # Notes:
+  #   * This function assumes the input data is already rid of any whitespace.
+  #
   # TODO:
   #   * Add optional verbose warnings for each individual object, for extra info.
   #   * Handle corrupt parameters properly (e.g. using to_f to begin with eliminates NaN's).
@@ -392,9 +395,9 @@ module Map
     objects = []
     object_data.split('!').each{ |obj|
       # General integrity checks and ID
-      next counts[:malformed_obj] += 1 if obj.strip !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
+      next counts[:malformed_obj] += 1 if obj !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
       old_id, params = $1.to_i, $2.split(',').map(&:to_f)
-      next counts[:unknown_obj] += 1 if !id.between?(0, 12)
+      next counts[:unknown_obj] += 1 if !old_id.between?(0, 12)
       id = NV14_IDMAP[old_id]
 
       # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
@@ -455,7 +458,7 @@ module Map
         # Invalid one-way directions in v1.4 result in a glitch one-way,
         # facing up but with collision facing down (1)
         direction = params[2]
-        if !is_int(direction) || !direction.between(0, 3)
+        if !is_int(direction) || !direction.between?(0, 3)
           counts[:oneway] += 1
           direction = 1
         end
@@ -473,7 +476,7 @@ module Map
         # Invalid thwump directions in v1.4 result in a glitch static thwump,
         # facing down but with a deadly right side (0)
         direction = params[2]
-        if !is_int(direction) || !direction.between(0, 3)
+        if !is_int(direction) || !direction.between?(0, 3)
           counts[:thwump] += 1
           direction = 0
         end
@@ -518,7 +521,7 @@ module Map
           cx, cy, tx, ty = 0, 0, 0, 0
           counts[:door_pos] += 1
         end
-        vx, vy = lnorm(or2vec(o)) # Direction vector of door, from anchor towards center.
+        vx, vy = lnorm(*or2vec(o)) # Direction vector of door, from anchor towards center.
         ax, ay = (xoffset + cx + tx + 1).round, (cy + ty + 1).round
         x, y = (4 * (ax + 0.5 * vx)).round, (4 * (ay + 0.5 * vy)).round
       when NV14_ID_EXIT
@@ -575,7 +578,7 @@ module Map
     start = content.rindex('&userdata=')
 
     # Parse each map
-    maps = content[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+)#/)
+    maps = content[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+?)(?:#|$)/m)
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
@@ -583,17 +586,18 @@ module Map
 
       # Parse metadata
       title, author, comments, data = *map_data
-      tile_data, object_data, mod_data = data.split('|').map(&:strip)
-      if !tile_data
+      tile_data, object_data, mod_data = data.split('|').map{ |str| str.gsub(/\s+/m, '') }
+      if !tile_data || tile_data.empty?
         tile_data = '0' * (NV14_ROWS * NV14_COLUMNS)
-        lvl_warnings << "Empty tile data"
+        lvl_warnings << "Empty map data. Is there a rogue new line?"
+      else
+        lvl_warnings << "Empty object data. Is it a tileset?" if !object_data || object_data.empty?
       end
-      lvl_warnings << "Empty object data" if !object_data
       lvl_warnings << "Ignored NReality data" if !!mod_data
 
       # Parse map data
-      tiles, objects = parse_nv14_file(tile_data.to_s, object_data.to_s, lvl_warnings)
-      lvl_warnings.each{ |w| warnings << "Map %3d (%-24.24s) - %s" % [i, title, w] } if warnings
+      tiles, objects = parse_nv14_map(tile_data.to_s, object_data.to_s, lvl_warnings)
+      lvl_warnings.each{ |w| warnings << "Map %03d: %-24.24s -> %s" % [i, title, w] } if warnings
       { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
     Log.clear
@@ -605,9 +609,14 @@ module Map
 
   # Convert an N v1.4 userlevels file to N++ map files, zipping them if there's more than one
   def self.convert_nv14_file(filename: nil, content: nil, warnings: nil, burn_author: false, burn_comments: false)
-    levels = parse_nv14_file(filename: file, content: content, warnings: warnings)
+    # Parse file contents for N v1.4 maps
+    bench(:start)
+    levels = parse_nv14_file(filename: filename, content: content, warnings: warnings)
+    bench(:step, "Parsing")
     return if !levels
     return { count: 0 } if levels.empty?
+
+    # Dump found maps to binary files following N++ format
     levels = levels.map{ |lvl|
       title = lvl[:title]
       title << ' // ' << lvl[:author] if burn_author
@@ -617,8 +626,15 @@ module Map
         dump_level(lvl[:tiles], lvl[:objects], title: title)
       ]
     }.to_h
+    bench(:step, "Dumping")
+
+    # Return hash
     return { count: 1, name: levels.keys.first, file: levels.values.first } if levels.size == 1
-    { count: levels.size, name: sanitize_filename(file), file: zip(levels) }
+    {
+      count: levels.size,
+      name: sanitize_filename(filename).sub(/\..{,3}$/, '') + '.zip',
+      file: zip(levels)
+    }
   end
 
   #            \\\ Dump map data into N++ binary userlevel format ///

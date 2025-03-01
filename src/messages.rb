@@ -1865,46 +1865,53 @@ def send_convert(event)
   nv2 = !!msg[/n?v2/i]
   perror("nv2 map conversion is not supported yet") if nv2
   attachments = fetch_attachments(event)
+  count = attachments.size
   perror("You need to attach at least one userlevels text file!") if attachments.empty?
+  resp = ""
+  files = []
 
   # Parse files
-  event << mdhdr1("#{find_emoji('gear') || '⚙'} Converter: N v1.4 ➤ N++")
-  event << "Found **#{attachments.size}** files."
+  resp << mdhdr1("#{find_emoji('gear') || '⚙'} __Converter: N v1.4 ➤ N++__\n")
+  resp << "Found **#{count < 10 ? EMOJI_NUMBERS[count] : count}** #{'file'.pluralize(count)}.\n"
   attachments.each{ |name, body|
-    event << mdhdr2("§ Converting file: #{name}")
+    resp << mdhdr3("═══ § Converting file: #{verbatim(name)}\n")
     warnings = []
-    res = Map.convert_nv14_file(content: body, warnings: warnings)
+    res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings)
 
     # Error parsing file
     if !res
-      event << "- Status: ❌"
-      event << "- Error: Failed to parse the file"
+      resp << mdsub("📊 Status: Error ❌\n")
+      resp << mdsub("Internal error parsing the file.\n")
       next
     end
 
     # No maps found in file
     if res[:count] == 0
-      event << "- Status: ❌"
-      event << "- Error: No maps found in the file. Ensure they follow the format:}"
+      resp << mdsub("📊 Status: Error ❌\n")
+      resp << mdsub("No maps found in the file. Ensure they follow the format:\n")
       col1 = ANSI.yellow
       col2 = ANSI.cyan
-      col3 = ANSI.none
+      col3 = ANSI.magenta
       header = "#{col1}title#{col3}##{col1}author#{col3}##{col1}comments#{col3}"
       map_data = "#{col2}tiles#{col3}|#{col2}objects#{col3}"
-      event << format_block("$#{header}##{map_data}#")
+      resp << format_block("#{col3}$#{header}##{map_data}#") + "\n"
       next
     end
 
     # Maps found and converted
-    event << "- Status: ✅"
-    event << "- Maps: #{res[:count]}"
-    event << "- Errors: None"
-    event << "- Warnings: #{warnings.size == 0 ? 'None' : warnings.size}"
+    resp << mdsub("📊 Status: Success ✅\n")
+    resp << mdsub("🗺 Maps: #{res[:count]}\n")
+    resp << mdsub("⚠️ Warnings: #{warnings.size == 0 ? 'None' : warnings.size}\n")
 
     # Attach map file (ZIP if multiple) and warnings if any
-    send_file(res[:file], res[:name], binary: true)
-    send_file(warnings.join("\n"), res[:name] + '_warnings.txt') if !warnings.empty?
+    files << tmp_file(res[:file], res[:name], binary: true)
+    if !warnings.empty?
+      filename = res[:name].sub(/\.zip$/, '') + '_warnings.txt'
+      files << tmp_file(warnings.join("\n"), filename, binary: false)
+    end
   }
+
+  send_message(event, content: resp, files: files)
 rescue => e
   lex(e, "Error converting maps.", event: event)
 end

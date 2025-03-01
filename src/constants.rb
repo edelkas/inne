@@ -113,6 +113,7 @@ EMOJIS_TO_DELETE = [                # Emojis to delete msgs via reactions
 EMOJIS_FOR_PLAY = [
   'Ninja', 'ninjajump', 'ninjavictory', 'nAight'
 ]
+EMOJI_NUMBERS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
 DAYS_PER_EPISODE = 1 # Number of days to auto-spoiler screenshots in a mappack
 
 # <---------------------------------------------------------------------------->
