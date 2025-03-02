@@ -1588,12 +1588,12 @@ end
 # valid range, we set a boolean. If it doesn't even fit in a byte,
 # we set another boolean.
 def nv14_coord(x, y, ox, oy)
-  x, y = 4 * (x / Map::NV14_UNITS + ox), 4 * (y / Map::NV14_UNITS + oy)
-  zsnap = true if !is_int(x) || !is_int(y)
-  x, y = x.round, y.round
+  xf, yf = 4 * (x / Map::NV14_UNITS + ox), 4 * (y / Map::NV14_UNITS + oy)
+  zsnap = true if !is_int(xf) || !is_int(yf)
+  x, y = xf.round, yf.round
   oob = true if !x.between?(4, 4 * (Map::COLUMNS + 1)) || !y.between?(4, 4 * (Map::ROWS + 1))
   skip = true if !x.between?(0, 0xFF) || !y.between?(0, 0xFF)
-  [x, y, zsnap, oob, skip]
+  [x, y, xf, yf, zsnap, oob, skip]
 end
 
 # Computes the name of a highscoreable based on the ID and type, e.g.:

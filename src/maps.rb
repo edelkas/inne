@@ -201,11 +201,21 @@ module Map
   NV14_ID_EXIT         = 11
   NV14_ID_MINE         = 12
   NV14_TILEMAP = "01PONQ5432=<;:9876A@?>EDCBIHGFMLKJ".each_char.with_index.to_h
-  NV14_IDMAP = [
-    ID_GOLD,   ID_BOUNCEBLOCK, ID_LAUNCHPAD, ID_GAUSS,  ID_FLOORGUARD,
-    ID_NINJA,  ID_DRONE_ZAP,   ID_ONEWAY,    ID_THWUMP, ID_DOOR_REGULAR,
-    ID_ROCKET, ID_EXIT,        ID_MINE
-  ]
+  NV14_OBJECTS = {
+    NV14_ID_GOLD        => { new_id: ID_GOLD,         att: 2, name: 'gold'         },
+    NV14_ID_BOUNCEBLOCK => { new_id: ID_BOUNCEBLOCK,  att: 2, name: 'bounceblock'  },
+    NV14_ID_LAUNCHPAD   => { new_id: ID_LAUNCHPAD,    att: 4, name: 'launchpad'    },
+    NV14_ID_GAUSS       => { new_id: ID_GAUSS,        att: 2, name: 'gauss turret' },
+    NV14_ID_FLOORGUARD  => { new_id: ID_FLOORGUARD,   att: 3, name: 'floorguard'   },
+    NV14_ID_NINJA       => { new_id: ID_NINJA,        att: 2, name: 'ninja'        },
+    NV14_ID_DRONE       => { new_id: ID_DRONE_ZAP,    att: 6, name: 'drone'        },
+    NV14_ID_ONEWAY      => { new_id: ID_ONEWAY,       att: 3, name: 'one-way'      },
+    NV14_ID_THWUMP      => { new_id: ID_THWUMP,       att: 3, name: 'thwump'       },
+    NV14_ID_DOOR        => { new_id: ID_DOOR_REGULAR, att: 9, name: 'door'         },
+    NV14_ID_ROCKET      => { new_id: ID_ROCKET,       att: 2, name: 'rocket'       },
+    NV14_ID_EXIT        => { new_id: ID_EXIT,         att: 4, name: 'exit'         },
+    NV14_ID_MINE        => { new_id: ID_MINE,         att: 2, name: 'mine'         }
+  }
   NV14_DRONE_TYPE_ZAP      = 0
   NV14_DRONE_TYPE_LASER    = 1
   NV14_DRONE_TYPE_CHAINGUN = 2
@@ -368,75 +378,79 @@ module Map
   #   * This function assumes the input data is already rid of any whitespace.
   #
   # TODO:
-  #   * Add optional verbose warnings for each individual object, for extra info.
   #   * Handle corrupt parameters properly (e.g. using to_f to begin with eliminates NaN's).
-  #   * When you have more parameters than necessary the data is typically corrupt as well.
   def self.parse_nv14_map(tile_data, object_data, warnings)
-    # Prepare some params
-    xoffset = 6                       # Amount of empty columns to add on the left (center map)
-    counts  = Hash.new(0)             # Counters for each type of warning for this map
+    xoffset = 6 # Amount of empty columns to add on the left (center map)
 
     # Parse tile data
     tile_count = tile_data.size
     canvas_size = NV14_ROWS * NV14_COLUMNS
     if tile_count < canvas_size
-      warnings << "Padded tile data with #{canvas_size - tile_count} extra tiles."
+      warnings["Padded tile data with #{canvas_size - tile_count} extra tiles."]
       tile_data = tile_data.ljust(canvas_size, '0')
     elsif tile_count > canvas_size
-      warnings << "Truncated tile data by #{tile_count - canvas_size} tiles."
+      warnings["Truncated tile data by #{tile_count - canvas_size} tiles."]
       tile_data = tile_data[0, canvas_size]
     end
     tiles = Array.new(ROWS){ Array.new(COLUMNS, 1) }
     tile_data.each_char.with_index{ |c, i|
-      tiles[i % ROWS][i / ROWS + xoffset] = NV14_TILEMAP[c] || (counts[:unknown_tile] += 1; 0)
+      x = i / ROWS + xoffset
+      y = i % ROWS
+      t = NV14_TILEMAP[c]
+      tiles[y][x] = t || 0
+      warnings[:unknown_tile] << "Tile %c at (%d, %d)" % [c, x, y] if !t
     }
 
     # Parse object data
     objects = []
-    object_data.split('!').each{ |obj|
+    object_data.split('!').each{ |object|
       # General integrity checks and ID
-      next counts[:malformed_obj] += 1 if obj !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
+      next warnings[:malformed_obj] << object if object !~ /^(\d+)\s*\^([\d\.\-,\s]+)$/
       old_id, params = $1.to_i, $2.split(',').map(&:to_f)
-      next counts[:unknown_obj] += 1 if !old_id.between?(0, 12)
-      id = NV14_IDMAP[old_id]
+      next warnings[:unknown_obj] << "ID #{old_id} (#{object}), should be 0 - 12" if !old_id.between?(0, 12)
+      obj = NV14_OBJECTS[old_id]
+      id = obj[:new_id]
 
       # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
-      next counts[:bad_params] += 1 if params.count < 2
-      x, y, zsnap, oob, skip = nv14_coord(*params[0, 2], xoffset, 0)
-      next counts[:oob_skip] += 1 if skip
-      counts[:zsnap] += 1 if zsnap
-      counts[:oob]   += 1 if oob
+      next warnings[:bad_params] << "%s %s should have at least 2 parameters (x, y)" % [obj[:name].capitalize, object] if params.count < 2
+      x, y, xf, yf, zsnap, oob, skip = nv14_coord(*params[0, 2], xoffset, 0)
+      name = "%s at (%g, %g)" % [obj[:name].capitalize, (1 + x / 4.0).round(2), (1 + y / 4.0).round(2)]
+      next warnings[:oob_skip] << name if skip
+      warnings[:zsnap] << "%s at (%.3f, %.3f) rounded to (%g, %g)" % [obj[:name].capitalize, 1 + xf / 4, 1 + yf / 4, (1 + x / 4.0).round(2), (1 + y / 4.0).round(2)] if zsnap
+      warnings[:oob] << name if oob
 
       # Specific params for each object type
+      next warnings[:bad_params] << "%s should have %d parameters" % [name, obj[:att]] if params.count != obj[:att]
       o, m = 0, 0
       switch = nil
       case old_id
       when NV14_ID_LAUNCHPAD
-        next counts[:bad_params] += 1 if params.count < 4
-
         # In v1.4, launchpad power was present in the map data, which could be
         # used to make e.g. teleporters in arbitrary directions.
         # Here we round them to the closest direction.
-        vel = params[2, 2]
-        dir = vec2dir(*vel)
-        counts[:launchpad] += 1 if !is_unit(*vel) || !is_int(dir)
+        vx, vy = params[2, 2]
+        power = vx * vx + vy * vy
+        dir = vec2dir(vx, vy)
+        warnings[:launchpad] << "%s has power %.2f" % [name, power] if !num_eql?(power, 1) || !is_int(dir)
         o = dir2or(dir)
       when NV14_ID_DRONE
-        next counts[:bad_params] += 1 if params.count < 6
-
         # Parse params, we handle invalid ones gracefully
         path, seeking, type, direction = params[2, 4].map(&:round)
+        seeking = seeking != 0
 
         # Type
         case type
         when NV14_DRONE_TYPE_ZAP
-          id = seeking == 0 ? ID_DRONE_ZAP : ID_DRONE_CHASER
+          id = seeking ? ID_DRONE_ZAP : ID_DRONE_CHASER
+          name = (seeking ? 'Chaser ' : 'Zap ') + name.downcase
         when NV14_DRONE_TYPE_LASER
           id = ID_DRONE_LASER
+          name = 'Laser ' + name.downcase
         when NV14_DRONE_TYPE_CHAINGUN
           id = ID_DRONE_CHAINGUN
+          name = 'Chaingun ' + name.downcase
         else
-          next counts[:drone_invalid] += 1
+          next warnings[:drone_invalid] << "%s is type %d (should be 0 - 2)" % [name, type]
         end
 
         # Orientation (RDLU, mod 4 is taken in v1.4)
@@ -448,18 +462,25 @@ module Map
         #   v1.4 defaults to an immobile drone.
         #   N++ defaults to Dumb CCW (3).
         if !path.between?(0, 3)
+          adj = path.between?(4, 5) ? 'unsupported' : 'invalid'
+          err = case path
+          when 4
+            'alternate'
+          when 5
+            'quasi-random'
+          else
+            'unknown'
+          end
+          warnings[:drone_path] << "%s has %s pathing %d (%s)" % [name, adj, path, err]
           path = 3
-          counts[:drone_path] += 1
         end
         m = path
       when NV14_ID_ONEWAY
-        next counts[:bad_params] += 1 if params.count < 3
-
         # Invalid one-way directions in v1.4 result in a glitch one-way,
         # facing up but with collision facing down (1)
         direction = params[2]
         if !is_int(direction) || !direction.between?(0, 3)
-          counts[:oneway] += 1
+          warnings[:oneway] << "%s has direction %g (should be 0 - 3)" % [name, direction]
           direction = 1
         end
         o = 2 * direction.round
@@ -471,19 +492,15 @@ module Map
         x += 2 * vec[0]
         y += 2 * vec[1]
       when NV14_ID_THWUMP
-        next counts[:bad_params] += 1 if params.count < 3
-
         # Invalid thwump directions in v1.4 result in a glitch static thwump,
         # facing down but with a deadly right side (0)
         direction = params[2]
         if !is_int(direction) || !direction.between?(0, 3)
-          counts[:thwump] += 1
+          warnings[:thwump] << "%s has direction %g (should be 0 - 3)" % [name, direction]
           direction = 0
         end
         o = 2 * direction.round
       when NV14_ID_DOOR
-        next counts[:bad_params] += 1 if params.count < 9
-
         # Parse params
         dir, trap, cx, cy, locked, tx, ty = params[2, 7]
         trap   = trap   != 0
@@ -493,17 +510,20 @@ module Map
         if locked
           id = ID_DOOR_LOCKED
           switch = [ID_DOOR_LOCKED_SWITCH, x, y, 0, 0]
+          name = 'Locked ' + name.downcase
         elsif trap
           id = ID_DOOR_TRAP
           switch = [ID_DOOR_TRAP_SWITCH, x, y, 0, 0]
+          name = 'Trap ' + name.downcase
         else
           id = ID_DOOR_REGULAR
+          name = 'Regular ' + name.downcase
         end
 
         # Invalid door directions in v1.4 result in a glitch door, with vertical
         # graphics but with very buggy collision
         if dir != 0 && dir != 1
-          counts[:door_dir] += 1
+          warnings[:door_dir] << "%s has direction %g (should be 0 or 1)" % [name, dir]
           dir = 0
         end
         o = dir.round * 2
@@ -519,19 +539,18 @@ module Map
         # Non-grid-aligned doors disappear (but their switch remains)
         if !is_int(cx) || !is_int(cy) || !is_int(tx) || !is_int(ty)
           cx, cy, tx, ty = 0, 0, 0, 0
-          counts[:door_pos] += 1
+          warnings[:door_pos] << name
         end
         vx, vy = lnorm(*or2vec(o)) # Direction vector of door, from anchor towards center.
         ax, ay = (xoffset + cx + tx + 1).round, (cy + ty + 1).round
         x, y = (4 * (ax + 0.5 * vx)).round, (4 * (ay + 0.5 * vy)).round
       when NV14_ID_EXIT
-        next counts[:bad_params] += 1 if params.count < 4
-
         # Switch position (again, round Z-snap and skip if fully OOB)
-        sx, sy, zsnap, oob, skip = nv14_coord(*params[2, 2], xoffset, 0)
-        next counts[:oob_skip] += 1 if skip
-        counts[:zsnap] += 1 if zsnap
-        counts[:oob]   += 1 if oob
+        sx, sy, sxf, syf, zsnap, oob, skip = nv14_coord(*params[2, 2], xoffset, 0)
+        name = "Exit switch at (%g, %g)" % [(1 + sx / 4.0).round(2), (1 + sy / 4.0).round(2)]
+        next warnings[:oob_skip] << name if skip
+        warnings[:zsnap] << "Exit switch at (%.3f, %.3f) rounded to (%g, %g)" % [1 + sxf / 4, 1 + syf / 4, (1 + sx / 4.0).round(2), (1 + sy / 4.0).round(2)] if zsnap
+        warnings[:oob] << name if oob
         switch = [ID_EXIT_SWITCH, sx, sy, 0, 0]
       end
 
@@ -539,31 +558,8 @@ module Map
       objects << switch if switch
     }
 
-    # Format and save warnings
-    counts.each{ |key, count|
-      warnings << case key
-      when :unknown_tile  then "Skipped #{count} unrecognized tiles"
-      when :malformed_obj then "Skipped #{count} malformed objects"
-      when :unknown_obj   then "Skipped #{count} unrecognized objects"
-      when :bad_params    then "Skipped #{count} objects with bad parameters"
-      when :zsnap         then "Rounded #{count} Z-snapped objects"
-      when :oob           then "Found #{count} out of bounds objects (skipped #{counts[:oob_skip]})"
-      when :oob_skip      then nil
-      when :launchpad     then "Normalized #{count} edited launchpads"
-      when :drone_invalid then "Skipped #{count} invalid drones"
-      when :drone_path    then "Normalized #{count} invalid drone pathings to Dumb CCW"
-      when :oneway        then "Defaulted #{count} glitch one-way platforms to Down"
-      when :thwump        then "Defaulted #{count} glitch thwumps to Right"
-      when :door_dir      then "Defaulted #{count} glitch doors to Vertical"
-      when :door_pos      then "Found #{count} non-grid-aligned doors which won't show"
-      else "Unknown error happened"
-      end
-    }
-    warnings.compact!
-
     # Sort objects by ID, preserving ties and excluding locked/trap switches
     objects = objects.stable_sort_by{ |o| o[0] == 7 ? 6 : o[0] == 9 ? 8 : o[0] }
-
     [tiles, objects]
   end
 
@@ -582,22 +578,48 @@ module Map
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
-      lvl_warnings = []
+      lvl_warnings = Hash.new{ |hash, key| hash[key] = [] }
 
       # Parse metadata
       title, author, comments, data = *map_data
       tile_data, object_data, mod_data = data.split('|').map{ |str| str.gsub(/\s+/m, '') }
       if !tile_data || tile_data.empty?
         tile_data = '0' * (NV14_ROWS * NV14_COLUMNS)
-        lvl_warnings << "Empty map data. Is there a rogue new line?"
+        lvl_warnings[:missing_tiles]
       else
-        lvl_warnings << "Empty object data. Is it a tileset?" if !object_data || object_data.empty?
+        lvl_warnings[:missing_objects] if !object_data || object_data.empty?
       end
-      lvl_warnings << "Ignored NReality data" if !!mod_data
+      lvl_warnings[:nreality] if !!mod_data
 
       # Parse map data
       tiles, objects = parse_nv14_map(tile_data.to_s, object_data.to_s, lvl_warnings)
-      lvl_warnings.each{ |w| warnings << "Map %03d: %-24.24s -> %s" % [i, title, w] } if warnings
+
+      # Format warnings
+      lvl_warnings.transform_keys!{ |key|
+        c = lvl_warnings[key].size
+        case key
+        when :missing_tiles   then "Map data missing. Is there a rogue new line?"
+        when :missing_objects then "Object data missing. Is it a tileset?"
+        when :nreality        then "NReality data found (ignoring)."
+        when :unknown_tile    then "Skipped #{c} unrecognized tiles:"
+        when :malformed_obj   then "Skipped #{c} malformed objects:"
+        when :unknown_obj     then "Skipped #{c} unrecognized objects:"
+        when :bad_params      then "Skipped #{c} objects with bad parameters:"
+        when :zsnap           then "Found #{c} Z-snapped objects:"
+        when :oob             then "Found #{c} out of bounds objects:"
+        when :oob_skip        then "Skipped #{c} out of bounds objects:"
+        when :launchpad       then "Normalized #{c} edited launchpads:"
+        when :drone_invalid   then "Skipped #{c} invalid drones:"
+        when :drone_path      then "Found #{c} invalid drone pathings (defaulted to dumb CCW):"
+        when :oneway          then "Found #{c} glitch one-way orientations (defaulted to down):"
+        when :thwump          then "Found #{c} glitch thwump orientations (defaulted to right):"
+        when :door_dir        then "Found #{c} glitch door orientations (defaulted to vertical):"
+        when :door_pos        then "Found #{c} non-grid-aligned doors which won't show:"
+        else key.to_s
+        end
+      }
+      warnings["=== Map #{i}  #{title}"] = lvl_warnings if warnings && !lvl_warnings.empty?
+
       { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
     Log.clear

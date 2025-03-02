@@ -1871,17 +1871,17 @@ def send_convert(event)
   files = []
 
   # Parse files
-  resp << mdhdr1("#{find_emoji('gear') || '⚙'} __Converter: N v1.4 ➤ N++__\n")
+  resp << mdhdr1("⚙ __Converter: N v1.4 ➤ N++__\n")
   resp << "Found **#{count < 10 ? EMOJI_NUMBERS[count] : count}** #{'file'.pluralize(count)}.\n"
   attachments.each{ |name, body|
     resp << mdhdr3("═══ § Converting file: #{verbatim(name)}\n")
-    warnings = []
+    warnings = {}
     res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings)
 
     # Error parsing file
     if !res
       resp << mdsub("📊 Status: Error ❌\n")
-      resp << mdsub("Internal error parsing the file.\n")
+      resp << mdsub("Internal error converting the file. Please report to Eddy.\n")
       next
     end
 
@@ -1899,15 +1899,26 @@ def send_convert(event)
     end
 
     # Maps found and converted
+    checks = warnings.inject(0){ |sum, pair|
+      sum + pair[1].inject(0){ |sz, p| sz + [p[1].size, 1].max }
+    }
     resp << mdsub("📊 Status: Success ✅\n")
     resp << mdsub("🗺 Maps: #{res[:count]}\n")
-    resp << mdsub("⚠️ Warnings: #{warnings.size == 0 ? 'None' : warnings.size}\n")
+    resp << mdsub("⚠️ Maps w/ warnings: #{warnings.size}\n")
+    resp << mdsub("🔎 Checks needed: #{checks}\n")
 
     # Attach map file (ZIP if multiple) and warnings if any
     files << tmp_file(res[:file], res[:name], binary: true)
     if !warnings.empty?
+      warnings = warnings.map{ |level, types|
+        level + types.map{ |type, list|
+          "\n         " + type + list.map{ |w|
+            "\n             - " + w
+          }.join
+        }.join
+      }.join("\n\n")
       filename = res[:name].sub(/\.zip$/, '') + '_warnings.txt'
-      files << tmp_file(warnings.join("\n"), filename, binary: false)
+      files << tmp_file(warnings, filename, binary: false)
     end
   }
 
