@@ -14,6 +14,7 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Make a native extension for some functions, notably SHA1 hashing.
 - Extend diff command to any highscoreable using the archives table, allowing to also specify a date.
 - Persist task counters in db (using task_ prefix). Don't do it constantly, perhaps only sum them when shutting down.
 - Migrate highscoreable_type to integers from 0 to 2.

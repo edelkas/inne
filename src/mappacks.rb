@@ -422,6 +422,12 @@ module MappackHighscoreable
     versions.max
   end
 
+  # Stored SHA1 hash computed using STB's C implementation
+  def saved_hash(v: nil)
+    hashes.where(v ? "`version` <= #{v}" : '').order(:version).last&.sha1_hash
+  end
+
+
   # Recompute SHA1 hash for all available versions
   # If 'pre', then episodes/stories will not recompute their level hashes
   def update_hashes(pre: false)
@@ -634,8 +640,7 @@ module MappackHighscoreable
   #     which is what N++ uses. Negative scores (which sometimes happen erroneously)
   #     then underflow, so we need to replicate this behaviour to match the hashes.
   def _verify_replay(ninja_check, score, c: true, v: nil)
-    c_hash = hashes.find_by(version: v)
-    map_hash = c && c_hash ? c_hash.sha1_hash : _hash(c: c, v: v)
+    map_hash = _hash(c: c, v: v, pre: true)
     return true if !map_hash
     score = ((1000.0 * score / 60.0 + 0.5).floor % 2 ** 32).to_s
     sha1(map_hash + score, c: c) == ninja_check
@@ -795,10 +800,11 @@ class MappackEpisode < ActiveRecord::Base
   # Computes the episode's hash, which the game uses for integrity verifications
   # If 'pre', take the precomputed level hashes, otherwise compute them
   def _hash(c: false, v: nil, pre: false)
-    hashes = levels.order(:id).map{ |l|
-      stored = l.hashes.where("version <= #{v}").order(:version).last
-      c && pre && stored ? stored.sha1_hash : l._hash(c: c, v: v)
-    }.compact
+    if pre && c
+      stored = saved_hash(v: v)
+      return stored if stored
+    end
+    hashes = levels.order(:id).map{ |l| l._hash(c: c, v: v, pre: pre) }.compact
     hashes.size < 5 ? nil : hashes.join
   end
 end
@@ -847,16 +853,13 @@ class MappackStory < ActiveRecord::Base
   # Computes the story's hash, which the game uses for integrity verifications
   # If 'pre', take the precomputed level hashes, otherwise compute them
   def _hash(c: false, v: nil, pre: false)
-    hashes = levels.order(:id).map{ |l|
-      stored = l.hashes.where("version <= #{v}").order(:version).last
-      c && pre && stored ? stored.sha1_hash : l._hash(c: c, v: v)
-    }.compact
+    if pre && c
+      stored = saved_hash(v: v)
+      return stored if stored
+    end
+    hashes = levels.order(:id).map{ |l| l._hash(c: c, v: v, pre: pre) }.compact
     return nil if hashes.size < 25
-    work = 0.chr * 20
-    25.times.each{ |i|
-      work = sha1(work + hashes[i], c: c)
-    }
-    work
+    hashes.inject(0.chr * 20){ |working, hash| sha1(working + hash, c: c) }
   end
 end
 

@@ -78,10 +78,12 @@
 # - Edit and save the source files in UTF8.                                    #
 # - Always run outte from the root directory, NOT from the src directory or    #
 #   any other one.                                                             #
+# - You can find more detailed information in the tool's repo (see below).     #
 #                                                                              #
-# ////// Contact:                                                              #
+# ////// Contact & Source:                                                     #
 #                                                                              #
 # Eddy @ https://discord.gg/nplusplus                                          #
+# https://github.com/edelkas/inne                                              #
 #                                                                              #
 ################################################################################
 
@@ -149,7 +151,7 @@ def initialize_vars
   $active_tasks    = {}
   $memory_warned   = false
   $memory_warned_c = false
-  $linux           = RbConfig::CONFIG['host_os'] =~ /linux/i
+  $linux           = RbConfig::CONFIG['host_os'].match?(/linux/i)
   $mutex           = { ntrace: Mutex.new, tmp_msg: Mutex.new }
   $threads         = []
   $main_queue      = Queue.new

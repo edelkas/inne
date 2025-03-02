@@ -414,9 +414,9 @@ module Map
       # Coordinates (round Z-snapped coordinates and skip heavily out of bounds objects)
       next warnings[:bad_params] << "%s %s should have at least 2 parameters (x, y)" % [obj[:name].capitalize, object] if params.count < 2
       x, y, xf, yf, zsnap, oob, skip = nv14_coord(*params[0, 2], xoffset, 0)
-      name = "%s at (%g, %g)" % [obj[:name].capitalize, (1 + x / 4.0).round(2), (1 + y / 4.0).round(2)]
+      name = "%s at (%g, %g)" % [obj[:name].capitalize, (x / 4.0 - 1).round(2), (y / 4.0 - 1).round(2)]
       next warnings[:oob_skip] << name if skip
-      warnings[:zsnap] << "%s at (%.3f, %.3f) rounded to (%g, %g)" % [obj[:name].capitalize, 1 + xf / 4, 1 + yf / 4, (1 + x / 4.0).round(2), (1 + y / 4.0).round(2)] if zsnap
+      warnings[:zsnap] << "%s at (%.3f, %.3f) rounded to (%g, %g)" % [obj[:name].capitalize, xf / 4 - 1, yf / 4 - 1, (x / 4.0 - 1).round(2), (y / 4.0 - 1).round(2)] if zsnap
       warnings[:oob] << name if oob
 
       # Specific params for each object type
@@ -547,9 +547,9 @@ module Map
       when NV14_ID_EXIT
         # Switch position (again, round Z-snap and skip if fully OOB)
         sx, sy, sxf, syf, zsnap, oob, skip = nv14_coord(*params[2, 2], xoffset, 0)
-        name = "Exit switch at (%g, %g)" % [(1 + sx / 4.0).round(2), (1 + sy / 4.0).round(2)]
+        name = "Exit switch at (%g, %g)" % [(sx / 4.0 - 1).round(2), (sy / 4.0 - 1).round(2)]
         next warnings[:oob_skip] << name if skip
-        warnings[:zsnap] << "Exit switch at (%.3f, %.3f) rounded to (%g, %g)" % [1 + sxf / 4, 1 + syf / 4, (1 + sx / 4.0).round(2), (1 + sy / 4.0).round(2)] if zsnap
+        warnings[:zsnap] << "Exit switch at (%.3f, %.3f) rounded to (%g, %g)" % [sxf / 4 - 1, syf / 4 - 1, (sx / 4.0 - 1).round(2), (sy / 4.0 - 1).round(2)] if zsnap
         warnings[:oob] << name if oob
         switch = [ID_EXIT_SWITCH, sx, sy, 0, 0]
       end
@@ -792,11 +792,15 @@ module Map
   #   v   - Map version to hash
   #   pre - Serve precomputed hash stored in MappackHash table
   def _hash(c: false, v: nil, pre: false)
-    stored = l.hashes.where(v ? "`version` <= #{v}" : '').order(:version).last rescue nil
-    return stored if pre && stored
+    if pre && c && !is_userlevel?
+      stored = saved_hash(v: v)
+      return stored if stored
+    end
     map_data = dump_level(hash: true, version: v)
     return nil if map_data.nil?
     sha1(PWD + map_data[0xB8..-1], c: c)
+  rescue
+    nil
   end
 
   # <-------------------------------------------------------------------------->
