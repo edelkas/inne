@@ -416,7 +416,7 @@ module Map
       x, y, xf, yf, zsnap, oob, skip = nv14_coord(*params[0, 2], xoffset, 0)
       name = "%s at (%g, %g)" % [obj[:name].capitalize, (x / 4.0 - 1).round(2), (y / 4.0 - 1).round(2)]
       next warnings[:oob_skip] << name if skip
-      warnings[:zsnap] << "%s at (%.3f, %.3f) rounded to (%g, %g)" % [obj[:name].capitalize, xf / 4 - 1, yf / 4 - 1, (x / 4.0 - 1).round(2), (y / 4.0 - 1).round(2)] if zsnap
+      warnings[:zsnap] << "%s at (%.3f, %.3f) rounded to (%g, %g)" % [obj[:name].capitalize, xf / 4.0 - 1, yf / 4.0 - 1, (x / 4.0 - 1).round(2), (y / 4.0 - 1).round(2)] if zsnap
       warnings[:oob] << name if oob
 
       # Specific params for each object type
@@ -441,7 +441,7 @@ module Map
         # Type
         case type
         when NV14_DRONE_TYPE_ZAP
-          id = seeking ? ID_DRONE_ZAP : ID_DRONE_CHASER
+          id = seeking ? ID_DRONE_CHASER : ID_DRONE_ZAP
           name = (seeking ? 'Chaser ' : 'Zap ') + name.downcase
         when NV14_DRONE_TYPE_LASER
           id = ID_DRONE_LASER
@@ -541,15 +541,15 @@ module Map
           cx, cy, tx, ty = 0, 0, 0, 0
           warnings[:door_pos] << name
         end
-        vx, vy = lnorm(*or2vec(o)) # Direction vector of door, from anchor towards center.
+        vx, vy = lnorm(*or2vec(o)).map(&:abs) # Direction vector of door
         ax, ay = (xoffset + cx + tx + 1).round, (cy + ty + 1).round
-        x, y = (4 * (ax + 0.5 * vx)).round, (4 * (ay + 0.5 * vy)).round
+        x, y = (4 * (ax - 0.5 * vx)).round, (4 * (ay - 0.5 * vy)).round
       when NV14_ID_EXIT
         # Switch position (again, round Z-snap and skip if fully OOB)
         sx, sy, sxf, syf, zsnap, oob, skip = nv14_coord(*params[2, 2], xoffset, 0)
         name = "Exit switch at (%g, %g)" % [(sx / 4.0 - 1).round(2), (sy / 4.0 - 1).round(2)]
         next warnings[:oob_skip] << name if skip
-        warnings[:zsnap] << "Exit switch at (%.3f, %.3f) rounded to (%g, %g)" % [sxf / 4 - 1, syf / 4 - 1, (sx / 4.0 - 1).round(2), (sy / 4.0 - 1).round(2)] if zsnap
+        warnings[:zsnap] << "Exit switch at (%.3f, %.3f) rounded to (%g, %g)" % [sxf / 4.0 - 1, syf / 4.0 - 1, (sx / 4.0 - 1).round(2), (sy / 4.0 - 1).round(2)] if zsnap
         warnings[:oob] << name if oob
         switch = [ID_EXIT_SWITCH, sx, sy, 0, 0]
       end
