@@ -177,6 +177,7 @@ PATH_SHA1       = "#{DIR_UTILS}/sha1"
 DIR_FONTS       = "#{DIR_UTILS}/fonts"
 
 FILENAME_MAPPACK_AUTHORS = 'AUTHORS'
+FILENAME_LIMIT = 128 # Never surpass 259 (Windows' limit, google MAX_PATH)
 
 # <---------------------------------------------------------------------------->
 # <------               SCREENSHOT AND ANIMATION VARIABLES               ------>

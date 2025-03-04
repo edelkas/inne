@@ -1863,6 +1863,7 @@ def send_convert(event)
   msg = parse_message(event)
   nv14 = !!msg[/n?v1\.?4/i]
   nv2 = !!msg[/n?v2/i]
+  prefix = !!msg[/\bprefix\b/i]
   perror("nv2 map conversion is not supported yet") if nv2
   attachments = fetch_attachments(event)
   count = attachments.size
@@ -1876,7 +1877,7 @@ def send_convert(event)
   attachments.each{ |name, body|
     resp << mdhdr3("═══ § Converting file: #{verbatim(name)}\n")
     warnings = {}
-    res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings)
+    res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings, prefix: prefix)
 
     # Error parsing file
     if !res

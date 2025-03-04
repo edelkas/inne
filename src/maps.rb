@@ -595,30 +595,32 @@ module Map
       tiles, objects = parse_nv14_map(tile_data.to_s, object_data.to_s, lvl_warnings)
 
       # Format warnings
-      lvl_warnings.transform_keys!{ |key|
-        c = lvl_warnings[key].size
-        case key
-        when :missing_tiles   then "Map data missing. Is there a rogue new line?"
-        when :missing_objects then "Object data missing. Is it a tileset?"
-        when :nreality        then "NReality data found (ignoring)."
-        when :unknown_tile    then "Skipped #{c} unrecognized tiles:"
-        when :malformed_obj   then "Skipped #{c} malformed objects:"
-        when :unknown_obj     then "Skipped #{c} unrecognized objects:"
-        when :bad_params      then "Skipped #{c} objects with bad parameters:"
-        when :zsnap           then "Found #{c} Z-snapped objects:"
-        when :oob             then "Found #{c} out of bounds objects:"
-        when :oob_skip        then "Skipped #{c} out of bounds objects:"
-        when :launchpad       then "Normalized #{c} edited launchpads:"
-        when :drone_invalid   then "Skipped #{c} invalid drones:"
-        when :drone_path      then "Found #{c} invalid drone pathings (defaulted to dumb CCW):"
-        when :oneway          then "Found #{c} glitch one-way orientations (defaulted to down):"
-        when :thwump          then "Found #{c} glitch thwump orientations (defaulted to right):"
-        when :door_dir        then "Found #{c} glitch door orientations (defaulted to vertical):"
-        when :door_pos        then "Found #{c} non-grid-aligned doors which won't show:"
-        else key.to_s
-        end
-      }
-      warnings["=== Map #{i}  #{title}"] = lvl_warnings if warnings && !lvl_warnings.empty?
+      if warnings && !lvl_warnings.empty?
+        lvl_warnings.transform_keys!{ |key|
+          c = lvl_warnings[key].size
+          case key
+          when :missing_tiles   then "Map data missing. Is there a rogue new line?"
+          when :missing_objects then "Object data missing. Is it a tileset?"
+          when :nreality        then "NReality data found (ignoring)."
+          when :unknown_tile    then "Skipped #{c} unrecognized tiles:"
+          when :malformed_obj   then "Skipped #{c} malformed objects:"
+          when :unknown_obj     then "Skipped #{c} unrecognized objects:"
+          when :bad_params      then "Skipped #{c} objects with bad parameters:"
+          when :zsnap           then "Found #{c} Z-snapped objects:"
+          when :oob             then "Found #{c} out of bounds objects:"
+          when :oob_skip        then "Skipped #{c} out of bounds objects:"
+          when :launchpad       then "Normalized #{c} edited launchpads:"
+          when :drone_invalid   then "Skipped #{c} invalid drones:"
+          when :drone_path      then "Found #{c} invalid drone pathings (defaulted to dumb CCW):"
+          when :oneway          then "Found #{c} glitch one-way orientations (defaulted to down):"
+          when :thwump          then "Found #{c} glitch thwump orientations (defaulted to right):"
+          when :door_dir        then "Found #{c} glitch door orientations (defaulted to vertical):"
+          when :door_pos        then "Found #{c} non-grid-aligned doors which won't show:"
+          else key.to_s
+          end
+        }
+        warnings["=== Map #{i}  #{title}"] = lvl_warnings
+      end
 
       { title: title, author: author, comments: comments, tiles: tiles, objects: objects }
     }
@@ -630,7 +632,9 @@ module Map
   end
 
   # Convert an N v1.4 userlevels file to N++ map files, zipping them if there's more than one
-  def self.convert_nv14_file(filename: nil, content: nil, warnings: nil, burn_author: false, burn_comments: false)
+  # TODO: Handle levels with the same name: if prefix, no problem, otherwise add suffix
+  # TODO: Handle levels with empty name (right now, empty filename!)
+  def self.convert_nv14_file(filename: nil, content: nil, warnings: nil, prefix: false, burn_author: false, burn_comments: false)
     # Parse file contents for N v1.4 maps
     bench(:start)
     levels = parse_nv14_file(filename: filename, content: content, warnings: warnings)
@@ -639,7 +643,9 @@ module Map
     return { count: 0 } if levels.empty?
 
     # Dump found maps to binary files following N++ format
-    levels = levels.map{ |lvl|
+    prefix_len = (levels.count - 1).to_s.length
+    levels = levels.map.with_index{ |lvl, i|
+      lvl[:title].prepend('%0*d ' % [prefix_len, i]) if prefix
       title = lvl[:title]
       title << ' // ' << lvl[:author] if burn_author
       title << ' // ' << lvl[:comments] if burn_comments
@@ -688,7 +694,7 @@ module Map
       mode:      0,        # Playing mode (0 solo, 1 coop, 2 race)
       qt:        QT_UNSET, # Query type, normally unset to 37
       favs:      0,        # Favourite count, normally unset to 0
-      time:      ''        # Time of creation (10 bytes), normally unset to 0, I don't even know its format
+      time:      ''        # Time of creation (10 bytes), normally unset to 0 (it's 5 shorts: year, month, day, hour, minute)
     )
     output = "".b unless output
 

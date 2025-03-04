@@ -394,7 +394,40 @@ class Userlevel < ActiveRecord::Base
     get_data(uri, data, err, qt, page, mode)
   end
 
+  #----------------------------------------------------------------------------#
+  #                       USERLEVEL QUERY DOCUMENTATION                        |
+  #----------------------------------------------------------------------------#
+  # File structure                                                             |
+  #   Global header (48B)                                                      |
+  #   Map headers (44B each)                                                   |
+  #   Map data blocks                                                          |
+  #----------------------------------------------------------------------------#
+  # Global header structure                                                    |
+  #    16B - Query date in %Y-%m-%d-%H:%M format, seems approximate            |
+  #     4B - Map count                                                         |
+  #     4B - Page number                                                       |
+  #     4B - Type (0 = Level, 1 = Episode, 2 = Story). Always 0.               |
+  #     4B - Query type (0 - 37), see QT_ enum                                 |
+  #     4B - Game mode (0 = Solo, 1 = Coop, 2 = Race, 3 = HC)                  |
+  #     4B - Cache duration in seconds (usually 5 or 1200)                     |
+  #     4B - Max page size (usually 500, sometimes 25)                         |
+  #     4B - Unknown field (usually 0 or 5)                                    |
+  #----------------------------------------------------------------------------#
+  # Map header structure                                                       |
+  #     4B - Userlevel ID (first one is 22715)                                 |
+  #     4B - Author ID, -1 if not found                                        |
+  #    16B - Author name, truncated                                            |
+  #     4B - Favourite (++) count                                              |
+  #    16B - Date in %Y-%m-%d-%H:%M format                                     |
+  #----------------------------------------------------------------------------#
+  # Map data block structure                                                   |
+  #     4B - Block length, including 6B mini-header                            |
+  #     2B - Object count                                                      |
+  #   Rest - Zlib-compressed map data (see dump_level for documentation)       |
+  #----------------------------------------------------------------------------#
+
   # Parse binary file with userlevel collection received from N++'s server
+  # TODO: Simplify the parsing of the headers with proper pack statements, like in the Demo class
   def self.parse(levels, update = false)
     # Parse header (48B)
     return nil if levels.size < 48
@@ -434,7 +467,7 @@ class Userlevel < ActiveRecord::Base
       # Parse compressed data
       break if levels.size < offset + len
       map = Zlib::Inflate.inflate(levels[offset + 6...offset + len])
-      maps[i][:title] = parse_str(map[30...158])
+      maps[i][:title] = parse_str(map[30, 146])
       maps[i][:tiles] = map[176...1142].bytes.each_slice(42).to_a
       maps[i][:objects] = map[1222..-1].bytes.each_slice(5).to_a
       offset += len

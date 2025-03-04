@@ -641,14 +641,15 @@ rescue
   str
 end
 
-# Make a string safe for filenames, by:
-# - Leaving only printable ASCII characters
-# - Replacing Windows' reserved characters by underscores
-# - Replacing trailing period and spaces by underscores
+# Make a string extra safe for Windows filenames (more restrictive than UNIX ones):
+# - Convert to ASCII, replacing invalid and undefined chars by underscores
+# - Remove non-printable characters
+# - Replace reserved characters by underscores
+# - Replace trailing periods and spaces by underscores
 # TODO: Handle reserved names (e.g. CON, COM1, LPT1, etc)
-def sanitize_filename(str)
+def sanitize_filename(str, limit: FILENAME_LIMIT)
   reserved = "\"*/:<>?\\|"
-  to_ascii(str).tr(reserved, '_').sub(/[\.\s]+$/) { |s| '_' * s.length }
+  to_ascii(str).tr(reserved, '_').sub(/[\.\s]+$/) { |s| '_' * s.length }[0, limit]
 end
 
 # Sanitize a string so that it is safe within an SQL LIKE statement
