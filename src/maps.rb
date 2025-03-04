@@ -632,8 +632,6 @@ module Map
   end
 
   # Convert an N v1.4 userlevels file to N++ map files, zipping them if there's more than one
-  # TODO: Handle levels with the same name: if prefix, no problem, otherwise add suffix
-  # TODO: Handle levels with empty name (right now, empty filename!)
   def self.convert_nv14_file(filename: nil, content: nil, warnings: nil, prefix: false, burn_author: false, burn_comments: false)
     # Parse file contents for N v1.4 maps
     bench(:start)
@@ -642,24 +640,38 @@ module Map
     return if !levels
     return { count: 0 } if levels.empty?
 
-    # Dump found maps to binary files following N++ format
-    prefix_len = (levels.count - 1).to_s.length
-    levels = levels.map.with_index{ |lvl, i|
-      lvl[:title].prepend('%0*d ' % [prefix_len, i]) if prefix
-      title = lvl[:title]
-      title << ' // ' << lvl[:author] if burn_author
-      title << ' // ' << lvl[:comments] if burn_comments
+    # Edit level names:
+    # - Optionally append author name or comments.
+    # - Append index when a level name is duplicated (needed since they're also the filename)
+    # - Optionally prepend global index, to keep track of the original order
+    # - Truncate to 128 characters
+    count = levels.size
+    prefix_len = prefix ? (count - 1).to_s.length + 1 : 0
+    freq = Hash.new(0)
+    levels.each_with_index{ |lvl, i|
+      lvl[:title] = lvl[:title].strip[0, 128 - prefix_len - 5] # Truncate just level name, for keying the hash
+      lvl[:title] = "Untitled" if lvl[:title].empty?
+      sanitized = sanitize_filename(lvl[:title])
+      lvl[:title] << ' (%d)' % freq[sanitized] if (freq[sanitized] += 1) > 1
+      lvl[:title] << ' // ' << lvl[:author].strip if burn_author
+      lvl[:title] << ' // ' << lvl[:comments].strip if burn_comments
+      lvl[:title].prepend('%0*d ' % [prefix_len - 1, i]) if prefix
+      lvl[:title].slice!(128..) # Truncate again, so the full thing is within bounds
+    }
+
+    # Dump maps to binary files following N++ format
+    levels = levels.map{ |lvl|
       [
         sanitize_filename(lvl[:title]),
-        dump_level(lvl[:tiles], lvl[:objects], title: title)
+        dump_level(lvl[:tiles], lvl[:objects], title: lvl[:title])
       ]
     }.to_h
     bench(:step, "Dumping")
 
     # Return hash
-    return { count: 1, name: levels.keys.first, file: levels.values.first } if levels.size == 1
+    return { count: 1, name: levels.first[0], file: levels.first[1] } if count == 1
     {
-      count: levels.size,
+      count: count,
       name: sanitize_filename(filename).sub(/\..{,3}$/, '') + '.zip',
       file: zip(levels)
     }

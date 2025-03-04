@@ -1861,11 +1861,14 @@ end
 def send_convert(event)
   # Parse message
   msg = parse_message(event)
-  nv14 = !!msg[/n?v1\.?4/i]
-  nv2 = !!msg[/n?v2/i]
-  prefix = !!msg[/\bprefix\b/i]
+  nv14     = !!msg[/n?v1\.?4/i]       # Provided maps are from N v1.4
+  nv2      = !!msg[/n?v2/i]           # Provided maps are from N v2
+  prefix   = !!msg[/\bprefix\b/i]     # Numeric prefix should be prepended to map titles
+  author   = !!msg[/\bauthors?\b/i]   # Author name should be appended to level titles
+  comments = !!msg[/\bcomments?\b/i]  # Comments / level type should be apprended to level titles
   perror("nv2 map conversion is not supported yet") if nv2
   attachments = fetch_attachments(event)
+  attachments = { 'vehe3.txt' => File.read('vehe3.txt') }
   count = attachments.size
   perror("You need to attach at least one userlevels text file!") if attachments.empty?
   resp = ""
@@ -1877,7 +1880,7 @@ def send_convert(event)
   attachments.each{ |name, body|
     resp << mdhdr3("═══ § Converting file: #{verbatim(name)}\n")
     warnings = {}
-    res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings, prefix: prefix)
+    res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings, prefix: prefix, burn_author: author, burn_comments: comments)
 
     # Error parsing file
     if !res
