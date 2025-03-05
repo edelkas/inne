@@ -1887,14 +1887,14 @@ def send_convert(event)
     err_msg = <<~ERR.gsub(/CONT\n/, ' ')
       # #{title}
       ### ═══ 📜 Instructions
-      You need to provide valid N v1.4 map data together with the convert command, by:
+      You need to provide valid N v1.4 map data together with the convert command, by either:
       * Attaching one or more userlevel text files.
       * Pasting the data for _one_ level in the message directly, if it fits.
-      You can even combine both ways.
+      You can even combine both methods.
       ### ═══ 💾 Map data format
       For maximum safety, map data should follow the usual v1.4 format:
       #{map_fmt} With **one** map per line (metadata fields can be empty).
-      -# (The scanner is actually way more flexible, and normally you get away with justCONT
+      -# (The scanner is actually way more flexible, and normally you can get away with justCONT
       passing the raw map data as returned by Ned, with multiple maps per line, etc.CONT
       But the more you depart from these guidelines, the more likely it is thatCONT
       scanning could fail or be incorrect.)
