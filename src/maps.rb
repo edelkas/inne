@@ -574,7 +574,7 @@ module Map
     start = content.rindex('&userdata=')
 
     # Parse each map
-    maps = content[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+?)(?:#|$)/m)
+    maps = content[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+?)(?=#|\$|$)/m)
     count = maps.count
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)

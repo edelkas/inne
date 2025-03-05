@@ -1868,7 +1868,6 @@ def send_convert(event)
   comments = !!msg[/\bcomments?\b/i]  # Comments / level type should be apprended to level titles
   perror("nv2 map conversion is not supported yet") if nv2
   attachments = fetch_attachments(event)
-  attachments = { 'vehe3.txt' => File.read('vehe3.txt') }
   count = attachments.size
   perror("You need to attach at least one userlevels text file!") if attachments.empty?
   resp = ""
