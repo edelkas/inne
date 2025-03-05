@@ -293,6 +293,8 @@ ID_PATTERNS = {
 # Input
 NAME_PATTERN = /(for|of) (.*)[\.\?]?/i
 MAX_ENTRIES  = 20 # maximum number of entries on methods with user input, to avoid spam
+NV14_USERLEVEL_PATTERN = /\$(.*?)#(.*?)#(.*?)#(.+?)(?=#|\$|$)/m
+NV14_MAP_PATTERN = /([^#\$\s`]+?)\|([^#\$]+?)(?=#|\$|\s|`|$)/
 
 # Output
 NUM_ENTRIES     = 20   # number of entries to show on most methods

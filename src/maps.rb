@@ -563,8 +563,9 @@ module Map
     [tiles, objects]
   end
 
-  # Parse an N v1.4 userlevels file (or data buffer)
-  # TODO: Support a more flexible format, such as the one returned by Ned line by line
+  # Parse an N v1.4 userlevels file (or data buffer). Two formats are tried:
+  #   - First, the standard $title#author#comments#tiles|objects# format
+  #   - If no results, look for map data only, but this should ideally be avoided.
   def self.parse_nv14_file(filename: nil, content: nil, warnings: nil)
     # Read file and skip till map data begins
     if !content
@@ -574,8 +575,11 @@ module Map
     start = content.rindex('&userdata=')
 
     # Parse each map
-    maps = content[start .. -1].scan(/\$(.*?)#(.*?)#(.*?)#(.+?)(?=#|\$|$)/m)
+    maps = content[start .. -1].scan(NV14_USERLEVEL_PATTERN)
     count = maps.count
+    maps = content[start .. -1].scan(NV14_MAP_PATTERN).map{ |tile_data, object_data|
+      ['', '', '', tile_data + '|' + object_data]
+    } if count == 0
     maps = maps.each_with_index.map{ |map_data, i|
       dbg("Parsing N v1.4 map #{"%-3d" % (i + 1)} / #{count}...", progress: true)
       lvl_warnings = Hash.new{ |hash, key| hash[key] = [] }

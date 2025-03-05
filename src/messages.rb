@@ -1857,7 +1857,9 @@ rescue => e
   lex(e, "Error fetching aliases.", event: event)
 end
 
-# Convert N v1.4 maps to N++ maps
+# Convert N v1.4 maps to N++ maps. Maps can be supplied by either:
+# - Attaching one or more userlevel files, format in the standard way.
+# - Pasting valid map data directly within the command in Discord.
 def send_convert(event)
   # Parse message
   msg = parse_message(event)
@@ -1867,37 +1869,55 @@ def send_convert(event)
   author   = !!msg[/\bauthors?\b/i]   # Author name should be appended to level titles
   comments = !!msg[/\bcomments?\b/i]  # Comments / level type should be apprended to level titles
   perror("nv2 map conversion is not supported yet") if nv2
-  attachments = fetch_attachments(event)
+
+  # Map data format string
+  col1 = ANSI.yellow
+  col2 = ANSI.cyan
+  col3 = ANSI.magenta
+  header = "#{col1}title#{col3}##{col1}author#{col3}##{col1}comments#{col3}"
+  map_data = "#{col2}tiles#{col3}|#{col2}objects#{col3}"
+  map_fmt = format_block("#{col3}$#{header}##{map_data}#")
+
+  # Fetch map data
+  map_data = msg[NV14_USERLEVEL_PATTERN] || msg[NV14_MAP_PATTERN]
+  file = !map_data
+  attachments = !file ? { 'conversion' => map_data } : fetch_attachments(event)
+  if attachments.empty?
+    err_msg = <<~ERR
+      You need to provide valid N v1.4 map data together with the convert command, by either:
+      * Attaching at least one userlevels text file.
+      * Pasting the data for _one_ level in the message directly, if it fits.
+      To ensure maximum compatibility, map data should follow the following format, one map per line (metadata fields can be empty):
+      #{map_fmt} You _might_ be able to get away by just passing the raw map data, as returned by Ned. But it's harder to scan this way.
+    ERR
+    perror(err_msg)
+  end
   count = attachments.size
-  perror("You need to attach at least one userlevels text file!") if attachments.empty?
   resp = ""
   files = []
 
   # Parse files
   resp << mdhdr1("⚙ __Converter: N v1.4 ➤ N++__\n")
-  resp << "Found **#{count < 10 ? EMOJI_NUMBERS[count] : count}** #{'file'.pluralize(count)}.\n"
+  resp << "Found **#{count < 10 ? EMOJI_NUMBERS[count] : count}** #{'file'.pluralize(count)}.\n" if file
   attachments.each{ |name, body|
-    resp << mdhdr3("═══ § Converting file: #{verbatim(name)}\n")
+    header = file ? "file: #{verbatim(name)}" : 'supplied map data:'
+    resp << mdhdr3("═══ § Converting #{header}\n")
     warnings = {}
     res = Map.convert_nv14_file(filename: name, content: body, warnings: warnings, prefix: prefix, burn_author: author, burn_comments: comments)
 
     # Error parsing file
     if !res
       resp << mdsub("📊 Status: Error ❌\n")
-      resp << mdsub("Internal error converting the file. Please report to Eddy.\n")
+      resp << mdsub("Internal error converting the #{file ? 'file' : 'map'}. Please report to Eddy.\n")
       next
     end
 
     # No maps found in file
     if res[:count] == 0
       resp << mdsub("📊 Status: Error ❌\n")
-      resp << mdsub("No maps found in the file. Ensure they follow the format:\n")
-      col1 = ANSI.yellow
-      col2 = ANSI.cyan
-      col3 = ANSI.magenta
-      header = "#{col1}title#{col3}##{col1}author#{col3}##{col1}comments#{col3}"
-      map_data = "#{col2}tiles#{col3}|#{col2}objects#{col3}"
-      resp << format_block("#{col3}$#{header}##{map_data}#") + "\n"
+      resp << mdsub("No valid map data found. Ensure it follows this format, one map per line:\n")
+      resp << map_fmt + "\n"
+      resp << mdsub("You _might_ be able to get away by just passing the raw map data, but this is safer.\n")
       next
     end
 
@@ -1921,7 +1941,11 @@ def send_convert(event)
         }.join
       }.join("\n\n")
       filename = res[:name].sub(/\.zip$/, '') + '_warnings.txt'
-      files << tmp_file(warnings, filename, binary: false)
+      if count == 1 && checks <= 20 && (resp + warnings).length <= DISCORD_CHAR_LIMIT - 50
+        resp << format_block(warnings)
+      else
+        files << tmp_file(warnings, filename, binary: false)
+      end
     end
   }
 
