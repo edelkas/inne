@@ -1869,6 +1869,7 @@ def send_convert(event)
   author   = !!msg[/\bauthors?\b/i]   # Author name should be appended to level titles
   comments = !!msg[/\bcomments?\b/i]  # Comments / level type should be apprended to level titles
   perror("nv2 map conversion is not supported yet") if nv2
+  title = "⚙ __Converter: N v1.4 ➤ N++__"
 
   # Map data format string
   col1 = ANSI.yellow
@@ -1880,15 +1881,29 @@ def send_convert(event)
 
   # Fetch map data
   map_data = msg[NV14_USERLEVEL_PATTERN] || msg[NV14_MAP_PATTERN]
-  file = !map_data
-  attachments = !file ? { 'conversion' => map_data } : fetch_attachments(event)
+  attachments = fetch_attachments(event)
+  attachments['msg_map_data'] = map_data if map_data
   if attachments.empty?
-    err_msg = <<~ERR
-      You need to provide valid N v1.4 map data together with the convert command, by either:
-      * Attaching at least one userlevels text file.
+    err_msg = <<~ERR.gsub(/CONT\n/, ' ')
+      # #{title}
+      ### ═══ 📜 Instructions
+      You need to provide valid N v1.4 map data together with the convert command, by:
+      * Attaching one or more userlevel text files.
       * Pasting the data for _one_ level in the message directly, if it fits.
-      To ensure maximum compatibility, map data should follow the following format, one map per line (metadata fields can be empty):
-      #{map_fmt} You _might_ be able to get away by just passing the raw map data, as returned by Ned. But it's harder to scan this way.
+      You can even combine both ways.
+      ### ═══ 💾 Map data format
+      For maximum safety, map data should follow the usual v1.4 format:
+      #{map_fmt} With **one** map per line (metadata fields can be empty).
+      -# (The scanner is actually way more flexible, and normally you get away with justCONT
+      passing the raw map data as returned by Ned, with multiple maps per line, etc.CONT
+      But the more you depart from these guidelines, the more likely it is thatCONT
+      scanning could fail or be incorrect.)
+      ### ═══ 🔧 Options
+      The following settings can also be optionally specified:
+      * **prefix** - Add numerical prefix before titles, to keep the original map order.CONT
+      Ideal for later tab building.
+      * **author** - Append author name to map titles.
+      * **comments** - Append comments to map titles.
     ERR
     perror(err_msg)
   end
@@ -1897,9 +1912,11 @@ def send_convert(event)
   files = []
 
   # Parse files
-  resp << mdhdr1("⚙ __Converter: N v1.4 ➤ N++__\n")
-  resp << "Found **#{count < 10 ? EMOJI_NUMBERS[count] : count}** #{'file'.pluralize(count)}.\n" if file
+  resp << mdhdr1(title) << "\n"
+  resp << "Found **#{count < 10 ? EMOJI_NUMBERS[count] : count}** #{'source'.pluralize(count)}.\n"
   attachments.each{ |name, body|
+    file = name != 'msg_map_data'
+    name = 'conversion' if !file
     header = file ? "file: #{verbatim(name)}" : 'supplied map data:'
     resp << mdhdr3("═══ § Converting #{header}\n")
     warnings = {}
