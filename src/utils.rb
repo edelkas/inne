@@ -2008,7 +2008,20 @@ end
 #   - Floats will also be formatted with 3 decimals
 # Additionally, all entries will be padded.
 # An entry could also be the symbol :sep, will will insert a separator in that row
-def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy: false, double: false, hor_pad: true, color: nil)
+def make_table(
+    rows,            # List of rows, each being an array of fields
+    header = nil,    # Add a header to the table as a row with a single column
+    sep_x  = nil,    # Explicitly set the horizontal border character
+    sep_y  = nil,    # Explicitly set the vertical border character
+    sep_i  = nil,    # Explicitly set the intersection character
+    heavy:   false,  # Use the heavy variants of the table borders
+    double:  false,  # Use the double-lined variants of the table borders
+    hor_pad: true,   # Add one space between the cell border and its contents
+    color_b: nil,    # Color for the table border
+    color_h: nil,    # Color for the header text
+    color_1: nil,    # Color for the even rows' contents
+    color_2: nil     # Color for the odd rows' contents
+  )
   # Convert all non-integer numbers to floats
   rows.each{ |r|
     next unless r.is_a?(Array)
@@ -2042,36 +2055,51 @@ def make_table(rows, header = nil, sep_x = nil, sep_y = nil, sep_i = nil, heavy:
   clean_down = mid_left  + widths.map{ |w| hor * (w + (hor_pad ? 2 : 0)) }.join(up_mid)   + mid_right
 
   # Optionally, add color
+  color = color_h || color_b || color_1 || color_2
+  clear_line = (color ? ANSI.clear : '') + "\n"
   if color
-    ver        = color + ver        + ANSI.clear
-    sep_up     = color + sep_up     + ANSI.clear
-    sep_mid    = color + sep_mid    + ANSI.clear
-    sep_down   = color + sep_down   + ANSI.clear
-    clean_up   = color + clean_up   + ANSI.clear
-    clean_mid  = color + clean_mid  + ANSI.clear
-    clean_down = color + clean_down + ANSI.clear
+    color_h = ANSI.none if !color_h
+    color_b = ANSI.none if !color_b
+    color_1 = ANSI.none if !color_1
+    color_2 = ANSI.none if !color_2
+
+    ver        = color_b + ver
+    sep_up     = color_b + sep_up
+    sep_mid    = color_b + sep_mid
+    sep_down   = color_b + sep_down
+    clean_up   = color_b + clean_up
+    clean_mid  = color_b + clean_mid
+    clean_down = color_b + clean_down
+  else
+    color_h, color_b, color_1, color_2 = [''] * 4
   end
 
-  # Build table
+  # Build header
   table = ''
-  if !header.nil?
+  if !!header
     header = ' ' + header + ' '
-    table << clean_up + "\n"
-    table << ver + ANSI.bold + header.center(length - 2, '░') + ANSI.clear + ver + "\n"
-    table << clean_down + "\n"
+    table << clean_up + clear_line
+    table << ver + color_h + ANSI.bold + header.center(length - 2, '░') + ver + clear_line
+    table << clean_down + clear_line
   else
-    table << sep_up + "\n"
+    table << sep_up + clear_line
   end
+
+  # Build table rows
+  even = true
+  sp = hor_pad ? ' ' : ''
   rows.each{ |r|
-    next table << sep_mid + "\n" if r == :sep
+    next table << sep_mid + clear_line if r == :sep
+    clr = color ? (even ? color_1 : color_2) : ''
     r.each_with_index{ |s, i|
       sign = s.is_a?(Numeric) ? '' : '-'
       fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
-      table << ver + (hor_pad ? ' ' : '') + "%#{sign}#{widths[i]}#{fmt}" % s + (hor_pad ? ' ' : '')
+      table << ver + sp + "#{clr}%#{sign}#{widths[i]}#{fmt}" % s + sp
     }
-    table << ver + "\n"
+    table << ver + clear_line
+    even = !even
   }
-  table << sep_down
+  table << sep_down + clear_line
 
   return table
 end

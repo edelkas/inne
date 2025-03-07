@@ -2888,7 +2888,7 @@ class Demo < ActiveRecord::Base
   include Demoish
   belongs_to :archive, foreign_key: :id
 
-  HEADER_SIZE = 26 # CLLLLLLC
+  HEADER_SIZE = 26 # cllllllc
   Header = Struct.new(:type, :size, :version, :framecount, :id, :mode, :unknown, :mask)
 
   def self.encode(replay)

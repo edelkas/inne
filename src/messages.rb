@@ -1177,11 +1177,15 @@ rescue => e
   lex(e, "Error finding differences.", event: event)
 end
 
-def send_mappacks(event)
+def send_mappacks(event, page: nil)
   msg = parse_message(event)
   short = !!msg[/short/i]
+  count = Mappack.count
   counts = MappackLevel.group(:mappack_id).count
-  list = Mappack.all.order(:date).map{ |m|
+  page_size = 10
+  page = parse_page(msg, page, false, event.message.components)
+  pag = compute_pages(count, page, page_size)
+  list = Mappack.all.order(date: :desc).offset(pag[:offset]).limit(page_size).map{ |m|
     fields = []
     fields << m.code.upcase
     fields << m.name.to_s unless short
@@ -1197,7 +1201,10 @@ def send_mappacks(event)
   header << 'Date'
   header << 'Levels'
   rows = [header, :sep, *list]
-  list.size < 20 ? event << format_block(make_table(rows)) : send_file(event, make_table(rows), 'mappacks.txt')
+  str = mdhdr1("📦 __Mappacks__\n") + "There are #{count} supported mappacks. Write their 3 letter code to use them in functions."
+  str << format_block(make_table(rows))
+  components = interaction_add_button_navigation_short(nil, pag[:page], pag[:pages], 'send_mappacks', wrap: false)
+  send_message(event, content: str, components: components)
 rescue => e
   lex(e, 'Error sending mappack list.')
 end
@@ -2090,9 +2097,10 @@ def send_tip(event, page: nil)
     "You are welcome to peruse it and, if you develop enough understanding of it, contribute to it as well."
   ]
   msg = parse_message(event)
-  tip = page ? (parse_page(msg, page, false, event.message.components) - 1) % tips.size : rand(tips.size)
-  str = mdtext("🔎 __Did you know...__\n", header: 1) + tips[tip]
-  components = interaction_add_button_navigation_short(nil, tip + 1, tips.size, 'send_tip')
+  page = parse_page(msg, page, false, event.message.components, default: rand(tips.size) + 1)
+  pag = compute_pages(tips.size, page, 1)
+  str = mdtext("🔎 __Did you know...__\n", header: 1) + tips[pag[:page] - 1]
+  components = interaction_add_button_navigation_short(nil, pag[:page], pag[:pages], 'send_tip', wrap: true)
   send_message(event, content: str, components: components)
 end
 
@@ -2188,7 +2196,7 @@ def respond(event)
   return hello(event)                if msg =~ /\bhello\b/i || msg =~ /\bhi\b/i
   return thanks(event)               if msg =~ /\bthank you\b/i || msg =~ /\bthanks\b/i
   return send_tip(event)             if msg =~/\btip\b/i
-  return send_convert(event)         if msg =~ /\bconvert\b/
+  return send_convert(event)         if msg =~ /\bconvert\b/i
 
   # If we get to this point, no command was executed
   action_dec('commands')

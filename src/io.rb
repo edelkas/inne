@@ -30,7 +30,7 @@ end
 # This is used mainly for page navigation. We determine the current page,
 # and we also determine whether we need to add an offset to it (to navigate)
 # or reset it (when a different component, e.g. a select menu, was activated).
-def parse_page(msg, offset = 0, reset = false, components = nil)
+def parse_page(msg, offset = 0, reset = false, components = nil, default: 1)
   return 1 if reset
   page = nil
   components.to_a.each{ |row|
@@ -38,7 +38,7 @@ def parse_page(msg, offset = 0, reset = false, components = nil)
       page = component.label.to_s[/\d+/i].to_i if component.custom_id.to_s == 'button:nav:page'
     }
   }
-  (page || msg[/page:?[\s\*]*(\d+)/i, 1] || 1).to_i + offset.to_i
+  (page || msg[/page:?[\s\*]*(\d+)/i, 1] || default).to_i + offset.to_i
 rescue
   1
 end

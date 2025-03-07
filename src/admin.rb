@@ -962,10 +962,16 @@ end
 def send_logs(event, page: nil)
   lines = File.readlines(PATH_LOG_FILE).reverse.map{ |l|
     next nil if l.length <= 34
-    l.insert(33, ANSI.esc(ANSI::NONE))
-     .insert(25, ANSI.esc(ANSI::MAGENTA))
-     .prepend(ANSI.esc(ANSI::YELLOW))
-     .chomp
+    type = l[/(?<!^)\[(.*?)\]/, 1]
+    color = case type
+    when 'ERROR'
+      ANSI.red
+    when 'WARN'
+      ANSI.yellow
+    else
+      ANSI.none
+    end
+    l.insert(33, ANSI.none).insert(25, color).prepend(ANSI.blue).chomp
   }.compact
   pager(event, page, header: "Logs", func: 'send_logs', list: lines)
 rescue => e

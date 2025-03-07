@@ -184,7 +184,9 @@ end
 
 
 # ActionRow builder with Buttons for standard page navigation
-def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000, func: nil)
+def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000, func: nil, force: false)
+  view = Discordrb::Webhooks::View.new if !view
+  return view if pages == 1 && !force
   interaction_add_navigation(
     view,
     labels:   ["❙❮", "❮", "#{page} / #{pages}", "❯", "❯❙"],
@@ -200,12 +202,24 @@ def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 100000
 end
 
 # ActionRow builder with Buttons for standard page navigation
-def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil)
+#   - func:  The name of the function this button will call
+#   - wrap:  Whether buttons will wrap once you get to the end of the list, or be disabled instead
+#   - force: Force buttons to show even if there's a single page
+def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil, wrap: false, force: false)
+  view = Discordrb::Webhooks::View.new if !view
+  return view if pages == 1 && !force
+  offset_left = wrap && page == 1 ? 1000000000 : -1
+  offset_right = wrap && page == pages ? -1000000000 : 1
   suf = func ? ':' + func : ''
   interaction_add_navigation_short(
     view,
-    labels: ["❮", "#{page} / #{pages}", "❯"],
-    ids: ["button:nav:-1#{suf}", "button:nav:page", "button:nav:1#{suf}"]
+    labels:   ["❮", "#{page} / #{pages}", "❯"],
+    disabled: [wrap ? false : page == 1, true, wrap ? false : page == pages],
+    ids:      [
+      "button:nav:#{offset_left}#{suf}",
+      "button:nav:page",
+      "button:nav:#{offset_right}#{suf}"
+    ]
   )
 end
 
