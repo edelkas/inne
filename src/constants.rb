@@ -16,7 +16,7 @@ BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
 DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
-DEBUG          = false # Breakpoint right after loading the bot
+DEBUG          = true  # Breakpoint right after loading the bot
 
 # Test specific features
 TEST_LOTD      = false # Post lotd on startup
@@ -172,7 +172,6 @@ DIR_TEST        = './test'
 
 DIR_UTILS       = './util'
 PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
-PATH_SHA1       = "#{DIR_UTILS}/sha1"
 
 DIR_FONTS       = "#{DIR_UTILS}/fonts"
 
@@ -486,8 +485,6 @@ INTEGRITY_CHECKS = true            # Verity replay security hashes
 WARN_INTEGRITY   = true            # Warn when players submit scores with invalid hashes
 WARN_VERSION     = false           # Warning for score submissions with old map versions
 LOCAL_LOGIN      = true            # Try to login user ourselves if Metanet fails
-HASH_INPUT_FN    = 'hash_in'       # Filename for SHA1 util to read
-HASH_OUTPUT_FN   = 'hash_out'      # Filename for SHA1 util to write
 
 # <---------------------------------------------------------------------------->
 # <------                        GAME VARIABLES                          ------>

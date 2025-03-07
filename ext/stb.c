@@ -1,13 +1,10 @@
 // This code is directly taken (and slightly modified) from the great STB:
 // https://github.com/nothings/stb/
 
-#include <assert.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <stdbool.h>
 
-#define LENGTH 128 * 1024
 #define stb_big32(c) (((c)[0]<<24) + (c)[1]*65536 + (c)[2]*256 + (c)[3])
-
 
 static void stb__sha1(unsigned char *chunk, unsigned int h[5])
 {
@@ -54,7 +51,7 @@ static void stb__sha1(unsigned char *chunk, unsigned int h[5])
    h[4] += e;
 }
 
-void stb_sha1(unsigned char output[20], unsigned char *buffer, unsigned int len)
+bool stb_sha1(unsigned char output[20], unsigned char *buffer, unsigned int len)
 {
    unsigned char final_block[128];
    unsigned int end_start, final_len, j;
@@ -76,8 +73,8 @@ void stb_sha1(unsigned char output[20], unsigned char *buffer, unsigned int len)
 
    final_len = end_start + 128;
 
-   assert(end_start + 128 >= len+9);
-   assert(end_start < len || len < 64-9);
+   if (!(end_start + 128 >= len+9) || !(end_start < len || len < 64-9))
+      return false;
 
    j = 0;
    if (end_start > len)
@@ -94,7 +91,8 @@ void stb_sha1(unsigned char output[20], unsigned char *buffer, unsigned int len)
    final_block[j++] = len >> 13;
    final_block[j++] = len >>  5;
    final_block[j++] = len <<  3;
-   assert(j == 128 && end_start + j == final_len);
+   if (!(j == 128 && end_start + j == final_len))
+      return false;
 
    for (j=0; j < final_len; j += 64) {
       if (j+64 >= end_start+64)
@@ -109,36 +107,6 @@ void stb_sha1(unsigned char output[20], unsigned char *buffer, unsigned int len)
       output[i*4 + 2] = h[i] >>  8;
       output[i*4 + 3] = h[i] >>  0;
    }
-}
 
-int main(int argc, char* argv[]){
-  if (argc < 3) {
-    printf("Filenames not supplied.\n");
-    exit(1);
-  }
-
-  FILE *fp = fopen(argv[1], "rb");
-  if (fp == NULL) {
-      printf("File to hash not found.\n");
-      exit(1);
-  }
-
-  // Read map data
-  unsigned char *buf = (unsigned char*) malloc(LENGTH);
-  unsigned int len = fread(buf, 1, LENGTH, fp);
-  fclose(fp);
-
-  // Compute SHA1 hash
-  unsigned char *hash = (unsigned char*) malloc(20);
-  stb_sha1(hash, buf, len);
-
-  // Write to file
-  fp = fopen(argv[2], "wb");
-  fwrite(hash, 1, 20, fp);
-  fclose(fp);
-
-  // Cleanup
-  free(buf);
-  free(hash);
-  return 0;
+   return true;
 }

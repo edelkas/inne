@@ -122,6 +122,13 @@ require_relative 'messages.rb'
 require_relative 'admin.rb'
 require_relative 'threads.rb'
 
+# Import our own native C extension
+begin
+  require_relative '../lib/cinne'
+rescue LoadError
+  err("Failed to load C-inne, is it built?")
+end
+
 # We monkey patch a few core classes (Enumerable, Array, boolean classes...)
 # and several of the gems (ActiveRecord, Discordrb, Webrick...)
 # See the MonkeyPatch module in models.rb for the details
@@ -152,6 +159,7 @@ def initialize_vars
   $memory_warned   = false
   $memory_warned_c = false
   $linux           = RbConfig::CONFIG['host_os'].match?(/linux/i)
+  $c_inne          = !!defined?(C_INNE)
   $mutex           = { ntrace: Mutex.new, tmp_msg: Mutex.new }
   $threads         = []
   $main_queue      = Queue.new

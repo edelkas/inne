@@ -1,6 +1,7 @@
 *.db
 *.swp
 *.sql
+*.so
 .byebug_history
 Gemfile.lock
 /.ruby-lsp
@@ -10,3 +11,4 @@ Gemfile.lock
 /bin
 /util/hash_*
 /.bundle
+/ext/Makefile

@@ -14,8 +14,8 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Add native C extension to the README documentation.
 - We can simplify paging: parse_page and compute_pages should be merged, also only pass the event itself instead of the message and the components separately, and use kwargs. Think about how to use the pager, but in a more flexible way that works for more contexts.
-- Make a native extension for some functions, notably SHA1 hashing.
 - Extend diff command to any highscoreable using the archives table, allowing to also specify a date.
 - Persist task counters in db (using task_ prefix). Don't do it constantly, perhaps only sum them when shutting down.
 - Migrate highscoreable_type to integers from 0 to 2.
