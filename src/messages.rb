@@ -1469,9 +1469,9 @@ def fix_episode(event)
 
   # Get player's episode and level scores from the server
   ep_score = player.get_score(ep, discord: true)
-  return if !score
+  return if !ep_score
   ep_replay = player.get_replay(ep_score[:replay_id], discord: true)
-  return if !replay
+  return if !ep_replay
   # TODO: Do these in parallel, together with running NSim (using .join on the threads)
   lvl_scores = ep.levels.map{ |lvl| player.get_score(lvl) }
 

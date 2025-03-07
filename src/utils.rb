@@ -321,6 +321,32 @@ end
 # <------                          NETWORKING                            ------>
 # <---------------------------------------------------------------------------->
 
+# Get the required server endpoint to perform the desired request to N++ server
+def npp_uri(type, args = {})
+  # Build path component.
+  path = METANET_PATH
+  request = case type
+  when :scores
+    METANET_GET_SCORES
+  when :replay
+    METANET_GET_REPLAY
+  when :levels
+    METANET_GET_LEVELS
+  when :submit
+    METANET_POST_SCORE
+  else
+    return
+  end
+  path << '/' << request
+
+  # Build query component. We always add 2 default attributes.
+  args.merge!({ app_id: APP_ID, steam_auth: '' })
+  query = URI.encode_www_form(args)
+
+  # Build full URI
+  URI::HTTPS.build(host: METANET_HOST, path: path, query: query)
+end
+
 # Make a request to N++'s server.
 # Since we need to use an open Steam ID, the function goes through all
 # IDs until either an open is found (and stored), or the list ends and we fail.
@@ -337,13 +363,13 @@ def get_data(uri_proc, data_proc, err, *vargs, fast: false)
   i = 0
   initial_id = GlobalProperty.get_last_steam_id
   response = Net::HTTP.get_response(uri_proc.call(initial_id, *vargs))
-  while response.body == INVALID_RESP
+  while response.body == METANET_INVALID_RES
     GlobalProperty.update_last_steam_id(fast)
     i += 1
     break if GlobalProperty.get_last_steam_id == initial_id || i > count
     response = Net::HTTP.get_response(uri_proc.call(GlobalProperty.get_last_steam_id, *vargs))
   end
-  return nil if response.body == INVALID_RESP
+  return nil if response.body == METANET_INVALID_RES
   raise "502 Bad Gateway" if response.code.to_i == 502
   GlobalProperty.activate_last_steam_id
   data_proc.call(response.body)

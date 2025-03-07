@@ -56,7 +56,15 @@ OFFLINE_MODE   = false   # Disables most intensive online functionalities
 OFFLINE_STRICT = false   # Disables all online functionalities of outte
 RETRIES        = 50      # Redownload attempts for boards / demos
 ATTEMPT_LIMIT  = 5       # Redownload attempts in general (bigger files)
-INVALID_RESP   = '-1337' # N++'s server response when Steam ID is inactive
+
+# Metanet's N++ server endpoints
+METANET_HOST        = 'dojo.nplusplus.ninja'
+METANET_PATH        = '/prod/steam'
+METANET_GET_SCORES  = 'get_scores'
+METANET_GET_REPLAY  = 'get_replay'
+METANET_GET_LEVELS  = 'query_levels'
+METANET_POST_SCORE  = 'submit_score'
+METANET_INVALID_RES = '-1337' # N++'s server response when Steam ID is inactive
 
 FAST_MANUAL = true # Only use active Steam IDs for manual queries, for speed
 FAST_PERIOD = 7    # Days old until a Steam ID is marked as inactive

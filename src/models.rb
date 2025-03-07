@@ -382,8 +382,8 @@ module Downloadable
   end
 
   def scores_uri(steam_id, qt: 0)
-    klass = self.class == Userlevel ? "level" : self.class.to_s.downcase
-    URI.parse("https://dojo.nplusplus.ninja/prod/steam/get_scores?steam_id=#{steam_id}&steam_auth=&#{klass}_id=#{self.id.to_s}&qt=#{qt}")
+    id_key = (is_userlevel? ? 'level' : self.class.to_s.downcase) + '_id'
+    npp_uri(:scores, { steam_id: steam_id, id_key => id, qt: qt })
   end
 
   # Download the highscoreable's scores from Metanet's server
@@ -418,7 +418,7 @@ module Downloadable
       end
 
       # outte++'s isn't active
-      if res && res.body == INVALID_RESP
+      if res && res.body == METANET_INVALID_RES
         if retries != 0 || !stop
           res = nil
         else
@@ -651,7 +651,7 @@ module Downloadable
     if !res
       err("Failed to submit score by #{pname} to #{fname} (bad post-form).", discord: log)
       return
-    elsif res == INVALID_RESP
+    elsif res == METANET_INVALID_RES
       err("Failed to submit score by #{pname} to #{fname} (inactive Steam ID).", discord: log)
       return
     end
@@ -1991,7 +1991,7 @@ class Player < ActiveRecord::Base
     # Forward request to Metanet
     action_inc('http_login')
     res = forward(req)
-    invalid = res.nil? || res == INVALID_RESP
+    invalid = res.nil? || res == METANET_INVALID_RES
     raise 'Invalid response' if invalid && !LOCAL_LOGIN
     locally = false
 
@@ -2059,20 +2059,27 @@ class Player < ActiveRecord::Base
 
   # Perform a request to N++'s server using this player's Steam ID
   def request(type, log: true, discord: false)
-    case type
+    res = case type
     when :scores
-      res = Net::HTTP.get_response(scores_uri(steam_id))
-      if !res || !(200..299).include?(res.code.to_i)
-        err("HTTP request failed (#{!!res ? res.code : '?'})") if log
-        perror("Failed to fetch scores from server, try again later") if discord
-        return
-      end
-      if res.body == INVALID_RESP
-        err("Steam ID #{steam_id} is inactive") if log
-        perror("Your Steam account isn't active, please open N++") if discord
-        return
-      end
+      Net::HTTP.get_response(scores_uri(steam_id))
+    when :replay
+
+    else
+      return
     end
+
+    if !res || !(200..299).include?(res.code.to_i)
+      err("HTTP request for #{type} failed (#{!!res ? res.code : '?'})") if log
+      perror("Failed to query Metanet score, try again later") if discord
+      return
+    end
+
+    if res.body == METANET_INVALID_RES
+      err("Steam ID #{name}:#{steam_id} is inactive") if log
+      perror("Your Steam account isn't active, please open N++") if discord
+      return
+    end
+
     res
   end
 
@@ -2095,7 +2102,7 @@ class Player < ActiveRecord::Base
     return { score: score['my_score'] / 1000.0, rank: score['my_rank'], replay_id: score['my_replay_id'] } if score
 
     # No personal score found
-    err("Player #{metanet_id} has no server score in #{h.name}") if log
+    err("Player #{name}:#{metanet_id} has no server score in #{h.name}") if log
     perror("#{format_name} has no #{h.name} score in the server") if discord
     nil
   end
@@ -2939,7 +2946,7 @@ class Demo < ActiveRecord::Base
   end
 
   def uri(steam_id)
-    URI.parse("https://dojo.nplusplus.ninja/prod/steam/get_replay?steam_id=#{steam_id}&steam_auth=&replay_id=#{archive.replay_id}&qt=#{qt}")
+    npp_uri(:replay, { steam_id: steam_id, replay_id: archive.replay_id, qt: qt })
   end
 
   def parse(replay)
