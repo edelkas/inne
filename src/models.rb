@@ -2058,22 +2058,27 @@ class Player < ActiveRecord::Base
   end
 
   # Perform a request to N++'s server using this player's Steam ID
-  def request(type, log: true, discord: false)
-    res = case type
-    when :scores
-      Net::HTTP.get_response(scores_uri(steam_id))
-    when :replay
-
-    else
+  # TODO: Might be a good idea to clean up get_data by calling this function,
+  #       though obviously not perroring in that case.
+  def request(type, log: true, discord: false, **uri_args)
+    # Ensure we know the player's Steam ID
+    if !steam_id
+      err("Player #{name}:#{metanet_id} has no Steam ID") if log
+      perror("I don't know your Steam ID!") if discord
       return
     end
 
+    # Perform HTTP request
+    res = Net::HTTP.get_response(npp_uri(type, steam_id, **uri_args))
+
+    # Request failed
     if !res || !(200..299).include?(res.code.to_i)
       err("HTTP request for #{type} failed (#{!!res ? res.code : '?'})") if log
       perror("Failed to query Metanet score, try again later") if discord
       return
     end
 
+    # Player is not authenticated in Steam
     if res.body == METANET_INVALID_RES
       err("Steam ID #{name}:#{steam_id} is inactive") if log
       perror("Your Steam account isn't active, please open N++") if discord
@@ -2083,11 +2088,13 @@ class Player < ActiveRecord::Base
     res
   end
 
+  # Fetches the player's score in the specified highscoreable
   def get_score(h, log: true, discord: false)
-    return if !steam_id
+    return if !h.is_a?(Downloadable)
 
     # Perform HTTP request. We also update the scores.
-    res = request(:scores, log: log, discord: discord)
+    id_key = (h.is_userlevel? ? 'level' : h.class.to_s.downcase) + '_id'
+    res = request(:scores, qt: 0, id_key => h.id, log: log, discord: discord)
     return if !res
     json = JSON.parse(res.body)
     scores = correct_ties(clean_scores(json['scores']))
@@ -2107,9 +2114,34 @@ class Player < ActiveRecord::Base
     nil
   end
 
-  # TODO: Implement
-  def get_replay(id, log: true, discord: false)
+  # Fetches the player's replay given the type and ID
+  # TODO: I feel like some of this logic should be in the Demo class
+  def get_replay(type, replay_id, log: true, discord: false)
+    return if !steam_id || !h.is_a?(Downloadable)
 
+    # Perform HTTP request
+    type = TYPES[type]
+    qt = type[:qt] rescue 0
+    res = request(:replay, qt: qt, replay_id: replay_id, log: log, discord: discord)
+    return if !res
+
+    # Replay doesn't exist anymore
+    if res.empty?
+      err("#{type[:name]} replay #{replay_id} does not exist anymore") if log
+      perror("The requested replay doesn't exist in the server anymore") if discord
+      return
+    end
+
+    # Integrity checks (see format documentation in Demo)
+    rt, rid, hid, uid = res[0, 16].unpack('l<4')
+    if rt != type[:rt] || rid != replay_id || uid != metanet_id
+      err("Received replay header doesn't match expected values") if log
+      perror("Received corrupt replay data from the server") if discord
+      return
+    end
+
+    # Parse demo data
+    Demo.parse(res[16..], type[:name])
   end
 
   def users(array: true)

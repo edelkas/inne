@@ -182,7 +182,7 @@ class UserlevelScore < ActiveRecord::Base
   end
 
   def replay_uri(steam_id)
-    npp_uri(:replay, steam_id, replay_id: replay_id )
+    npp_uri(:replay, steam_id, replay_id: replay_id, qt: 0 )
   end
 
   # Download demo on the fly

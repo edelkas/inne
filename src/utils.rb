@@ -1615,6 +1615,7 @@ def splits_from_scores(scores, start: 90.0, factor: 1, offset: 90.0)
   scores.map{ |s| round_score(acc += (s / factor - offset)) }
 end
 
+# TODO: Generalize with scale param to sr mode and userlevels/mappacks
 def scores_from_splits(splits, offset: 90.0)
   splits.each_with_index.map{ |s, i|
     round_score(i == 0 ? s : s - splits[i - 1] + offset)
