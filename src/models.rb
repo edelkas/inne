@@ -3284,6 +3284,12 @@ module Server extend self
     method  = req.request_method
     query   = req.path.sub(METANET_PATH, '').split('/')[2..-1].join('/')
 
+    # Log POST bodies
+    if $log[:socket] && method == 'POST'
+      timestamp = Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')
+      File.binwrite(File.join(DIR_LOGS, sanitize_filename(query) + '_' + timestamp), req.body)
+    end
+
     # Always log players in, regardless of mappack
     return respond(res, Player.login(mappack, req)) if method == 'POST' && query == METANET_POST_LOGIN
 
@@ -3331,12 +3337,11 @@ module Server extend self
     if body.nil?
       res.status = 400
       res.body = ''
-      dbg('CLE Response: No body') if $log[:socket]
     else
       res.status = 200
       res.body = body
-      dbg('CLE Response: ' + body) if $log[:socket] && body.encoding.name == 'UTF-8'
     end
+    dbg('CLE Response: ' + (body || 'No body')) if $log[:socket] && (!body || body.encoding.name == 'UTF-8')
   end
 
   def fwd(req, res)
