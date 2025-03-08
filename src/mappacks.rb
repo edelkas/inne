@@ -551,7 +551,6 @@ module MappackHighscoreable
     else
       text = "#{self.name} leaderboards requested"
     end
-    dbg(res.to_json) if SOCKET_LOG
     dbg(text)
 
     # Return leaderboards
@@ -1077,7 +1076,6 @@ class MappackScore < ActiveRecord::Base
     res['replay_id'] = replay_id_hs || replay_id_sr || -1
 
     # Finish
-    dbg(res.to_json) if SOCKET_LOG
     dbg("#{name} submitted a score to #{h.name}")
     return res.to_json
   rescue => e

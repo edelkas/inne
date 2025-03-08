@@ -124,6 +124,13 @@ module Log extend self
     dbg("Failed to change logging fanciness")
   end
 
+  def socket
+    $log[:socket] = !$log[:socket]
+    $log[:socket] ? dbg("Enabled socket logs") : dbg("Disabled socket logs")
+  rescue
+    dbg("Failed to change socket logging")
+  end
+
   def set_modes(modes)
     @modes = modes.select{ |m| MODES.key?(m) }
     dbg("Set logging modes to #{@modes.join(', ')}.")
@@ -322,9 +329,8 @@ end
 # <---------------------------------------------------------------------------->
 
 # Get the required server endpoint to perform the desired request to N++ server
-def npp_uri(type, args = {})
+def npp_uri(type, steam_id, **args)
   # Build path component.
-  path = METANET_PATH
   request = case type
   when :scores
     METANET_GET_SCORES
@@ -332,15 +338,21 @@ def npp_uri(type, args = {})
     METANET_GET_REPLAY
   when :levels
     METANET_GET_LEVELS
+  when :search
+    METANET_GET_SEARCH
   when :submit
     METANET_POST_SCORE
+  when :publish
+    METANET_POST_LEVEL
+  when :login
+    METANET_POST_LOGIN
   else
     return
   end
-  path << '/' << request
+  path = METANET_PATH + '/' + request
 
-  # Build query component. We always add 2 default attributes.
-  args.merge!({ app_id: APP_ID, steam_auth: '' })
+  # Build query component. We always add 2 default attributes plus the Steam ID.
+  args.merge!({ app_id: APP_ID, steam_auth: '', steam_id: steam_id })
   query = URI.encode_www_form(args)
 
   # Build full URI

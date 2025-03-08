@@ -345,16 +345,19 @@ def send_log_config(event)
   flags = parse_flags(event)
   event << "Enabled logging modes: #{Log.modes.join(', ')}." if flags.empty?
   flags.each{ |f, v|
-    str = ''
-    case f
+    str = case f
     when :l
-      str = Log.level(v.to_sym) if !v.nil?
+      Log.level((v || 'normal').to_sym)
     when :f
-      str = Log.fancy
+      Log.fancy
+    when :s
+      Log.socket
     when :m
-      str = Log.change_modes(v.split.map(&:to_sym)) if !v.nil?
+      Log.change_modes(v.to_s.split.map(&:to_sym))
     when :M
-      str = Log.set_modes(v.split.map(&:to_sym)) if !v.nil?
+      Log.set_modes(v.to_s.split.map(&:to_sym))
+    else
+      ''
     end
     event << str if !str.empty?
   }

@@ -603,7 +603,7 @@ module Map
         lvl_warnings.keys.each{ |key|
           c = lvl_warnings[key].size
           new_key = case key
-          when :missing_tiles   then "Map data missing. Is there a rogue new line?"
+          when :missing_tiles   then "Map data missing. Is there a rogue line break?"
           when :missing_objects then "Object data missing. Is it a tileset?"
           when :nreality        then "NReality data found (ignoring)."
           when :unknown_tile    then "Skipped #{c} unrecognized tiles:"

@@ -16,7 +16,7 @@ BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
 DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
-DEBUG          = true  # Breakpoint right after loading the bot
+DEBUG          = false # Breakpoint right after loading the bot
 
 # Test specific features
 TEST_LOTD      = false # Post lotd on startup
@@ -63,7 +63,10 @@ METANET_PATH        = '/prod/steam'
 METANET_GET_SCORES  = 'get_scores'
 METANET_GET_REPLAY  = 'get_replay'
 METANET_GET_LEVELS  = 'query_levels'
+METANET_GET_SEARCH  = 'search/levels'
+METANET_POST_LOGIN  = 'login'
 METANET_POST_SCORE  = 'submit_score'
+METANET_POST_LEVEL  = 'submit_level'
 METANET_INVALID_RES = '-1337' # N++'s server response when Steam ID is inactive
 
 FAST_MANUAL = true # Only use active Steam IDs for manual queries, for speed
@@ -480,7 +483,7 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 
 SOCKET      = true  # Whether to open sockets or not
 SOCKET_PORT = 8126  # Port for CLE's TCP server
-SOCKET_LOG  = false # Log request and response details
+SOCKET_LOG  = TEST  # Log request and response details
 
 # CUSE-specific variables
 QUERY_LIMIT_SOFT = 25   # Number of queried userlevels per page
@@ -491,7 +494,7 @@ PWD              = ENV['NPP_HASH']
 CLE_FORWARD      = true            # Forward unrelated requests to Metanet
 INTEGRITY_CHECKS = true            # Verity replay security hashes
 WARN_INTEGRITY   = true            # Warn when players submit scores with invalid hashes
-WARN_VERSION     = false           # Warning for score submissions with old map versions
+WARN_VERSION     = true            # Warning for score submissions with old map versions
 LOCAL_LOGIN      = true            # Try to login user ourselves if Metanet fails
 
 # <---------------------------------------------------------------------------->

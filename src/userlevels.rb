@@ -181,11 +181,14 @@ class UserlevelScore < ActiveRecord::Base
     Userlevel.where(completions: nil).update_all(completions: 0)
   end
 
+  def replay_uri(steam_id)
+    npp_uri(:replay, steam_id, replay_id: replay_id )
+  end
+
   # Download demo on the fly
   def demo
-    uri = "https://dojo.nplusplus.ninja/prod/steam/get_replay?steam_id=%s&steam_auth=&replay_id=#{replay_id}"
     replay = get_data(
-      -> (steam_id) { URI.parse(uri % steam_id) },
+      -> (steam_id) { replay_uri(steam_id) },
       -> (data) { data },
       "Error downloading userlevel #{id} replay #{replay_id}"
     )
@@ -372,7 +375,7 @@ class Userlevel < ActiveRecord::Base
   end
 
   def self.levels_uri(steam_id, qt = QT_NEWEST, page = 0, mode = MODE_SOLO)
-    URI("https://dojo.nplusplus.ninja/prod/steam/query_levels?steam_id=#{steam_id}&steam_auth=&qt=#{qt}&mode=#{mode}&page=#{page}")
+    npp_uri(:levels, steam_id, qt: qt, mode: mode, page: page)
   end
 
   def self.serial(maps)

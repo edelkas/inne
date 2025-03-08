@@ -161,6 +161,7 @@ def initialize_vars
   $linux           = RbConfig::CONFIG['host_os'].match?(/linux/i)
   $c_inne          = !!defined?(C_INNE)
   $mutex           = { ntrace: Mutex.new, tmp_msg: Mutex.new }
+  $log             = { socket: SOCKET_LOG }
   $threads         = []
   $main_queue      = Queue.new
   $sql_vars        = {}

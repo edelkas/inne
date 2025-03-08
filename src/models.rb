@@ -136,12 +136,12 @@ module MonkeyPatches
     ::WEBrick::HTTPServer.class_eval do
       def access_log(config, req, res)
         param = ::WEBrick::AccessLog::setup_params(config, req, res)
-        param['U'] = param['U'].split('?')[0].split('/')[-1] rescue ''
+        #param['U'] = param['U'].split('?')[0].split('/')[-1] rescue '' # Uncomment to show only last component
         @config[:AccessLog].each{ |logger, fmt|
           str = ::WEBrick::AccessLog::format(fmt.gsub('%T', ''), param)
           str += " #{"%.3fms" % (1000 * param['T'])}" if fmt.include?('%T') rescue ''
           str.squish!
-          fmt.include?('%s') ? lout(str) : lin(str) if SOCKET_LOG
+          fmt.include?('%s') ? lout(str) : lin(str) if $log[:socket]
         }
       end
     end
@@ -383,7 +383,7 @@ module Downloadable
 
   def scores_uri(steam_id, qt: 0)
     id_key = (is_userlevel? ? 'level' : self.class.to_s.downcase) + '_id'
-    npp_uri(:scores, { steam_id: steam_id, id_key => id, qt: qt })
+    npp_uri(:scores, steam_id, id_key => id, qt: qt)
   end
 
   # Download the highscoreable's scores from Metanet's server
@@ -2945,8 +2945,8 @@ class Demo < ActiveRecord::Base
     TYPES[archive.highscoreable_type][:qt] rescue -1
   end
 
-  def uri(steam_id)
-    npp_uri(:replay, { steam_id: steam_id, replay_id: archive.replay_id, qt: qt })
+  def replay_uri(steam_id)
+    npp_uri(:replay, steam_id, replay_id: archive.replay_id, qt: qt)
   end
 
   def parse(replay)
@@ -2954,7 +2954,7 @@ class Demo < ActiveRecord::Base
   end
 
   def get_demo
-    uri = Proc.new { |steam_id| uri(steam_id) }
+    uri = Proc.new { |steam_id| replay_uri(steam_id) }
     data = Proc.new { |data| data }
     err  = "error getting demo with id #{archive.replay_id} "\
            "for #{archive.highscoreable_type.downcase} "\
@@ -3250,17 +3250,17 @@ module Server extend self
     # Parse request parameters
     mappack = req.path.split('/')[1][/\D+/i]
     method  = req.request_method
-    query   = req.path.split('/')[-1]
+    query   = req.path.sub(METANET_PATH, '').split('/')[2..-1].join('/')
 
     # Always log players in, regardless of mappack
-    return respond(res, Player.login(mappack, req)) if method == 'POST' && query == 'login'
+    return respond(res, Player.login(mappack, req)) if method == 'POST' && query == METANET_POST_LOGIN
 
     # Automatically forward requests for certain mappacks that lack custom boards
     return fwd(req, res) if ['rdx'].include?(mappack)
 
     # CUSE requests only affect userlevel searching
     if mappack == 'cuse'
-      return fwd(req, res) unless method == 'GET' && query == 'levels'
+      return fwd(req, res) unless method == 'GET' && query == METANET_GET_SEARCH
       return respond(res, Userlevel.search(req))
     end
 
@@ -3269,21 +3269,21 @@ module Server extend self
     case method
     when 'GET'
       case query
-      when 'get_scores'
+      when METANET_GET_SCORES
         body = MappackScore.get_scores(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
-      when 'get_replay'
+      when METANET_GET_REPLAY
         body = MappackScore.get_replay(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
-      when 'levels'
+      when METANET_GET_SEARCH
         body = Userlevel.search(req)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
       case query
-      when 'submit_score'
+      when METANET_POST_SCORE
         body = Scheduler.with_lock do # Prevent restarts during score submission
           MappackScore.add(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
         end
-      when 'login'
+      when METANET_POST_LOGIN
         body = Player.login(mappack, req)
       end
     end
@@ -3299,9 +3299,11 @@ module Server extend self
     if body.nil?
       res.status = 400
       res.body = ''
+      dbg('CLE Response: No body') if $log[:socket]
     else
       res.status = 200
       res.body = body
+      dbg('CLE Response: ' + body) if $log[:socket] && body.encoding.name == 'UTF-8'
     end
   end
 
