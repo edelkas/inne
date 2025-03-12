@@ -841,6 +841,14 @@ module Highscoreable
     self.is_a?(MappackHighscoreable)
   end
 
+  def is_userlevel?
+    self.is_a?(Userlevel)
+  end
+
+  def is_vanilla?
+    !is_mappack? && !is_userlevel?
+  end
+
   def is_level?
     self.is_a?(Levelish)
   end
@@ -851,10 +859,6 @@ module Highscoreable
 
   def is_story?
     self.is_a?(Storyish)
-  end
-
-  def is_userlevel?
-    self.is_a?(Userlevel)
   end
 
   # Protected levels have secret replays
@@ -1527,7 +1531,6 @@ module Scorish
     Scorish.format(name_padding, score_padding, cools: cools, mode: mode, t_rank: t_rank, mappack: self.is_a?(MappackScore), h: h)
   end
 
-  # TODO: Rely on NSim class here
   def splits(board = 'hs', event: nil)
     return if !highscoreable.is_episode?
 
@@ -1543,27 +1546,11 @@ module Scorish
     TmpMsg.update(event, '-# Queued...') if event && $mutex[:ntrace].locked?
     $mutex[:ntrace].synchronize do
       TmpMsg.update(event, '-# Running simulation...') if event
-
-      # Export input files
-      File.binwrite(NTRACE_INPUTS_E, demo.demo)
-      highscoreable.levels.each_with_index{ |l, i|
-        map = !l.is_a?(Map) ? MappackLevel.find(l.id) : l
-        File.binwrite(NTRACE_MAP_DATA_E % i, map.dump_level)
-      }
-      python(PATH_NTRACE)
-      FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
-
-      # Parse output files
-      file = File.binread(NTRACE_OUTPUT_E) rescue nil
-      FileUtils.rm_f([NTRACE_OUTPUT_E])
-      return if !file
-      valid = file.scan(/True|False/).map{ |b| b == 'True' }
-      splits = file.split(/True|False/)[1..-1].map{ |d|
-        round_score(d.strip.to_i.to_f / 60.0)
-      }
-      scores = scores_from_splits(splits, offset: 90.0)
-
-      { valid: valid, splits: splits, scores: scores }
+      nsim = NSim.new(highscoreable.levels.map{ |l| l.map.dump_level }, demo.demo)
+      nsim.run
+      res = { valid: nsim.valid_flags, splits: nsim.splits, scores: nsim.scores }
+      nsim.destroy
+      res
     end
   end
 end
@@ -2117,7 +2104,7 @@ class Player < ActiveRecord::Base
   # Fetches the player's replay given the type and ID
   # TODO: I feel like some of this logic should be in the Demo class
   def get_replay(type, replay_id, log: true, discord: false)
-    return if !steam_id || !h.is_a?(Downloadable)
+    return if !h.is_a?(Downloadable)
 
     # Perform HTTP request
     type = TYPES[type]

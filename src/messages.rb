@@ -1468,6 +1468,7 @@ def fix_episode(event)
   perror("I don't know #{player.name}'s Steam ID.") if !player.steam_id
 
   # Get player's episode and level scores from the server
+  TmpMsg.update(event, '-# Fetching scores from the server...')
   ep_score = player.get_score(ep, discord: true)
   return if !ep_score
   ep_replay = player.get_replay('Episode', ep_score[:replay_id], discord: true)

@@ -1712,25 +1712,26 @@ end
 # map data and demo data, the resulting position and collision information, etc.
 # It may contain multiple simulations for the same level, since they're all traced
 # together.
-# TODO: Make splits use this as well.
 # TODO: The :ntrace mutex should probably be handled by this class automatically
 class NSim
 
-  attr_reader :count, :success, :correct, :valid, :valid_flags, :complexity
+  attr_reader :count, :success, :correct, :valid, :valid_flags, :complexity, :splits, :scores
   attr_accessor :ppc
   Collision = Struct.new(:id, :index, :state)
 
   def initialize(map_data, demo_data)
-    @splits         = @map_data.is_a?(Array)
+    @splits_mode    = map_data.is_a?(Array)
     @map_data       = map_data
-    @demo_data      = demo_data.take(MAX_TRACES)
-    @demos          = @splits ? Demo.decode(@demo_data) : @demo_data.map{ |d| Demo.decode(d) }
-    @count          = @splits ? 1 : @demo_data.size
+    @demo_data      = @splits_mode ? demo_data : demo_data.take(MAX_TRACES)
+    @demos          = @splits_mode ? Demo.decode(@demo_data) : @demo_data.map{ |d| Demo.decode(d) }
+    @count          = @splits_mode ? 1 : @demo_data.size
     @success        = false # Was nsim executed successfully?
     @correct        = false # Was nsim output parsed correctly?
     @valid          = false # Was nsim result a valid run?
     @output         = ''
     @valid_flags    = []
+    @scores         = []
+    @splits         = []
     @raw_coords     = 40.times.map{ |id| [id, {}] }.to_h
     @raw_chunks     = 40.times.map{ |id| [id, {}] }.to_h
     @raw_collisions = {}
@@ -1740,7 +1741,7 @@ class NSim
 
   # Export input files for nsim
   private def export
-    if @splits
+    if @splits_mode
       File.binwrite(NTRACE_INPUTS_E, @demo_data)
       @map_data.each_with_index{ |map, i| File.binwrite(NTRACE_MAP_DATA_E % i, map) }
     else
@@ -1750,33 +1751,38 @@ class NSim
   end
 
   # Execute simulation
+  # TODO: Store all scores in trace mode into @scores
   private def execute(basic_sim: true, basic_render: true, silent: false)
     t = Time.now
     path = PATH_NTRACE + (basic_sim ? ' --basic-sim' : '') + (basic_render ? '' : ' --full-export')
     stdout, stderr, status = python(path, output: true, fast: false)
     @output = [stdout, stderr].join("\n\n")
     dbg("NSim simulation time: %.3fs" % [Time.now - t]) unless silent
-    @success = status.success? && File.file?(@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
+    @success = status.success? && File.file?(@splits_mode ? NTRACE_OUTPUT_E : NTRACE_OUTPUT)
   end
 
   # Remove all temp files
   private def clean
-    if @splits
-      FileUtils.rm([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')], force: true)
+    if @splits_mode
+      FileUtils.rm_f([NTRACE_INPUTS_E, *Dir.glob(NTRACE_MAP_DATA_E % '*')])
     else
-      FileUtils.rm([NTRACE_MAP_DATA, *Dir.glob(NTRACE_INPUTS % '*')], force: true)
+      FileUtils.rm_f([NTRACE_MAP_DATA, *Dir.glob(NTRACE_INPUTS % '*')])
     end
-    FileUtils.rm([@splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT], force: true)
+    FileUtils.rm_f([@splits_mode ? NTRACE_OUTPUT_E : NTRACE_OUTPUT])
   end
 
-  # Parse nsim's output file and read entity coordinates and collisions
-  # TODO: Should we deduplicate collisions, or handle it later?
-  private def parse(silent: false)
-    fn = @splits ? NTRACE_OUTPUT_E : NTRACE_OUTPUT
-    f = File.open(fn, 'rb')
-    dbg("NSim output size: %.3fKiB" % [File.size(fn) / 1024.0]) unless silent
-    t = Time.now
+  # Parse nsim's output file in trace mode and read coordinates and collisions
+  private def parse_splits(f)
+    @valid_flags = f.scan(/True|False/).map{ |b| b == 'True' }
+    @splits = f.split(/True|False/)[1..-1].map{ |d|
+      round_score(d.strip.to_i.to_f / 60.0)
+    }
+    @scores = scores_from_splits(splits, offset: 90.0)
+  end
 
+  # Parse nsim's output in splits mode and read level splits and valid flags
+  # TODO: Should we deduplicate collisions, or handle it later?
+  private def parse_trace(f)
     # Run count and valid flags
     n, = fparse(f, 'C')
     @valid_flags = fparse(f, 'C' * n).map{ |b| b > 0 }
@@ -1802,7 +1808,16 @@ class NSim
         @raw_collisions[frame] << collision[2, 4]
       end
     end
+  end
 
+  # Read and parse nsim's output file
+  private def parse(silent: false)
+    fn = @splits_mode ? NTRACE_OUTPUT_E : NTRACE_OUTPUT
+    return if !File.file?(fn)
+    f = File.open(fn, 'rb')
+    dbg("NSim output size: %.3fKiB" % [File.size(fn) / 1024.0]) unless silent
+    t = Time.now
+    @splits_mode ? parse_splits(f) : parse_trace(f)
     dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0]) unless silent
     dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)]) unless silent
     @correct = true
@@ -1846,11 +1861,13 @@ class NSim
 
   # Free references to allocated data so that it's hopefully garbage collected
   def destroy
+    @map_data.each(&:clear) if @splits_mode
+    @map_data.map!{ nil } if @splits_mode
     @map_data.clear
     @map_data = nil
 
-    @demo_data.each(&:clear)
-    @demo_data.map!{ nil }
+    @demo_data.each(&:clear) if !@splits_mode
+    @demo_data.map!{ nil } if !@splits_mode
     @demo_data.clear
     @demo_data = nil
 
@@ -1858,6 +1875,8 @@ class NSim
     @demos.map!{ nil }
     @demos.clear
     @demos = nil
+
+    return if @splits_mode
 
     @raw_collisions.each{ |frame, cols| cols.clear }
     @raw_collisions.keys.each{ |frame| @raw_collisions[frame] = nil }
@@ -1898,7 +1917,7 @@ class NSim
 
   # Length of the simulation, in frames
   def length(index = nil)
-    if @splits
+    if @splits_mode
       index ? @demos[index].size : @demos.map(&:size).sum
     else
       index ? @raw_chunks[0][index][1].sum : @raw_chunks[0].map{ |index, chunks| chunks[1].sum }.max
