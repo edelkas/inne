@@ -1461,10 +1461,11 @@ end
 # Look for unsubmitted level scores in episode runs and resubmit them
 # TODO: What happens if we don't know the users Steam ID?
 def fix_episode(event)
+  assert_permissions(event)
   msg = parse_message(event)
   ep = parse_highscoreable(event)
   perror("You have to specify an episode.") if !ep.is_episode?
-  player = parse_player(event, enforce: true)
+  player = parse_player(event, false, false, true)
   perror("I don't know #{player.name}'s Steam ID.") if !player.steam_id
 
   # Get player's episode and level scores from the server
@@ -1476,11 +1477,24 @@ def fix_episode(event)
   lvl_scores = ep.levels.map{ |lvl| _thread{ player.get_score(lvl) } }.map(&:value)
 
   # Compute episode level scores using NSim
+  TmpMsg.update(event, '-# Running simulation...')
+  nsim = NSim.new(ep.levels.map{ |l| l.map.dump_level }, Demo.encode(ep_replay))
+  nsim.run
+  ep_scores = { valid: nsim.valid_flags, splits: nsim.splits, scores: nsim.scores }
+  nsim.destroy
 
+  # Print results
+  rows = []
+  rows << ["", "00", "01", "02", "03", "04"]
+  rows << :sep
+  rows << ["Episode score", *ep_scores[:scores]]
+  rows << ["Level score", *lvl_scores]
+  event << "Score comparison:\n#{format_block(make_table(rows))}"
 
   # TODO: Resubmit runs where episode score > level score (or level score is nil)
   # TODO: Log what happened to Discord (old vs new ranks and scores, if they changed)
-
+rescue => e
+  lex(e, "Error fixing episode scores.", event: event)
 end
 
 # Command to allow SimVYo to dynamically update his ntrace tool by sending the
@@ -2193,6 +2207,7 @@ def respond(event)
   return send_aliases(event)         if msg =~ /\baliases\b/i
   return send_dmmc(event)            if msg =~ /\bdmmcize\b/i
   return update_ntrace(event)        if msg =~ /\bupdate\s*ntrace\b/i
+  return fix_episode(event)          if msg =~ /fix episode/i
   return faceswap(event)             if msg =~ /faceswap/i
   return send_mappacks(event)        if msg =~ /mappacks/i
   return send_denubbed(event)        if msg =~ /\bdenubbed\b/i

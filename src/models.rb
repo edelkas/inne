@@ -2084,8 +2084,8 @@ class Player < ActiveRecord::Base
     res = request(:scores, qt: 0, id_key => h.id, log: log, discord: discord)
     return if !res
     json = JSON.parse(res.body)
-    scores = correct_ties(clean_scores(json['scores']))
-    save_scores(scores)
+    scores = h.correct_ties(h.clean_scores(json['scores']))
+    h.save_scores(scores)
 
     # First, try to find personal score in global leaderboard.
     score, rank = scores.each_with_index.find{ |s, i| s['user_id'] == metanet_id }
@@ -2103,11 +2103,11 @@ class Player < ActiveRecord::Base
 
   # Fetches the player's replay given the type and ID
   # TODO: I feel like some of this logic should be in the Demo class
-  def get_replay(type, replay_id, log: true, discord: false)
+  def get_replay(h, replay_id, log: true, discord: false)
     return if !h.is_a?(Downloadable)
 
     # Perform HTTP request
-    type = TYPES[type]
+    type = TYPES[h.class.to_s.remove('Mappack')] || TYPES['Level']
     qt = type[:qt] rescue 0
     res = request(:replay, qt: qt, replay_id: replay_id, log: log, discord: discord)
     return if !res
