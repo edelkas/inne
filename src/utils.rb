@@ -667,6 +667,13 @@ def is_num(str)
   str.strip == str[/\d+/i]
 end
 
+def is_float(str)
+  Float(str)
+  true
+rescue
+  false
+end
+
 # Escape problematic chars (e.g. quotes or backslashes)
 def escape(str)
   str.dump[1..-2]
@@ -1773,8 +1780,9 @@ class NSim
 
   # Parse nsim's output file in trace mode and read coordinates and collisions
   private def parse_splits(f)
-    @valid_flags = f.scan(/True|False/).map{ |b| b == 'True' }
-    @splits = f.split(/True|False/)[1..-1].map{ |d|
+    body = f.read
+    @valid_flags = body.scan(/True|False/).map{ |b| b == 'True' }
+    @splits = body.split(/True|False/)[1..-1].map{ |d|
       round_score(d.strip.to_i.to_f / 60.0)
     }
     @scores = scores_from_splits(splits, offset: 90.0)
@@ -1817,18 +1825,24 @@ class NSim
     f = File.open(fn, 'rb')
     dbg("NSim output size: %.3fKiB" % [File.size(fn) / 1024.0]) unless silent
     t = Time.now
-    @splits_mode ? parse_splits(f) : parse_trace(f)
+    @correct = true
+    begin
+      @splits_mode ? parse_splits(f) : parse_trace(f)
+    rescue => e
+      lex(e, 'Failed to parse NSim output')
+      @correct = false
+    end
     dbg("NSim read size: %.3fKiB" % [f.pos / 1024.0]) unless silent
     dbg("NSim parse time: %.3fms" % [1000.0 * (Time.now - t)]) unless silent
-    @correct = true
   ensure
     f&.close
   end
 
   # Print debug information
-  def debug(event)
+  def dbg(event)
     if @output.length < DISCORD_CHAR_LIMIT - 100
-      return "Debug info (terminal output):" + format_block(@output)
+      output = @output.strip.empty? ? 'None' : "\n" + format_block(@output)
+      return "Debug info (terminal output): " + output
     end
 
     _thread do
@@ -1855,8 +1869,31 @@ class NSim
     parse(silent: silent) if @success
     compute_complexity(silent: silent) if @correct
     validate
+  rescue => e
+    lex(e, 'Error running NSim')
   ensure
     clean
+  end
+
+  # Ensure simulation correctness or halt otherwise
+  # @par debug:  Include debug information in error msg
+  # @par strict: Force simulation to be valid
+  def check(event, debug: false, strict: true)
+    return true if @valid || !strict && @correct
+    if !@success
+      str = 'Simulation failed'
+    elsif !@correct
+      str = 'Simulation results are corrupt'
+    else
+      str = 'Simulation isn\'t valid'
+    end
+    str << ', contact the botmaster for details.'
+    if debug
+      debug_info = dbg(event)
+      str << ' ' + debug_info unless debug_info.empty?
+    end
+    perror(str)
+    false
   end
 
   # Free references to allocated data so that it's hopefully garbage collected
@@ -2090,7 +2127,7 @@ def make_table(
   text_rows = rows.select{ |r| r.is_a?(Array) }
   count = text_rows.map(&:size).max
   rows.each{ |r| if r.is_a?(Array) then r << "" while r.size < count end }
-  widths = (0..count - 1).map{ |c| text_rows.map{ |r| (r[c].is_a?(Float) ? "%.3f" % r[c] : r[c].to_s).length }.max }
+  widths = (0..count - 1).map{ |c| text_rows.map{ |r| (r[c].is_a?(Float) ? "%.3f" % r[c] : ANSI.unesc(r[c].to_s)).length }.max }
   length = widths.sum + (hor_pad ? 2 * widths.size : 0) + widths.size + 1
 
   # Build connectors
@@ -2137,7 +2174,7 @@ def make_table(
   if !!header
     header = ' ' + header + ' '
     table << clean_up + clear_line
-    table << ver + color_h + ANSI.bold + header.center(length - 2, '░') + ver + clear_line
+    table << ver + color_h + ANSI.bold + header.center(length - 2, '░') + ANSI.clear + ver + clear_line
     table << clean_down + clear_line
   else
     table << sep_up + clear_line
@@ -2150,9 +2187,14 @@ def make_table(
     next table << sep_mid + clear_line if r == :sep
     clr = color ? (even ? color_1 : color_2) : ''
     r.each_with_index{ |s, i|
-      sign = s.is_a?(Numeric) ? '' : '-'
+      if s.is_a?(String)
+        clr_once = s[/^\x1B\[\d+m/]
+        s = ANSI.unesc(s)
+      end
+      sign = s.is_a?(Numeric) || is_float(ANSI.unesc(s)) ? '' : '-'
       fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
-      table << ver + sp + "#{clr}%#{sign}#{widths[i]}#{fmt}" % s + sp
+      table << ver + sp + "#{clr_once || clr}%#{sign}#{widths[i]}#{fmt}" % s + sp
+      table << ANSI.none if clr_once && !color
     }
     table << ver + clear_line
     even = !even

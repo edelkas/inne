@@ -1461,18 +1461,19 @@ end
 # Look for unsubmitted level scores in episode runs and resubmit them
 # TODO: What happens if we don't know the users Steam ID?
 def fix_episode(event)
-  assert_permissions(event)
   msg = parse_message(event)
-  ep = parse_highscoreable(event)
+  ep = parse_highscoreable(event, mappack: true)
   perror("You have to specify an episode.") if !ep.is_episode?
+  perror("The episode must be a vanilla Metanet episode.") if ep.is_mappack?
   player = parse_player(event, false, false, true)
-  perror("I don't know #{player.name}'s Steam ID.") if !player.steam_id
+  perror("I don't know #{player.name}'s Steam ID, ask the botmaster to add it.") if !player.steam_id
+  debug = !!msg[/\bdebug\b/i] && check_permission(event, 'ntracer')
 
   # Get player's episode and level scores from the server
   TmpMsg.update(event, '-# Fetching scores from the server...')
   ep_score = player.get_score(ep, discord: true)
   return if !ep_score
-  ep_replay = player.get_replay('Episode', ep_score[:replay_id], discord: true)
+  ep_replay = player.get_replay(ep, ep_score[:replay_id], discord: true)
   return if !ep_replay
   lvl_scores = ep.levels.map{ |lvl| _thread{ player.get_score(lvl) } }.map(&:value)
 
@@ -1480,19 +1481,52 @@ def fix_episode(event)
   TmpMsg.update(event, '-# Running simulation...')
   nsim = NSim.new(ep.levels.map{ |l| l.map.dump_level }, Demo.encode(ep_replay))
   nsim.run
+  nsim.check(event, debug: debug)
   ep_scores = { valid: nsim.valid_flags, splits: nsim.splits, scores: nsim.scores }
   nsim.destroy
 
   # Print results
+  output = ""
   rows = []
   rows << ["", "00", "01", "02", "03", "04"]
   rows << :sep
   rows << ["Episode score", *ep_scores[:scores]]
-  rows << ["Level score", *lvl_scores]
-  event << "Score comparison:\n#{format_block(make_table(rows))}"
+  row = ["Level score"]
+  lvl_scores.each_with_index{ |s, i|
+    next row << ANSI.bad + 'None' + ANSI.clear if !s
+    diff = s[:score] - ep_scores[:scores][i]
+    color_start = diff > 0.001 ? ANSI.good : diff < -0.001 ? ANSI.bad : ''
+    color_end = diff.abs > 0.001 ? ANSI.clear : ''
+    row << color_start + "%.3f" % [round_score(s[:score])] + color_end
+  }
+  rows << row
+  output << mdhdr2("⚙ __Episode score patcher__\n")
+  output << "Episode #{verbatim(ep.name)} scores vs level scores for #{verbatim(player.print_name)}:\n"
+  output << format_block(make_table(rows))
 
-  # TODO: Resubmit runs where episode score > level score (or level score is nil)
-  # TODO: Log what happened to Discord (old vs new ranks and scores, if they changed)
+  # Resubmit improved ones
+  to_submit = 5.times.select{ |i|
+    !lvl_scores[i] || ep_scores[:scores][i] > lvl_scores[i][:score] + 0.001
+  }
+  if to_submit.empty?
+    output << "No level scores need resubmission ✅\n"
+    event << output
+    return
+  end
+  output << "**#{to_submit.size}** level #{'score'.pluralize(to_submit.size)} need resubmission.\n"
+  output << mdhdr3("═══ § Score submission\n")
+  TmpMsg.update(event, '-# Submitting level scores...')
+  ep.levels.each_with_index{ |lvl, i|
+    next unless to_submit.include?(i)
+    res = lvl.submit_score(ep_scores[:scores][i], [ep_replay[i].bytes], player, log: true)
+    if !res
+      output << "❌ Submission to level #{verbatim(lvl.name)} failed.\n"
+    else
+      output << "✅ Submitted new score to level #{verbatim(lvl.name)} ➡️ "
+      output << "Old rank: **#{lvl_scores[i][:rank] rescue 'None'}**. New rank: **#{res['rank']}**.\n"
+    end
+  }
+  event << output
 rescue => e
   lex(e, "Error fixing episode scores.", event: event)
 end

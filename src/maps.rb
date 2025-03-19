@@ -2322,7 +2322,7 @@ module Map
       else
         str = "Failed to parse simulation result, contact the botmaster for details. "
       end
-      res.each{ |l| str << l.debug(event) } if debug
+      res.each{ |l| str << l.dbg(event) } if debug
       perror(str)
     end
 
@@ -2405,7 +2405,7 @@ module Map
     # Output debug info
     dbg("NSim memory used: %dMB." % getmem)
     dbg("NSim full time: %.3fs." % [Time.now - t])
-    event << res.map{ |l| l.debug(event) }.join("\n\n") if debug
+    event << res.map{ |l| l.dbg(event) }.join("\n\n") if debug
     dbg("FINAL: #{"%8.3f" % [1000 * (Time.now - t)]}") if BENCH_IMAGES
   rescue => e
     lex(e, 'Failed to trace replays', event: event)

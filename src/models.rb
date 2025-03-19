@@ -644,7 +644,7 @@ module Downloadable
 
     # Perform HTTP POST request
     res = post_form(
-      path: '/prod/steam/submit_score',
+      path: METANET_PATH + '/' + METANET_POST_SCORE,
       args: { user_id: player.metanet_id, steam_id: player.steam_id },
       parts: parts
     )
@@ -2059,7 +2059,7 @@ class Player < ActiveRecord::Base
     res = Net::HTTP.get_response(npp_uri(type, steam_id, **uri_args))
 
     # Request failed
-    if !res || !(200..299).include?(res.code.to_i)
+    if !res || !res.code.to_i.between?(200, 299)
       err("HTTP request for #{type} failed (#{!!res ? res.code : '?'})") if log
       perror("Failed to query Metanet score, try again later") if discord
       return
@@ -2072,7 +2072,7 @@ class Player < ActiveRecord::Base
       return
     end
 
-    res
+    res.body
   end
 
   # Fetches the player's score in the specified highscoreable
@@ -2083,9 +2083,8 @@ class Player < ActiveRecord::Base
     id_key = (h.is_userlevel? ? 'level' : h.class.to_s.downcase) + '_id'
     res = request(:scores, qt: 0, id_key => h.id, log: log, discord: discord)
     return if !res
-    json = JSON.parse(res.body)
+    json = JSON.parse(res)
     scores = h.correct_ties(h.clean_scores(json['scores']))
-    h.save_scores(scores)
 
     # First, try to find personal score in global leaderboard.
     score, rank = scores.each_with_index.find{ |s, i| s['user_id'] == metanet_id }
