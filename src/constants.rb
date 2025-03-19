@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = true  # Switch to the local test bot
+TEST           = false # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = false # Execute all threads
+DO_EVERYTHING  = true  # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -274,14 +274,14 @@ MONKEY_PATCH_CHUNKYPNG     = true # Enable ChunkyPNG monkey patches (optional)
 # Highscoreable ID patterns
 LEVEL_PATTERN       = /([SCR][ILU]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([?!]-[ABCDEX]-[0-9][0-9]?)/i
 LEVEL_PATTERN_D     = /([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([?!])-?([ABCDEX])-?([0-9][0-9]?)/i
-LEVEL_PATTERN_M     = /([A-Z]{3}-[SCR][ILU]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([A-Z]{3}-[?!]-[ABCDEX]-[0-9][0-9]?)/i
-LEVEL_PATTERN_M_D   = /([A-Z]{3})-?([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([A-Z]{3})-?([?!])-?([ABCDEX])-?([0-9][0-9]?)/i
+LEVEL_PATTERN_M     = /([A-Z0-9]{3}-[SCR][ILU]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([A-Z0-9]{3}-[?!]-[ABCDEX]-[0-9][0-9]?)/i
+LEVEL_PATTERN_M_D   = /([A-Z0-9]{3})-?([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([A-Z0-9]{3})-?([?!])-?([ABCDEX])-?([0-9][0-9]?)/i
 EPISODE_PATTERN     = /([SCR][ILU]?-[ABCDEX]-[0-9][0-9]?)/i
 EPISODE_PATTERN_D   = /([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)/i
-EPISODE_PATTERN_M   = /([A-Z]{3}-[SCR][ILU]?-[ABCDEX]-[0-9][0-9]?)/i
-EPISODE_PATTERN_M_D = /([A-Z]{3})-?([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)/i
+EPISODE_PATTERN_M   = /([A-Z0-9]{3}-[SCR][ILU]?-[ABCDEX]-[0-9][0-9]?)/i
+EPISODE_PATTERN_M_D = /([A-Z0-9]{3})-?([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)/i
 STORY_PATTERN       = /([SCR][ILU]?)-?([0-9][0-9]?)/i
-STORY_PATTERN_M     = /([A-Z]{3})-?([SCR][ILU]?)-?([0-9][0-9]?)/i
+STORY_PATTERN_M     = /([A-Z0-9]{3})-?([SCR][ILU]?)-?([0-9][0-9]?)/i
 
 # Organize all possible highscoreable ID patterns into a hash
 # (note dashes are irrelevant for stories, as there can be no ambiguity)

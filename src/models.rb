@@ -3266,7 +3266,7 @@ module Server extend self
     return respond(res) if req.path.strip == '/'
 
     # Parse request parameters
-    mappack = req.path.split('/')[1][/\D+/i]
+    mappack = req.path.split('/')[1][/\w+/i]
     method  = req.request_method
     query   = req.path.sub(METANET_PATH, '').split('/')[2..-1].join('/')
 

@@ -585,9 +585,9 @@ def parse_mappack(msg = nil, user = nil, channel = nil, event: nil, explicit: fa
   mappack = nil
 
   # Parse mappack explicitly in different ways
-  mappack = Mappack.find_by(name: msg.strip[/\w+/i])         if text
-  mappack = Mappack.find_by(name: term)                      if text && !mappack
-  mappack = Mappack.find_by(code: msg.scan(/\b[A-Z]{3}\b/i)) if text && !mappack
+  mappack = Mappack.find_by(name: msg.strip[/\w+/i])            if text
+  mappack = Mappack.find_by(name: term)                         if text && !mappack
+  mappack = Mappack.find_by(code: msg.scan(/\b[A-Z0-9]{3}\b/i)) if text && !mappack
 
   # Parse mappack implicitly
   mappack = default_mappack(user, channel) if !mappack && !explicit
