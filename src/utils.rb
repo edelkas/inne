@@ -1111,6 +1111,11 @@ end
 # <------                        DISCORD RELATED                         ------>
 # <---------------------------------------------------------------------------->
 
+# Discord API version currently in use by Discordrb
+def discord_api_version
+  Discordrb::API.api_base[/v(\d+)/, 1].to_i
+end
+
 # Find the botmaster's Discord user
 def botmaster
   $bot.servers.each{ |id, server|

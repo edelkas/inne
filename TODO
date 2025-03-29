@@ -14,6 +14,9 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Function to sanitize mappack archives by removing dupes.
+- Add nv2  converter.
+- Add Userlevel -> Metanet and viceversa converters.
 - Reload Discordrb main branch from bundler, which allows to respond to interactions with attachments. Use this to implement screenshots when searching multiple pages of levels, or even when browsing userlevels. To prevent regenerating the screenshots when browsing, cache them in /tmp using some kind of hash for the name to identify the query, and clear them regularly (and when there are too many).
 - Add native C extension to the README documentation.
 - We can simplify paging: parse_page and compute_pages should be merged, also only pass the event itself instead of the message and the components separately, and use kwargs. Think about how to use the pager, but in a more flexible way that works for more contexts.

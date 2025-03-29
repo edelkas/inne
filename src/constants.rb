@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = false # Switch to the local test bot
+TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = true  # Execute all threads
+DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -494,7 +494,7 @@ PWD              = ENV['NPP_HASH']
 CLE_FORWARD      = true            # Forward unrelated requests to Metanet
 INTEGRITY_CHECKS = true            # Verity replay security hashes
 WARN_INTEGRITY   = true            # Warn when players submit scores with invalid hashes
-WARN_VERSION     = true            # Warning for score submissions with old map versions
+WARN_VERSION     = false           # Warning for score submissions with old map versions
 LOCAL_LOGIN      = true            # Try to login user ourselves if Metanet fails
 
 # <---------------------------------------------------------------------------->

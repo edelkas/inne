@@ -1406,7 +1406,9 @@ class MappackScore < ActiveRecord::Base
     return false if !highscoreable || !demo || !demo.demo
     nsim = NSim.new(highscoreable.dump_level, [demo.demo])
     nsim.run
-    nsim.score || false
+    ret = nsim.score || false
+    nsim.destroy
+    ret
   rescue => e
     lex(e, 'ntrace testing failed')
     nil
