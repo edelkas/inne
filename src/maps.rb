@@ -2246,7 +2246,7 @@ module Map
     msg, palette, error = hash[:msg], hash[:palette], hash[:error]
     h = h.vanilla if h.is_mappack? && h.mappack.id == 0
     perror("Error finding Metanet board.") if !h
-    userlevel = h.is_a?(Userlevel)
+    userlevel = h.is_userlevel?
     board = parse_board(msg, 'hs')
     perror("Non-highscore modes (e.g. speedrun) are only available for mappacks.") if !h.is_mappack? && board != 'hs'
     perror("Traces are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)

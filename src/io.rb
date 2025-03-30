@@ -1030,7 +1030,7 @@ end
 # Whether the response should be spoilered or not
 def parse_spoiler(msg, h = nil, channel = nil)
   old_enough = true
-  if h && !h.is_a?(Userlevel)
+  if h && !h.is_userlevel?
     mappack = h.map.mappack
     days = DAYS_PER_EPISODE * mappack.episodes.count
     old_enough = mappack.date < days.days.ago
@@ -1080,6 +1080,10 @@ def format_board(board)
   else
     'highscore'
   end
+end
+
+def format_frac(frac)
+  frac ? 'interpolated' : ''
 end
 
 # 'empty' means we print nothing

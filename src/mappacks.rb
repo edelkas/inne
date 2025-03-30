@@ -1199,7 +1199,7 @@ class MappackScore < ActiveRecord::Base
       scores = MappackScore.where(highscoreable: highscoreable, player: player)
       silent ? return : perror("#{player.name} does not have a score in #{highscoreable.name}") if scores.empty?
     else # If highscoreable and player have been provided
-      silent ? return : perror("#{highscoreable.name} does not belong to a mappack") if !highscoreable.is_a?(MappackHighscoreable)
+      silent ? return : perror("#{highscoreable.name} does not belong to a mappack") if !highscoreable.is_mappack?
       scores = self.where(highscoreable: highscoreable, player: player)
       silent ? return : perror("#{player.name} does not have a score in #{highscoreable.name}") if scores.empty?
       s = scores.where.not(rank_hs: nil).first

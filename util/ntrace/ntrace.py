@@ -1,6 +1,7 @@
 import os.path
 import zlib
 import struct
+import json
 
 from nsim import *
 
@@ -48,6 +49,7 @@ JUMP_INPUTS_DIC = {0:0, 1:1, 2:0, 3:1, 4:0, 5:1, 6:0, 7:1}
 
 goldlog = []
 frameslog = []
+fractionlog = []
 validlog = []
 collisionlog = []
 entitylog = []
@@ -84,6 +86,7 @@ for i in range(len(inputs_list)):
     #Append to the logs for each replay.
     goldlog.append(sim.gold_collected)
     frameslog.append(inp_len)
+    fractionlog.append(1 - sim.ninja.fractional_frame)
     validlog.append(valid)
     collisionlog.append(sim.collisionlog)
     poslog = array.array('h')
@@ -120,7 +123,6 @@ if tool_mode == "trace":
             f.write(struct.pack('<L', collisions))
             for col in collisionlog[i]:
                 f.write(col)
-    print("%.3f" % ((90 * 60 - frameslog[0] + 1 + goldlog[0] * 120) / 60))
 
 #For each level of the episode, write to file whether the replay is valid, then write the score split. 
 #Only ran in splits mode.
@@ -131,3 +133,8 @@ if tool_mode == "splits":
             print(validlog[i], file=f)
             split = split - frameslog[i] + 1 + goldlog[i]*120
             print(split, file=f)
+
+# Basic stats in the terminal
+scores = [(90 * 60 - frameslog[i] + 1 + goldlog[i] * 120) / 60 for i in range(len(inputs_list))]
+stats = { "valid": validlog, "scores": scores, "fractions": fractionlog, "frames": frameslog, "gold": goldlog }
+print(json.dumps(stats))

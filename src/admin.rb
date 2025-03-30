@@ -42,13 +42,6 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event)
-  lvls = Level.all.map{ |l| [l, l.map.object_counts[Map::ID_BOUNCEBLOCK]] }.sort_by{ |l, g| -g }.take(20)
-  list = lvls.map.with_index{ |l, i| "%02d: %-10s %4d" % [i, l[0].name, l[1]] }
-  send_message(
-    event,
-    content: format_block(list.join("\n")),
-    files: [Map.screenshot(file: true, h: lvls.map(&:first))]
-  )
 end
 
 def send_color_test(event)
@@ -674,7 +667,7 @@ def update_completions(event)
     end
     count_old = h.completions.to_i
     count_new = h.update_completions(log: true, discord: true, retries: 0, stop: true, global: global)
-    name = h.is_a?(Userlevel) ? "userlevel #{h.id}" : h.name
+    name = h.is_userlevel? ? "userlevel #{h.id}" : h.name
     if count_new
       count_new = count_new.to_i
       diff = count_new - count_old
@@ -995,6 +988,32 @@ def test_report(event)
   end
 end
 
+# Computes the interpolated scores using NSim and seeds them in the archives table
+def seed_fractional_scores(event)
+  list = Archive.where(fraction: nil, highscoreable_type: Level)
+  bad = 0
+  lost = 0
+  good = 0
+  count = list.count
+  list.find_each.with_index{ |ar, i|
+    if ar.lost || !ar.demo&.demo
+      ar.update(fraction: -1)
+      lost += 1
+    else
+      nsim = NSim.new(ar.highscoreable.map.dump_level, [ar.demo.demo])
+      nsim.run
+      frac = nsim.frac
+      nsim.destroy
+      ar.update(fraction: frac || -1)
+      !frac ? (bad += 1) : (good += 1)
+    end
+    print("Seeded #{ANSI.format(i + 1, fg: ANSI::BLUE)} / #{ANSI.format(count, fg: ANSI::BLUE)} fractional scores ")
+    print("(#{ANSI.format(good, fg: ANSI::GREEN)} good, #{ANSI.format(bad, fg: ANSI::RED)} bad, ")
+    print("#{ANSI.format(lost, fg: ANSI::RED)} lost)\r")
+  }
+  puts
+end
+
 
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
@@ -1044,6 +1063,7 @@ def respond_special(event)
   return sanitize_hashes(event)          if cmd == 'sanitize_hashes'
   return sanitize_userlevels(event)      if cmd == 'sanitize_userlevels'
   return sanitize_users(event)           if cmd == 'sanitize_users'
+  return seed_fractional_scores(event)   if cmd == 'seed_fractions'
   return seed_hashes(event)              if cmd == 'seed_hashes'
   return set_user_id(event)              if cmd == 'set_user_id'
   return set_replay_id(event)            if cmd == 'set_replay_id'

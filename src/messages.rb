@@ -432,16 +432,19 @@ def send_scores(event, map = nil, ret = false)
   h       = map.nil? ? parse_highscoreable(event, mappack: true) : map
   offline = parse_offline(msg)
   nav     = parse_nav(msg)
-  mappack = h.is_a?(MappackHighscoreable)
+  mappack = h.is_mappack?
   board   = parse_board(msg, 'hs', dual: true)
   board   = 'hs' if !mappack && board == 'dual'
   full    = parse_full(msg)
   cheated = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i]
+  frac    = !!msg[/\bfrac(tional)?\b/]
+  frac  &&= h.is_vanilla? && h.is_level?
+
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
   res     = ""
 
   # Navigating scores goes into a different method (see below this one)
-  if nav && !h.is_a?(MappackHighscoreable)
+  if nav && !h.is_mappack?
     send_nav_scores(event)
     return
   end
@@ -454,9 +457,9 @@ def send_scores(event, map = nil, ret = false)
   end
 
   # Format scores
-  header = format_header("#{format_full(full)} #{format_board(board).pluralize} for #{h.format_name}#{cheated ? ' [with cheaters]' : ''}")
+  header = format_header("#{format_full(full)} #{format_frac(frac)} #{format_board(board).pluralize} for #{h.format_name}#{cheated ? ' [with cheaters]' : ''}")
   res << header
-  scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated)
+  scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated, frac: frac)
   if full && scores.count > 20
     send_file(event, scores.join("\n"), "#{h.name}-scores.txt")
   else
@@ -466,7 +469,7 @@ def send_scores(event, map = nil, ret = false)
   # Add cleanliness if it's an episode or a story
   res << "\n" if full
   res << "Scores: **#{h.completions}**. " if h.completions && h.completions > 0
-  res << send_clean_one(event, true) if (h.is_a?(Episodish) || h.is_a?(Storyish)) && board != 'gm'
+  res << send_clean_one(event, true) if (h.is_episode? || h.is_story?) && board != 'gm'
 
   # If it's an episode, update all 5 level scores in the background
   if h.is_a?(Episode) && !offline && !OFFLINE_STRICT
@@ -748,7 +751,7 @@ def send_clean_one(event, ret = false)
   # Parse params
   msg = parse_message(event)
   h = parse_highscoreable(event, mappack: true)
-  perror("Cleanliness is an episode/story-specific function!") if h.is_a?(Levelish)
+  perror("Cleanliness is an episode/story-specific function!") if h.is_level?
   board = parse_board(msg, 'hs')
   perror("Sorry, G-- cleanlinesses aren't available yet.") if board == 'gm'
   perror("Only highscore mode is available for Metanet levels for now.") if !h.is_mappack? && board != 'hs'
@@ -1358,20 +1361,20 @@ end
 
 def send_download(event)
   h   = parse_highscoreable(event, mappack: true, map: true)
-  perror("Only levels can be downloaded") if !h.is_a?(Levelish)
+  perror("Only levels can be downloaded") if !h.is_level?
   event << "Downloading #{h.format_name}:"
   send_file(event, h.dump_level, h.name, true)
 rescue => e
   lex(e, "Error preparing downloading.", event: event)
 end
 
-# Use SimVYo's tool to trace the replay of a run based on the map data and
-# the demo data: still image.
+# Trace or animate a level / episode run given the map data and demo data using
+# SimVYo's nsim tool to simulate the physics.
 def send_trace(event)
   perror("Sorry, NSim is disabled.") if !FEATURE_NTRACE
   msg = parse_message(event)
-  wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:ntrace].locked?
-  $mutex[:ntrace].synchronize do
+  wait_msg = send_message(event, content: "Queued...", db: false) if $mutex[:trace].locked?
+  $mutex[:trace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
     Map.trace(event, anim: !!msg[/anim/i])
   end

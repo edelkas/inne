@@ -1709,8 +1709,8 @@ end
 
 def send_userlevel_trace(event)
   perror("Sorry, tracing is disabled.") if !FEATURE_NTRACE
-  wait_msg = send_message(event, content: 'Waiting for another trace to finish...', db: false) if $mutex[:ntrace].locked?
-  $mutex[:ntrace].synchronize do
+  wait_msg = send_message(event, content: 'Queued...', db: false) if $mutex[:trace].locked?
+  $mutex[:trace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
     parse_message(event).sub!(/user\s*level/i, '')
     parse_message(event).squish!

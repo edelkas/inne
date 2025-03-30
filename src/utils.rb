@@ -387,7 +387,7 @@ def get_data(uri_proc, data_proc, err, *vargs, fast: false)
   data_proc.call(response.body)
 rescue => e
   if (attempts += 1) < RETRIES
-    err("#{err}: #{e}") if LOG_DOWNLOAD_ERRORS
+    lex(e, err) if LOG_DOWNLOAD_ERRORS
     sleep(0.25)
     retry
   else
@@ -744,9 +744,11 @@ end
 
 module ANSI extend self
   # Format
-  NONE  = 0
-  BOLD  = 1
-  UNDER = 4
+  NONE   = 0
+  BOLD   = 1
+  FAINT  = 2 # No Discord support
+  ITALIC = 3 # No Discord support
+  UNDER  = 4
 
   # Text colors
   BLACK   = 30
@@ -768,40 +770,64 @@ module ANSI extend self
   CYAN_BG    = 46
   WHITE_BG   = 47
 
-  def esc(num)
-    "\x1B[#{num}m"
+  # Bright text colors (no Discord support)
+  BRIGHT_BLACK   = 90
+  BRIGHT_RED     = 91
+  BRIGHT_GREEN   = 92
+  BRIGHT_YELLOW  = 93
+  BRIGHT_BLUE    = 94
+  BRIGHT_MAGENTA = 95
+  BRIGHT_CYAN    = 96
+  BRIGHT_WHITE   = 97
+
+  # Bright background colors (no Discord support)
+  BRIGHT_BLACK_BG   = 100
+  BRIGHT_RED_BG     = 101
+  BRIGHT_GREEN_BG   = 102
+  BRIGHT_YELLOW_BG  = 103
+  BRIGHT_BLUE_BG    = 104
+  BRIGHT_MAGENTA_BG = 105
+  BRIGHT_CYAN_BG    = 106
+  BRIGHT_WHITE_BG   = 107
+
+  def esc(nums = [0])
+    "\x1B[#{nums.join(';')}m"
   end
 
   def unesc(str)
-    str.gsub(/\x1B\[\d+m/, '')
+    str.gsub(/\x1B\[[\d;]*m/, '')
   end
 
-  def format(str, bold: false, underlined: false, fg: nil, bg: nil)
-    return str if !bold && !underlined && !fg && !bg
-    str.prepend(esc(BOLD))  if bold
-    str.prepend(esc(UNDER)) if underlined
-    str.prepend(esc(fg))    if fg
-    str.prepend(esc(bg))    if bg
-    str << esc(NONE)
+  def format(str, bold: false, faint: false, italic: false, underlined: false, fg: nil, bg: nil, close: true)
+    str = str.to_s
+    codes = []
+    codes << BOLD   if bold
+    codes << FAINT  if faint
+    codes << ITALIC if italic
+    codes << UNDER  if underlined
+    codes << fg     if fg
+    codes << bg     if bg
+    str.prepend(esc(codes)) unless codes.empty?
+    str << esc if close && !codes.empty?
     str
   end
 
   # Format code shortcuts
-  def none()    esc(NONE)    end
-  def bold()    esc(BOLD)    end
-  def under()   esc(UNDER)   end
+  def none()    esc()        end
+  def bold()    esc([BOLD])    end
+  def under()   esc([UNDER])   end
   alias_method :clear, :none
   alias_method :reset, :none
 
   # Basic color code shortcuts
-  def black()   esc(BLACK)   end
-  def red()     esc(RED)     end
-  def green()   esc(GREEN)   end
-  def yellow()  esc(YELLOW)  end
-  def blue()    esc(BLUE)    end
-  def magenta() esc(MAGENTA) end
-  def cyan()    esc(CYAN)    end
-  def white()   esc(WHITE)   end
+  def black()   esc([BLACK])   end
+  def red()     esc([RED])     end
+  def green()   esc([GREEN])   end
+  def yellow()  esc([YELLOW])  end
+  def blue()    esc([BLUE])    end
+  def magenta() esc([MAGENTA]) end
+  def cyan()    esc([CYAN])    end
+  def white()   esc([WHITE])   end
 
   # Other color shortcuts
   alias_method :good,  :green
@@ -1724,10 +1750,9 @@ end
 # map data and demo data, the resulting position and collision information, etc.
 # It may contain multiple simulations for the same level, since they're all traced
 # together.
-# TODO: The :ntrace mutex should probably be handled by this class automatically
 class NSim
 
-  attr_reader :count, :success, :correct, :valid, :valid_flags, :complexity, :splits, :scores
+  attr_reader :count, :success, :correct, :valid, :valid_flags, :complexity, :splits, :scores, :stats
   attr_accessor :ppc
   Collision = Struct.new(:id, :index, :state)
 
@@ -1749,6 +1774,7 @@ class NSim
     @raw_collisions = {}
     @ppc            = 0 # Determines the default scaling factor for coordinates
     @complexity     = 0 # Total coordinates
+    @stats          = {}
   end
 
   # Export input files for nsim
@@ -1843,6 +1869,12 @@ class NSim
     f&.close
   end
 
+  # Parse the stats printed to the terminal after execution
+  private def parse_stats
+    start = @output.strip.rindex("\n").to_i
+    @stats = JSON.parse(@output[start..]) rescue {}
+  end
+
   # Print debug information
   def dbg(event)
     if @output.length < DISCORD_CHAR_LIMIT - 100
@@ -1867,17 +1899,20 @@ class NSim
     @valid = @success && @correct && @valid_flags.all?
   end
 
-  # Run simulation and parse result
+  # Run simulation and parse result inside the NSim mutex
   def run(basic_sim: true, basic_render: true, silent: false)
-    export
-    execute(basic_sim: basic_sim, basic_render: basic_render, silent: silent)
-    parse(silent: silent) if @success
+    $mutex[:nsim].synchronize do
+      export
+      execute(basic_sim: basic_sim, basic_render: basic_render, silent: silent)
+      parse(silent: silent) if @success
+    rescue => e
+      lex(e, 'Error running NSim')
+    ensure
+      clean
+    end
+    parse_stats if @success
     compute_complexity(silent: silent) if @correct
     validate
-  rescue => e
-    lex(e, 'Error running NSim')
-  ensure
-    clean
   end
 
   # Ensure simulation correctness or halt otherwise
@@ -1967,11 +2002,15 @@ class NSim
   end
 
   # Run score taken from nclone's terminal output
-  def score
-    return if !@valid || !@output || @output.empty?
-    score = @output.split("\n").last
-    return if !score || score.strip.empty?
-    round_score(score.strip.to_f)
+  def score(index = 0)
+    return if !@valid_flags[index]
+    round_score(@stats['scores'][index]) rescue nil
+  end
+
+  # Run fractional score taken from nclone's terminal output
+  def frac(index = 0)
+    return if !@valid_flags[index]
+    @stats['fractions'][index] rescue nil
   end
 
   # Run is finished for this ninja on this frame
@@ -2125,7 +2164,7 @@ def make_table(
   # Convert all non-integer numbers to floats
   rows.each{ |r|
     next unless r.is_a?(Array)
-    r.map!{ |e| e.is_a?(Numeric) && !e.integer? ? e.to_f : e }
+    r.map!{ |e| e.nil? ? '' : e.is_a?(Numeric) && !e.integer? ? e.to_f : e }
   }
 
   # Compute column widths

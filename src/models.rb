@@ -321,7 +321,7 @@ module Downloadable
   #   event: Send msgs to Discord if not nil
   #   msgs:  Discord message to edit for progress report
   def self.submit_zero_scores(list, event: nil, msgs: [nil])
-    ul = list.first.is_a?(Userlevel)
+    ul = list.first.is_userlevel?
     count = list.count
     good = 0
     bad = 0
@@ -352,7 +352,7 @@ module Downloadable
   #   global:  Use global boards (true), around mine (false) or default (nil)
   def self.update_completions(list, event: nil, msgs: [nil], retries: 0, global: nil)
     type = list.first.class.to_s.downcase
-    ul = list.first.is_a?(Userlevel)
+    ul = list.first.is_userlevel?
     count = list.count
     delta = 0
     list.find_each.with_index{ |h, i|
@@ -881,7 +881,7 @@ module Highscoreable
   # Arguments are unused, but they're necessary to be compatible with the corresponding
   # function in MappackHighscoreable
   def leaderboard(*args, **kwargs)
-    ul = self.is_a?(Userlevel)
+    ul = is_userlevel?
     attr_names = %W[rank id score name metanet_id replay_id cool star]
     attrs = [
       'rank',
@@ -901,10 +901,7 @@ module Highscoreable
     end
   end
 
-  def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false)
-    userlevel = self.is_a?(Userlevel)
-    hs = board == 'hs'
-
+  def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20).each_with_index.select{ |_, r|
@@ -912,14 +909,14 @@ module Highscoreable
     }.sort_by{ |_, r| full ? r : ranks.index(r) }
 
     # Figure out if cheated scores need to be inserted
-    if cheated && SHOW_CHEATERS && !is_mappack? && !full
+    if cheated && SHOW_CHEATERS && is_vanilla? && !full
       cheated_scores = Archive.where(highscoreable: self, expired: false, cheated: true)
                               .joins("INNER JOIN `players` ON `players`.`metanet_id` = `archives`.`metanet_id`")
                               .order('`score` DESC', '`replay_id` ASC')
                               .pluck(:name, '`score` / 60.0', :metanet_id, :replay_id)
       cheated_scores.map!{ |s|
         h = {}
-        h['score']      = s[1]
+        h['score']      = s[1].to_f
         h['name']       = s[0]
         h['metanet_id'] = s[2]
         h['replay_id']  = s[3]
@@ -932,28 +929,58 @@ module Highscoreable
       boards.sort_by!{ |s, _| [-(s['score'] * 60).round, s['replay_id']] }
     end
 
+    # Figure out if interpolated fractional scores need to be used instead
+    frac &&= is_vanilla? && is_level?
+    close_calls = []
+    equals = []
+    if frac
+      boards.each{ |s, _| s['score'] = round_score(s['score']) } # Normalize scores
+      cools = false
+      fractions = Archive.where(highscoreable: self).pluck(:replay_id, :fraction).to_h rescue {}
+      boards.each{ |s, _|
+        fraction = fractions[s['replay_id']]
+        next s['question'] = true if !fraction || !fraction.between?(0, 1)
+        s['score'] -= (1 - fraction) / 60.0
+      }
+      boards.sort_by!{ |s, _| [-s['score'], s['replay_id']] }
+      close_calls = boards.select{ |s, _| !s['question'] }
+                          .group_by{ |s, _| s['score'].round(3) }
+                          .select{ |_, list| list.size > 1 }
+                          .map{ |_, list| list.map{ |s, _| s['replay_id'] } }
+                          .flatten
+      equals = boards.group_by{ |s, _| s['score'] }
+                     .select{ |_, list| list.size > 1 }
+                     .map{ |_, list| list.map{ |s, _| s['replay_id'] } }
+                     .flatten
+    end
+
     # Calculate padding
+    hs = board == 'hs'
     name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
     field = !is_mappack? ? 'score' : "score_#{board}"
     score_padding = sp > 0 ? sp : boards.map{ |s, _|
-      is_mappack? && hs || userlevel ? s[field] / 60.0 : s[field]
+      is_mappack? && hs || is_userlevel? ? s[field] / 60.0 : s[field]
     }.max.to_i.to_s.length + (!is_mappack? || hs ? 4 : 0)
 
     # Print scores
     boards.map{ |s, r|
-      Scorish.format(name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r, mappack: is_mappack?, userlevel: userlevel, h: s)
+      Scorish.format(
+        name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r,
+        mappack: is_mappack?, userlevel: is_userlevel?, h: s,
+        prec: close_calls.include?(s['replay_id']), equal: equals.include?(s['replay_id'])
+      )
     }
   end
 
-  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false)
-    if !self.is_a?(MappackHighscoreable) || mode != 'dual'
-      ret = format_scores_board(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated)
+  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false)
+    if !is_mappack? || mode != 'dual'
+      ret = format_scores_board(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
       ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"] if ret.size == 0
       ret = ret.join("\n") if join
       return ret
     end
-    board_hs = format_scores_board('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated)
-    board_sr = format_scores_board('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated)
+    board_hs = format_scores_board('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+    board_sr = format_scores_board('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
     length_hs = board_hs.first.length rescue 0
     length_sr = board_sr.first.length rescue 0
     size = [board_hs.size, board_sr.size].max
@@ -1139,7 +1166,7 @@ module Highscoreable
                    .sort_by{ |k, v| v[:index] }.to_h
     i = tabs.keys.index(self.tab.to_sym)
     tabs = tabs.values
-    old_id = self.is_a?(MappackHighscoreable) ? inner_id : id
+    old_id = is_mappack? ? inner_id : id
 
     # Scale factor to translate Level IDs to Episode / Story IDs
     type = TYPES[klass]
@@ -1175,7 +1202,7 @@ module Highscoreable
       new_id = old_id
     end
 
-    new_id += type[:slots] * mappack.id if self.is_a?(MappackHighscoreable)
+    new_id += type[:slots] * mappack.id if is_mappack?
     self.class.find(new_id) rescue self
   rescue => e
     lex(e, 'Failed to navigate highscoreable')
@@ -1210,7 +1237,7 @@ module Levelish
   # Return the corresponding Level object of a MappackLevel
   # 'null' determines whether to return nil or self if no equivalent exists
   def vanilla(null = false)
-    return self if self.is_a?(Level) || self.is_a?(Userlevel)
+    return self if self.is_a?(Level) || is_userlevel?
     level = Level.find_by(id: id)
     return level ? level : null ? nil : self
   end
@@ -1241,7 +1268,7 @@ module Levelish
     n = m == 1 ? 2 : 1
     framecount /= n
     size = framecount * n + 26 + 4 * n
-    h_id = self.is_a?(MappackHighscoreable) ? inner_id : id
+    h_id = is_mappack? ? inner_id : id
 
     # Build header
     header = [0].pack('C')               # Type (0 lvl, 1 lvl in ep, 2 lvl in sty)
@@ -1332,11 +1359,10 @@ module Episodish
   end
 
   def splits(rank = 0, board: 'hs')
-    mappack = self.is_a?(MappackHighscoreable)
-    scoref  = !mappack ? 'score' : "score_#{board}"
-    start   = mappack && board == 'sr' ? 0 : 90.0
-    factor  = mappack && board == 'hs' ? 60.0 : 1
-    offset  = !mappack || board == 'hs' ? 90.0 : 0
+    scoref  = !is_mappack? ? 'score' : "score_#{board}"
+    start   = is_mappack? && board == 'sr' ? 0 : 90.0
+    factor  = is_mappack? && board == 'hs' ? 60.0 : 1
+    offset  = !is_mappack? || board == 'hs' ? 90.0 : 0
     scores  = levels.map{ |l| l.leaderboard(board)[rank][scoref] }
     splits_from_scores(scores, start: start, factor: factor, offset: offset)
   rescue => e
@@ -1501,13 +1527,12 @@ end
 # Implemented by Score and MappackScore
 module Scorish
 
-  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {})
+  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, prec: false, equal: false)
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
     cheat = !!h['cheated']
 
     # Compose each element
-
     t_star   = mappack || !stars ? '' : (h['star'] ? '*' : ' ')
     t_rank   = cheat ? 'xx' : t_rank || h['rank'] || '--'
     t_rank   = Highscoreable.format_rank(t_rank)
@@ -1515,12 +1540,14 @@ module Scorish
     f_score  = !mappack ? 'score' : "score_#{mode}"
     s_score  = mappack && hs || userlevel ? 60.0 : 1
     t_score  = h[f_score] / s_score
-    t_fmt    = !mappack || hs ? "%#{score_padding}.3f" : "%#{score_padding}d"
+    t_fmt    = !mappack || hs ? "%#{score_padding}.#{prec ? 6 : 3}f" : "%#{score_padding}d"
     t_score  = t_fmt % [t_score]
     t_cool   = !mappack && cools && h['cool'] ? " 😎" : ""
+    t_eql    = equal && !h['question'] ? ' =' : ''
+    t_quest  = h['question'] ? ' ?' : ''
 
     # Put everything together
-    line = "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}"
+    line = "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}#{t_eql}#{t_quest}"
     line = "#{ANSI.red}#{line}#{ANSI.clear}" if cheat
     line
   end
@@ -1543,15 +1570,12 @@ module Scorish
     return if !FEATURE_NTRACE
 
     # Execute ntrace in mutex
-    TmpMsg.update(event, '-# Queued...') if event && $mutex[:ntrace].locked?
-    $mutex[:ntrace].synchronize do
-      TmpMsg.update(event, '-# Running simulation...') if event
-      nsim = NSim.new(highscoreable.levels.map{ |l| l.map.dump_level }, demo.demo)
-      nsim.run
-      res = { valid: nsim.valid_flags, splits: nsim.splits, scores: nsim.scores }
-      nsim.destroy
-      res
-    end
+    TmpMsg.update(event, '-# Running simulation...') if event
+    nsim = NSim.new(highscoreable.levels.map{ |l| l.map.dump_level }, demo.demo)
+    nsim.run
+    res = { valid: nsim.valid_flags, splits: nsim.splits, scores: nsim.scores }
+    nsim.destroy
+    res
   end
 end
 

@@ -99,6 +99,7 @@ class Ninja:
         self.xposlog = [] #Used to produce trace
         self.yposlog = []
         self.log()
+        self.fractional_frame = 0 #More accurate win score
         
     def integrate(self):
         """Update position and speed by applying drag and gravity before collision phase."""
@@ -950,6 +951,10 @@ class EntityExit(Entity):
         if overlap_circle_vs_circle(self.xpos, self.ypos, self.RADIUS,
                                     ninja.xpos, ninja.ypos, ninja.RADIUS):
             ninja.win()
+            dx = ninja.xpos - ninja.xpos_old
+            dy = ninja.ypos - ninja.ypos_old
+            ninja.fractional_frame = get_time_of_intersection_circle_vs_circle(
+                ninja.xpos_old, ninja.ypos_old, dx, dy, self.xpos, self.ypos, ninja.RADIUS + self.RADIUS)
 
 
 class EntityExitSwitch(Entity):

@@ -160,7 +160,7 @@ def initialize_vars
   $memory_warned_c = false
   $linux           = RbConfig::CONFIG['host_os'].match?(/linux/i)
   $c_inne          = !!defined?(C_INNE)
-  $mutex           = { ntrace: Mutex.new, tmp_msg: Mutex.new }
+  $mutex           = { trace: Mutex.new, nsim: Mutex.new, tmp_msg: Mutex.new }
   $log             = { socket: SOCKET_LOG }
   $threads         = []
   $main_queue      = Queue.new
