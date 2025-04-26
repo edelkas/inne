@@ -202,20 +202,26 @@ rescue => e
   lex(e, "Error generating highscore plot.", event: event)
 end
 
-def send_ul_plot_day(event)
-  counts = Userlevel.group('date(date)').count
+def send_ul_plot_day(event, scores = false)
+  if scores
+    list = UserlevelScore.joins("INNER JOIN userlevels ON userlevels.id = userlevel_id")
+  else
+    list = Userlevel
+  end
+  counts = list.group('date(date)').count
   dates = (counts.keys.first .. counts.keys.last).to_a
 
   total_counts = dates.map{ |date| counts[date].to_i }
-  dalton_counts = Userlevel.where(author_id: 234533).group('date(date)').count
+  dalton_counts = list.where('author_id = 234533').group('date(date)').count
   dalton_counts = dates.map{ |date| dalton_counts[date].to_i }
 
   labels = dates.map{ |date|
     [1, 7].include?(date.month) && date.day == 1 ? date.strftime("%b '%y") : ''
   }
 
+  title = scores ? 'Userlevel scores' : 'Userlevels'
   create_svg(
-    title:    "Userlevels by day\n (Total: #{total_counts.sum} userlevels in #{total_counts.size} days)",
+    title:    "#{title} by day\n (Total: #{total_counts.sum} userlevels in #{total_counts.size} days)",
     x_name:   'Date',
     y_name:   'Count',
     x_res:    3000,
@@ -227,8 +233,13 @@ def send_ul_plot_day(event)
   )
 end
 
-def send_ul_plot_month(event)
-  counts = Userlevel.group('year(date)', 'month(date)').count
+def send_ul_plot_month(event, scores = false)
+  if scores
+    list = UserlevelScore.joins("INNER JOIN userlevels ON userlevels.id = userlevel_id")
+  else
+    list = Userlevel
+  end
+  counts = list.group('year(date)', 'month(date)').count
   first_year  = counts.keys.first[0]
   last_year   = counts.keys.last[0]
   first_month = counts.keys.first[1]
@@ -242,7 +253,7 @@ def send_ul_plot_month(event)
     }
   }.flatten
 
-  dalton_counts = Userlevel.where(author_id: 234533).group('year(date)', 'month(date)').count
+  dalton_counts = list.where('author_id = 234533').group('year(date)', 'month(date)').count
   dalton_counts = (first_year .. last_year).map{ |year|
     month1 = year == first_year ? first_month : 1
     month2 = year == last_year ? last_month : 12
@@ -266,8 +277,9 @@ def send_ul_plot_month(event)
     }
   }.flatten
 
+  title = scores ? 'Userlevel scores' : 'Userlevels'
   create_svg(
-    title:    "Userlevels by month\n (Total: #{total_counts.sum} userlevels in #{total_counts.size} months)",
+    title:    "#{title} by month\n (Total: #{total_counts.sum} userlevels in #{total_counts.size} months)",
     x_name:   'Date',
     y_name:   'Count',
     x_res:    1920,
@@ -283,9 +295,9 @@ def send_ul_plot(event)
   flags = parse_flags(event)
   case flags[:period]
   when 'month'
-    file = send_ul_plot_month(event)
+    file = send_ul_plot_month(event, flags.key?(:scores))
   else
-    file = send_ul_plot_day(event)
+    file = send_ul_plot_day(event, flags.key?(:scores))
   end
   send_file(event, file, 'plot.svg', true)
 rescue => e
