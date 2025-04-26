@@ -967,7 +967,7 @@ module Highscoreable
       Scorish.format(
         name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r,
         mappack: is_mappack?, userlevel: is_userlevel?, h: s,
-        prec: true, equal: equals.include?(s['replay_id'])
+        prec: frac, equal: equals.include?(s['replay_id'])
       )
     }
   end

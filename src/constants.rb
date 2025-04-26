@@ -156,35 +156,33 @@ LOG_DOWNLOAD_ERRORS = false # Too spammy if no Steam IDs are active
 # <------                        PATH VARIABLES                          ------>
 # <---------------------------------------------------------------------------->
 
-DIR_DB            = './db'
+DIR_DB            = 'db'
 DIR_MIGRATION     = "#{DIR_DB}/migrate"
 CONFIG            = "#{DIR_DB}/config.yml"
 DIR_MAPPACKS      = "#{DIR_DB}/mappacks"
 PATH_MAPPACK_INFO = "#{DIR_MAPPACKS}/digest"
 
-DIR_IMAGES    = './images'
+DIR_IMAGES    = 'img'
 PATH_AVATARS  = "#{DIR_IMAGES}/avatars"
 PATH_PALETTES = "#{DIR_IMAGES}/palette.png"
 PATH_OBJECTS  = "#{DIR_IMAGES}/object_layers"
 PATH_TILES    = "#{DIR_IMAGES}/tile_layers"
-PATH_BORDER   = "#{DIR_IMAGES}/b.png"
 
-DIR_LOGS        = './logs'
+DIR_LIB = 'lib'
+
+DIR_LOGS        = 'logs'
 PATH_LOG_FILE   = "#{DIR_LOGS}/log_outte"
 PATH_LOG_SQL    = "#{DIR_LOGS}/log_outte_sql"
 PATH_LOG_OLD    = "#{DIR_LOGS}/log_outte_old"
 PATH_LOG_REPORT = "#{DIR_LOGS}/log_report"
 
-DIR_SCREENSHOTS = "./screenshots"
+DIR_SOURCE      = 'src'
 
-DIR_SOURCE      = './src'
+DIR_TEST        = 'test'
 
-DIR_TEST        = './test'
-
-DIR_UTILS       = './util'
-PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
-
+DIR_UTILS       = 'util'
 DIR_FONTS       = "#{DIR_UTILS}/fonts"
+PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
 
 FILENAME_MAPPACK_AUTHORS = 'AUTHORS'
 FILENAME_LIMIT = 128 # Never surpass 259 (Windows' limit, google MAX_PATH)

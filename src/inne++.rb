@@ -124,7 +124,7 @@ require_relative 'threads.rb'
 
 # Import our own native C extension
 begin
-  require_relative '../lib/cinne'
+  require_relative File.join('..', DIR_LIB, 'cinne')
 rescue LoadError
   err("Failed to load C-inne, is it built?")
 end
