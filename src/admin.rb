@@ -215,7 +215,6 @@ def send_ul_plot_day(event)
   }
 
   create_svg(
-    filename: 'userlevels_by_day.svg',
     title:    "Userlevels by day\n (Total: #{total_counts.sum} userlevels in #{total_counts.size} days)",
     x_name:   'Date',
     y_name:   'Count',
@@ -268,7 +267,6 @@ def send_ul_plot_month(event)
   }.flatten
 
   create_svg(
-    filename: 'userlevels_by_month.svg',
     title:    "Userlevels by month\n (Total: #{total_counts.sum} userlevels in #{total_counts.size} months)",
     x_name:   'Date',
     y_name:   'Count',
@@ -279,18 +277,17 @@ def send_ul_plot_month(event)
     labels:   labels,
     fmt:      '%d'
   )
-
-  #Magick::ImageList.new('userlevels_by_month.svg').write('userlevels_by_month.png')
 end
 
 def send_ul_plot(event)
   flags = parse_flags(event)
   case flags[:period]
   when 'month'
-    send_ul_plot_month(event)
+    file = send_ul_plot_month(event)
   else
-    send_ul_plot_day(event)
+    file = send_ul_plot_day(event)
   end
+  send_file(event, file, 'plot.svg', true)
 rescue => e
   lex(e, "Error generating userlevel plot.", event: event)
 end

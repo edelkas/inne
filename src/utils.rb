@@ -2315,7 +2315,6 @@ def make_histogram(
 end
 
 def create_svg(
-    filename: 'graph.svg',
     title:    'Plot',
     x_name:   'X',
     y_name:   'Y',
@@ -2398,7 +2397,7 @@ def create_svg(
   data.each_with_index{ |plot, i|
     g.add_data({data: plot, title: names[i].to_s})
   }
-  File.open(filename, 'w'){ |f| f.write(g.burn_svg_only) }
+  g.burn_svg_only
 end
 
 # Parse a TGA image and read the pixel data (very incomplete)
