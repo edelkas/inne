@@ -14,6 +14,8 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Ability to subscribe to certain things, like new maps by some user, or lost 0ths/top20s in vanilla/mappack/userlevels, or any new 0th, ...
+- Turns out you can see Switch players real username in Search (but not in regular tabs like Newest). Perhaps we can exploit this to fill the blank names in the db by searching for all their maps and, if we get a single result, we know it's the correct player.
 - Function to sanitize mappack archives by removing dupes.
 - Add nv2  converter.
 - Add Userlevel -> Metanet and viceversa converters.
@@ -76,7 +78,6 @@ Ongoing:
 - In order to sort ties, rather than alphabetical, use chronological. For simplicity, use date of most recent 0th, rather than the whole history.
 - Migrate the scores table to using integer scores (in frames), like the others.
 - Dual 0ths (both hs and sr 0ths), and dual ownages
-- Ability to subscribe to mappacks or certain things (e.g. "subscribe to cla sr top20" will warn when the user loses a sr top20 in mappack CLA)
 - Package outte as a gem
 - Across-mappacks rankings and stuff
 - TASes in outte, perhaps add to CLE too (scores around mine?)

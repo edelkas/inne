@@ -815,7 +815,8 @@ HACKERS = {
   333510 => ["dominater01"],
   336069 => ["Progressively idle"],
   353512 => ["Dragon_V.V"],
-  357282 => ["MX_Er3P"]
+  357282 => ["MX_Er3P"],
+  401089 => ["Haidi"]
 }
 
 CHEATERS = {

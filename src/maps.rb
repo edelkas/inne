@@ -807,7 +807,7 @@ module Map
     end
 
     # Dump raw binary data
-    Map.dump_level(tiles, objects, counts, mode: mode, title: title, author_id: author_id)
+    Map.dump_level(tiles, objects, counts, query: query, mode: mode, title: title, author_id: author_id)
   end
 
   # Computes the level's hash, which the game uses for integrity verifications
