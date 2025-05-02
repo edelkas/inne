@@ -1593,10 +1593,16 @@ def find_max_type(rank, type, tabs, mappack = nil, board = 'hs')
     rfield = !mappack ? :rank  : "rank_#{board}".to_sym
     sfield = !mappack ? :score : "score_#{board}".to_sym
     scale  = mappack && board == 'hs' ? 60.0 : 1.0
-
-    query = klass.where(highscoreable_type: type, rfield => 0)
-    query = query.where(tab: tabs) if !tabs.empty?
-    query = query.sum(sfield) / scale
+    size   = TYPES[type.vanilla.to_s][:size]
+    count  = query.count
+    query  = klass.where(highscoreable_type: mappack ? MappackLevel : Level, rfield => 0)
+    query  = query.where(tab: tabs) if !tabs.empty?
+    if size > 1
+      table = type.table_name
+      query = query.joins("INNER JOIN `#{table}` ON `highscoreable_id` DIV #{size} = `#{table}`.`id`")
+    end
+    query  = query.sum(sfield) / scale
+    query -= count * (size - 1) * 90.0 if board == 'hs'
     mappack && board == 'sr' ? query.to_i : query.to_f
   else
     query.count
