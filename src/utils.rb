@@ -1085,28 +1085,30 @@ end
 # <------                       FILE MANIPULATION                        ------>
 # <---------------------------------------------------------------------------->
 
+FMT_SIZES = {
+  'a' => 1, 'A' => 1, 'Z' => 1,
+  'c' => 1, 'C' => 1,
+  's' => 2, 'S' => 2, 'n' => 2, 'v' => 2,
+  'l' => 4, 'L' => 4, 'i' => 4, 'I' => 4, 'N' => 4, 'V' => 4,
+  'f' => 4, 'F' => 4, 'e' => 4, 'g' => 4,
+  'q' => 8, 'Q' => 8, 'j' => 8, 'J' => 8,
+  'd' => 8, 'D' => 8, 'E' => 8, 'G' => 8
+}
+
 # Helper for reading files. Raises if not n bytes left to read.
 def assert_left(f, n)
-  raise if f.size - f.pos < n
+  raise "Not enough bytes left (#{f.size} < #{f.pos + n})" if f.size - f.pos < n
 end
 
 # Computes the size in bytes of a binary string given the packing format string.
 def fmtsz(fmt)
-  sizes = {
-    'c' => 1, 'C' => 1,
-    's' => 2, 'S' => 2, 'n' => 2, 'v' => 2,
-    'l' => 4, 'L' => 4, 'i' => 4, 'I' => 4, 'N' => 4, 'V' => 4,
-    'f' => 4, 'F' => 4, 'e' => 4, 'g' => 4,
-    'q' => 8, 'Q' => 8, 'j' => 8, 'J' => 8,
-    'd' => 8, 'D' => 8, 'E' => 8, 'G' => 8
-  }
   fmt.tr('<>!_', '').scan(/([A-Za-z])(\d+)?/)
-     .inject(0){ |sum, pat| sum + sizes[pat[0]] * (pat[1] || 1).to_i }
+     .inject(0){ |sum, pat| sum + FMT_SIZES[pat[0]] * (pat[1] || 1).to_i }
 end
 
-# Unpacks a series of bytes from an open file. Only works for unpacking numeric
-# types (e.g. integers or floats), not strings.
-def fparse(f, fmt)
+# Unpacks a series of bytes from an open IO object. Only works for unpacking numeric
+# types (e.g. integers or floats) and strings.
+def ioparse(f, fmt)
   sz = fmtsz(fmt)
   assert_left(f, sz)
   f.read(sz).unpack(fmt)
@@ -1829,15 +1831,15 @@ class NSim
   # TODO: Should we deduplicate collisions, or handle it later?
   private def parse_trace(f)
     # Run count and valid flags
-    n, = fparse(f, 'C')
-    @valid_flags = fparse(f, 'C' * n).map{ |b| b > 0 }
+    n, = ioparse(f, 'C')
+    @valid_flags = ioparse(f, 'C' * n).map{ |b| b > 0 }
 
     n.times do |i|
       # Entity coordinate section
-      entity_count, = fparse(f, 'S<')
+      entity_count, = ioparse(f, 'S<')
       entity_count.times do
-        id, index, chunk_count = fparse(f, 'CS<S<')
-        chunks = fparse(f, "S<#{2 * chunk_count}").each_slice(2).to_a.transpose
+        id, index, chunk_count = ioparse(f, 'CS<S<')
+        chunks = ioparse(f, "S<#{2 * chunk_count}").each_slice(2).to_a.transpose
         @raw_chunks[id][index] = chunks unless @raw_chunks[id][index]
         frames = chunks.last.sum
         next f.seek(4 * frames, :CUR) if @raw_coords[id][index]
@@ -1845,7 +1847,7 @@ class NSim
       end
 
       # Entity collision section
-      collision_count, = fparse(f, 'L<')
+      collision_count, = ioparse(f, 'L<')
       collision_count.times do
         collision = f.read(6)
         frame, = collision.unpack('S<')

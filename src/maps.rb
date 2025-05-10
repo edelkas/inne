@@ -166,6 +166,21 @@ module Map
   COLOR_OFFSET_MENU          = 143
   COLOR_OFFSET_EDITOR        = 185
 
+  # Map file offsets (the first 2 are only present in files, NOT in queries)
+  OFFSET_VERSION   = 0x0
+  OFFSET_SIZE      = 0x4
+  OFFSET_LEVEL_ID  = 0x8
+  OFFSET_MODE      = 0xC
+  OFFSET_QT        = 0x10
+  OFFSET_AUTHOR_ID = 0x14
+  OFFSET_FAVS      = 0x18
+  OFFSET_DATETIME  = 0x1C
+  OFFSET_TITLE     = 0x26
+  OFFSET_AUTHOR    = 0xA6
+  OFFSET_TILES     = 0xB8
+  OFFSET_COUNTS    = 0x47E
+  OFFSET_OBJECTS   = 0x4CE
+
   # Map properties. Challenge: Figure out what the following constant encodes ;)
   BORDERS = "100FF87E1781E0FC3F03C0FC3F03C0FC3F03C078370388FC7F87C0EC1E01C1FE3F13E"
   ROWS    = 23

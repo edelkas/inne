@@ -329,6 +329,10 @@ PART_SIZE      = 500   # Number of userlevels per file returned by the server wh
 MIN_ID         = 22715 # ID of the very first userlevel, to exclude Metanet levels
 DEFAULT_GLOBAL = true  # Default to all userlevels in highscoring functions
 
+# Offsets and sizes of the different binary formats used for levels
+SIZE_QUERY_HEADER_GLOBAL = 48 # Size of the initial header of a userlevel query
+SIZE_QUERY_HEADER_MAP    = 44 # Size of each individual map header in a query
+
 # Userlevel query types
 QT_SI                                  =  0 # (Metanet only)
 QT_S                                   =  1 # (Metanet only)

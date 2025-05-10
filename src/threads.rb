@@ -350,7 +350,9 @@ def update_status
   if !OFFLINE_STRICT
     # Download newest userlevels from all 3 modes
     [MODE_SOLO, MODE_COOP, MODE_RACE].each do |mode|
-      Userlevel.browse(mode: mode, update: true) rescue next
+      Userlevel.parse(Userlevel.get_levels(QT_NEWEST, 0, mode))
+    rescue
+      next
     end
 
     # Update scores for lotd, eotw and cotm

@@ -430,89 +430,63 @@ class Userlevel < ActiveRecord::Base
   #----------------------------------------------------------------------------#
 
   # Parse binary file with userlevel collection received from N++'s server
-  # TODO: Simplify the parsing of the headers with proper pack statements, like in the Demo class
-  def self.parse(levels, update = false)
+  # TODO: We should probably incorporate the parse_tabs code here.
+  def self.parse(buffer)
+    buffer = StringIO.new(buffer.to_s)
+
     # Parse header (48B)
-    return nil if levels.size < 48
-    header = {
-      date:    levels[0...16],           # Rough date of query
-      count:   _unpack(levels[16...20]), # Map count in this collection (<= 500)
-      page:    _unpack(levels[20...24]), # Page number (>= 0)
-      type:    _unpack(levels[24...28]), # Playable type (always 0, i.e., Level)
-      qt:      _unpack(levels[28...32]), # Query type (0-37)
-      mode:    _unpack(levels[32...36]), # Game mode (0 = Solo, 1 = Coop, 2 = Race, 3 = HC)
-      cache:   _unpack(levels[36...40]), # Cache duration in seconds (usually 1200 or 5)
-      max:     _unpack(levels[40...44]), # Max page size (usually 500 or 25)
-      unknown: _unpack(levels[44...48])  # Unknown field (usually 0 or 5)
-    }
+    header = Struct.new(:date, :count, :page, :type, :qt, :mode, :cache, :max, :unknown)
+                   .new(*ioparse(buffer, 'a16l<8'))
 
     # Parse map headers (44B each)
-    return nil if levels.size < 48 + 44 * header[:count]
-    maps = levels[48 ... 48 + 44 * header[:count]].chars.each_slice(44).map { |h|
-      {
-        id:        _unpack(h[0...4], 'l<'),   # Userlevel ID
-        author_id: _unpack(h[4...8], 'l<'),   # Author user ID (-1 if not found)
-        author:    parse_str(h[8...24].join), # Author name, truncated to 16 chars
-        favs:      _unpack(h[24...28], 'l<'), # ++ count
-        date:      Time.strptime(h[28..-1].join, DATE_FORMAT_NPP).strftime(DATE_FORMAT_MYSQL)
-      }
-    }
+    RawMap = Struct.new(:id, :author_id, :author, :favs, :date, :count, :title, :tiles, :objects)
+    maps = Array.new(header.count).map do
+      RawMap.new(*ioparse(buffer, 'l<2a16l<a16')).tap do |map|
+        map.author = parse_str(map.author)
+        map.date = Time.strptime(map.date, DATE_FORMAT_NPP)
+      end
+    end
 
     # Parse map data (variable length blocks)
-    i = 0
-    offset = 48 + header[:count] * 44
-    while i < header[:count]
-      # Parse mini-header (6B)
-      break if levels.size < offset + 6
-      len = _unpack(levels[offset...offset + 4])                 # Block length (4B)
-      maps[i][:count] = _unpack(levels[offset + 4...offset + 6]) # Object count (2B)
-
-      # Parse compressed data
-      break if levels.size < offset + len
-      map = Zlib::Inflate.inflate(levels[offset + 6...offset + len])
-      maps[i][:title] = parse_str(map[30, 146])
-      maps[i][:tiles] = map[176...1142].bytes.each_slice(42).to_a
-      maps[i][:objects] = map[1222..-1].bytes.each_slice(5).to_a
-      offset += len
-      i += 1
+    maps.each do |map|
+      len, map.count = ioparse(buffer, 'L<S<')
+      assert_left(buffer, len - 6)
+      data = Zlib::Inflate.inflate(buffer.read(len - 6)) rescue next
+      map.title = parse_str(data[Map.OFFSET_TITLE - 8, 128 + 16 + 2])
+      map.tiles = data[Map.OFFSET_TILES - 8, Map.ROWS * Map.COLUMNS].bytes.each_slice(Map.COLUMNS).to_a
+      map.objects = data[Map.OFFSET_OBJECTS - 8..].bytes.each_slice(5).to_a
     end
 
     # Update database
-    result = []
-    ActiveRecord::Base.transaction do
-      maps.each{ |map|
-        if update
-          # Userlevel object
-          entry = Userlevel.find_or_create_by(id: map[:id]).update(
-            title:      map[:title],
-            author_id:  map[:author_id],
-            favs:       map[:favs],
-            date:       map[:date],
-            mode:       header[:mode],
-            map_update: Time.now.strftime(DATE_FORMAT_MYSQL)
-          )
+    maps.each do |map|
+      # Userlevel object
+      entry = Userlevel.find_or_create_by(id: map.id).update(
+        title:      map.title,
+        author_id:  map.author_id,
+        favs:       map.favs,
+        date:       map.date.strftime(DATE_FORMAT_MYSQL),
+        mode:       header.mode,
+        map_update: Time.now.strftime(DATE_FORMAT_MYSQL)
+      )
 
-          # Userlevel author
-          UserlevelAuthor.find_or_create_by(id: map[:author_id]).rename(map[:author], map[:date])
+      # Userlevel author
+      UserlevelAuthor.find_or_create_by(id: map.author_id).rename(map.author, map.date)
 
-          # Userlevel map data
-          UserlevelData.find_or_create_by(id: map[:id]).update(
-            tile_data:   Map.encode_tiles(map[:tiles]),
-            object_data: Map.encode_objects(map[:objects])
-          )
-        else
-          entry = Userlevel.find_by(id: map[:id])
-        end
-        result << entry
-      }
+      # Userlevel map data (don't update)
+      next if UserlevelData.find_by(id: map.id)
+      UserlevelData.create(
+        id:          map.id,
+        tile_data:   Map.encode_tiles(map.tiles),
+        object_data: Map.encode_objects(map.objects)
+      )
     end
-    result.compact
   rescue => e
     lex(e, 'Error updating userlevels')
     nil
   end
 
   # Dump 48 byte header used by the game for userlevel queries
+  # TODO: Clean this up by using a proper pack statement. Ditto for all other _pack uses.
   def self.query_header(
       count,
       page:  0,                  # Query page
@@ -556,6 +530,7 @@ class Userlevel < ActiveRecord::Base
   end
 
   # Updates position of userlevels in several lists (best, top weekly, featured, hardest...)
+  # TODO: Clean up this messy function (use proper packs, eliminate hardcoded numbers, integrate into parse...)
   def self.parse_tabs(levels)
     return false if levels.nil? || levels.size < 48
     count  = _unpack(levels[16..19])
@@ -585,12 +560,6 @@ class Userlevel < ActiveRecord::Base
     return false if !USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.include?(qt)
     levels = get_levels(qt, page, mode)
     return parse_tabs(levels) && _unpack(levels[16..19]) == PART_SIZE
-  end
-
-  # Browse userlevels in N++'s server
-  def self.browse(qt: QT_NEWEST, page: 0, mode: MODE_SOLO, update: false)
-    levels = get_levels(qt, page, mode)
-    parse(levels, update) unless levels.nil?
   end
 
   # Handle intercepted N++'s userlevel queries via the socket

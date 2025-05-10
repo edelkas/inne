@@ -1,5 +1,7 @@
 # Downloads all userlevels from Metanet's server so they can be used as an
 # initial seed for the database. To use you need to set PAGES correctly.
+# TODO: This should be implemented in a dynamic way as a function in outte.
+#       I've removed all these files from the repo now.
 
 require 'net/http'
 Dir.chdir('../maps')
@@ -20,7 +22,7 @@ def get(mode, page)
     $done[mode][page][:done] = false
     print("doesn't exist.\n")
     return 0
-  end  
+  end
   if response == '-1337'
     print("failed.\n")
     return 0
@@ -41,7 +43,3 @@ MODES.each_with_index{ |mode, i|
     if file != 0 then File.write('#{mode}/' + j.to_s.rjust(PAGES.to_s.size,'0'), file) end
   }
 }
-
-
-
-
