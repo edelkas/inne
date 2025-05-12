@@ -14,6 +14,8 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- For the logs we shouldn't be reading the whole file and painting all lines every time we browse a 10 line page.
+- Add ephemeral messages in useful places (e.g. a button that says "Screenshot" when querying scores or viceversa)
 - Ability to subscribe to certain things, like new maps by some user, or lost 0ths/top20s in vanilla/mappack/userlevels, or any new 0th, ...
 - Turns out you can see Switch players real username in Search (but not in regular tabs like Newest). Perhaps we can exploit this to fill the blank names in the db by searching for all their maps and, if we get a single result, we know it's the correct player.
 - Function to sanitize mappack archives by removing dupes.
