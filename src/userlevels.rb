@@ -486,9 +486,8 @@ class Userlevel < ActiveRecord::Base
   end
 
   # Dump 48 byte header used by the game for userlevel queries
-  # TODO: Clean this up by using a proper pack statement. Ditto for all other _pack uses.
   def self.query_header(
-      count,
+      count,                     # Map count
       page:  0,                  # Query page
       type:  TYPE_LEVEL,         # Type (0 = levels, 1 = episodes, 2 = stories)
       qt:    QT_SEARCH_BY_TITLE, # Query type (36 = search by title)
@@ -496,18 +495,8 @@ class Userlevel < ActiveRecord::Base
       cache: NPP_CACHE_DURATION, # Cache duration in seconds (def. 5, unused for searches)
       max:   QUERY_LIMIT_HARD    # Max results per page (def. 500)
     )
-    date_str = Time.now.strftime(DATE_FORMAT_NPP).b
-
-    header  = date_str        # Date of query  (16B)
-    header += _pack(count, 4) # Map count      ( 4B)
-    header += _pack(page,  4) # Query page     ( 4B)
-    header += _pack(type,  4) # Type           ( 4B)
-    header += _pack(qt,    4) # Query category ( 4B)
-    header += _pack(mode,  4) # Game mode      ( 4B)
-    header += _pack(cache, 4) # Cache duration ( 4B)
-    header += _pack(max,   4) # Max page size  ( 4B)
-    header += _pack(0,     4) # ?              ( 4B)
-    header
+    header = Time.now.strftime(DATE_FORMAT_NPP).b
+    header += [count, page, type, qt, mode, cache, max, 0].pack('l<8')
   end
 
   # Dump binary file containing a collection of userlevels using the format
@@ -530,26 +519,22 @@ class Userlevel < ActiveRecord::Base
   end
 
   # Updates position of userlevels in several lists (best, top weekly, featured, hardest...)
-  # TODO: Clean up this messy function (use proper packs, eliminate hardcoded numbers, integrate into parse...)
+  # TODO: Clean hardcoded numbers, integrate into self.parse, and test it.
   def self.parse_tabs(levels)
-    return false if levels.nil? || levels.size < 48
-    count  = _unpack(levels[16..19])
-    page   = _unpack(levels[20..23])
-    qt     = _unpack(levels[28..31])
-    mode   = _unpack(levels[32..35])
-    tab    = USERLEVEL_TABS[qt][:name] rescue nil
-    return false if tab.nil?
+    # Parse header parameters
+    return false if levels.nil? || levels.size <= 48
+    count, page, type, qt, mode = levels[16, 20].unpack('l<5')
+    tab = USERLEVEL_TABS[qt]
+    return false if !tab
+    count = [tab[:size] - page * PART_SIZE, count].min unless tab[:size] == -1
+    return false if count <= 0
 
-    ActiveRecord::Base.transaction do
-      levels[48 .. 48 + 44 * count - 1].scan(/./m).each_slice(44).to_a.each_with_index{ |l, i|
-        index = page * PART_SIZE + i
-        return false if USERLEVEL_TABS[qt][:size] != -1 && index >= USERLEVEL_TABS[qt][:size]
-        print("Updating #{MODES[mode].downcase} #{USERLEVEL_TABS[qt][:name]} map #{index + 1} / #{USERLEVEL_TABS[qt][:size]}...".ljust(80, " ") + "\r")
-        UserlevelTab.find_or_create_by(mode: mode, qt: qt, index: index).update(userlevel_id: _unpack(l[0..3]))
-        return false if USERLEVEL_TABS[qt][:size] != -1 && index + 1 >= USERLEVEL_TABS[qt][:size] # Seems redundant, but prevents downloading a file for nothing
-      }
-    end
-    return true
+    # Parse headers
+    levels[48, 44 * count].each_char.each_slice(44).with_index{ |l, i|
+      UserlevelTab.find_or_create_by(mode: mode, qt: qt, index: page * PART_SIZE + i)
+                  .update(userlevel_id: l[0, 4].join.unpack1('l<'))
+    }
+    return page * PART_SIZE + count < tab[:size] || tab[:size] == -1
   rescue => e
     lex(e, 'Error updating userlevel tabs')
     return false
@@ -559,7 +544,7 @@ class Userlevel < ActiveRecord::Base
   def self.update_relationships(qt = QT_HARDEST, page = 0, mode = MODE_SOLO)
     return false if !USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.include?(qt)
     levels = get_levels(qt, page, mode)
-    return parse_tabs(levels) && _unpack(levels[16..19]) == PART_SIZE
+    return parse_tabs(levels) && levels[16, 4].unpack1('l<') == PART_SIZE
   end
 
   # Handle intercepted N++'s userlevel queries via the socket

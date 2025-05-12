@@ -116,6 +116,17 @@ module Map
     ID_DRONE_ZAP,  ID_DRONE_CHASER, ID_DEATHBALL, ID_MICRODRONE
   ]
 
+  # Map properties. Challenge: Figure out what the following constant encodes ;)
+  BORDERS = "100FF87E1781E0FC3F03C0FC3F03C0FC3F03C078370388FC7F87C0EC1E01C1FE3F13E"
+  ROWS    = 23
+  COLUMNS = 42
+  UNITS   = 24               # Game units per tile
+  DIM     = 44               # Pixels per tile at 1080p
+  PPC     = 11               # Pixels per coordinate (1/4th tile)
+  PPU     = DIM.to_f / UNITS # Pixels per unit
+  WIDTH   = DIM * (COLUMNS + 2)
+  HEIGHT  = DIM * (ROWS + 2)
+
   # Palette stuff
   DEFAULT_PALETTE = "vasquez"
   THEMES = [
@@ -181,21 +192,12 @@ module Map
   OFFSET_COUNTS    = 0x47E
   OFFSET_OBJECTS   = 0x4CE
 
-  # Map properties. Challenge: Figure out what the following constant encodes ;)
-  BORDERS = "100FF87E1781E0FC3F03C0FC3F03C0FC3F03C078370388FC7F87C0EC1E01C1FE3F13E"
-  ROWS    = 23
-  COLUMNS = 42
-  UNITS   = 24               # Game units per tile
-  DIM     = 44               # Pixels per tile at 1080p
-  PPC     = 11               # Pixels per coordinate (1/4th tile)
-  PPU     = DIM.to_f / UNITS # Pixels per unit
-  WIDTH   = DIM * (COLUMNS + 2)
-  HEIGHT  = DIM * (ROWS + 2)
-
-  # Map file properties
-  HEADER_LEN = 0xB8
-  HEADER_LEN_TITLE = 128
-  HEADER_LEN_AUTHOR = 16
+  # Map file sizes
+  SIZE_HEADER = 0xB8  # (subtract 8 in query files)
+  SIZE_TITLE  = 128
+  SIZE_AUTHOR = 16
+  SIZE_TILES  = ROWS * COLUMNS
+  SIZE_COUNTS = 2 * OBJECT_COUNT
 
   # N v1.4
   NV14_ROWS            = 23
@@ -669,14 +671,14 @@ module Map
     prefix_len = prefix ? (count - 1).to_s.length + 1 : 0
     freq = Hash.new(0)
     levels.each_with_index{ |lvl, i|
-      lvl[:title] = lvl[:title].strip[0, 128 - prefix_len - 5] # Truncate just level name, for keying the hash
+      lvl[:title] = lvl[:title].strip[0, SIZE_TITLE - prefix_len - 5] # Truncate just level name, for keying the hash
       lvl[:title] = "Untitled" if lvl[:title].empty?
       sanitized = sanitize_filename(lvl[:title])
       lvl[:title] << ' (%d)' % freq[sanitized] if (freq[sanitized] += 1) > 1
       lvl[:title] << ' // ' << lvl[:author].strip if burn_author
       lvl[:title] << ' // ' << lvl[:comments].strip if burn_comments
       lvl[:title].prepend('%0*d ' % [prefix_len - 1, i]) if prefix
-      lvl[:title].slice!(128..) # Truncate again, so the full thing is within bounds
+      lvl[:title].slice!(SIZE_TITLE..) # Truncate again, so the full thing is within bounds
     }
 
     # Dump maps to binary files following N++ format
@@ -712,6 +714,7 @@ module Map
   #   - In query mode, the author ID is set as well.
   #   - All the others are normally unset to the default values in the game.
   # For hashing, only set the mode and title, and no query mode.
+  # TODO: Add detailed format documentation.
   def self.dump_level(
       tiles,               # Matrix of tiles
       objects,             # List of objects
@@ -732,7 +735,7 @@ module Map
 
     # Miniheader only present in userlevel files, but not in queries
     if !query
-      size = HEADER_LEN + ROWS * COLUMNS + OBJECT_COUNT * 2 + 5 * objects.size
+      size = SIZE_HEADER + ROWS * COLUMNS + OBJECT_COUNT * 2 + 5 * objects.size
       output << [magic, size].pack('l<2')
     end
 
