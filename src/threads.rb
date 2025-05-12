@@ -581,11 +581,11 @@ end
 # Download some userlevel tabs (best, top weekly, featured, hardest), for all
 # 3 modes, to keep those lists up to date in the database
 def update_userlevel_tabs
-  [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |m|
-    USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.each { |qt|
+  [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |mode|
+    USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.each{ |qt|
       page = 0
-      page += 1 while Userlevel::update_relationships(qt, page, m)
-      UserlevelTab.where(mode: m, qt: qt)
+      page += 1 while parse(get_levels(qt, page, mode))
+      UserlevelTab.where(mode: mode, qt: qt)
                   .where("`index` >= #{USERLEVEL_TABS[qt][:size]}")
                   .delete_all unless USERLEVEL_TABS[qt][:size] == -1
     }

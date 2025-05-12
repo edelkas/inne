@@ -430,13 +430,13 @@ class Userlevel < ActiveRecord::Base
   #----------------------------------------------------------------------------#
 
   # Parse binary file with userlevel collection received from N++'s server
-  # TODO: We should probably incorporate the parse_tabs code here.
   def self.parse(buffer)
     buffer = StringIO.new(buffer.to_s)
 
     # Parse header (48B)
     header = Struct.new(:date, :count, :page, :type, :qt, :mode, :cache, :max, :unknown)
                    .new(*ioparse(buffer, 'a16l<8'))
+    return false if !USERLEVEL_TABS.key?(header.qt) || header.count <= 0
 
     # Parse map headers (44B each)
     RawMap = Struct.new(:id, :author_id, :author, :favs, :date, :count, :title, :tiles, :objects)
@@ -445,6 +445,18 @@ class Userlevel < ActiveRecord::Base
         map.author = parse_str(map.author)
         map.date = Time.strptime(map.date, DATE_FORMAT_NPP)
       end
+    end
+
+    # Update relationships (return true if there are pages left to update)
+    if header.qt != QT_NEWEST
+      tab = USERLEVEL_TABS[header.qt]
+      count = tab[:size] != -1 ? [tab[:size] - header.page * PART_SIZE, header.count].min : header.count
+      return false if count <= 0
+      maps.lazy.take(count).each_with_index{ |m, i|
+        UserlevelTab.find_or_create_by(mode: header.mode, qt: header.qt, index: header.page * PART_SIZE + i)
+                    .update(userlevel_id: m.id)
+      }
+      return (header.page * PART_SIZE + count < tab[:size] || tab[:size] == -1) && header.count == PART_SIZE
     end
 
     # Parse map data (variable length blocks)
@@ -482,7 +494,7 @@ class Userlevel < ActiveRecord::Base
     end
   rescue => e
     lex(e, 'Error updating userlevels')
-    nil
+    false
   end
 
   # Dump 48 byte header used by the game for userlevel queries
@@ -516,35 +528,6 @@ class Userlevel < ActiveRecord::Base
     headers = maps.map{ |m| m.dump_header }.join
     data    = maps.map{ |m| m.dump_data }.join
     header + headers + data
-  end
-
-  # Updates position of userlevels in several lists (best, top weekly, featured, hardest...)
-  # TODO: Clean hardcoded numbers, integrate into self.parse, and test it.
-  def self.parse_tabs(levels)
-    # Parse header parameters
-    return false if levels.nil? || levels.size <= 48
-    count, page, type, qt, mode = levels[16, 20].unpack('l<5')
-    tab = USERLEVEL_TABS[qt]
-    return false if !tab
-    count = [tab[:size] - page * PART_SIZE, count].min unless tab[:size] == -1
-    return false if count <= 0
-
-    # Parse headers
-    levels[48, 44 * count].each_char.each_slice(44).with_index{ |l, i|
-      UserlevelTab.find_or_create_by(mode: mode, qt: qt, index: page * PART_SIZE + i)
-                  .update(userlevel_id: l[0, 4].join.unpack1('l<'))
-    }
-    return page * PART_SIZE + count < tab[:size] || tab[:size] == -1
-  rescue => e
-    lex(e, 'Error updating userlevel tabs')
-    return false
-  end
-
-  # Returns true if the page is full, indicating there are more pages
-  def self.update_relationships(qt = QT_HARDEST, page = 0, mode = MODE_SOLO)
-    return false if !USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.include?(qt)
-    levels = get_levels(qt, page, mode)
-    return parse_tabs(levels) && levels[16, 4].unpack1('l<') == PART_SIZE
   end
 
   # Handle intercepted N++'s userlevel queries via the socket
