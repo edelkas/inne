@@ -584,7 +584,7 @@ def update_userlevel_tabs
   [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |mode|
     USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.each{ |qt|
       page = 0
-      page += 1 while parse(get_levels(qt, page, mode))
+      page += 1 while Userlevel.parse(Userlevel.get_levels(qt, page, mode))
       UserlevelTab.where(mode: mode, qt: qt)
                   .where("`index` >= #{USERLEVEL_TABS[qt][:size]}")
                   .delete_all unless USERLEVEL_TABS[qt][:size] == -1

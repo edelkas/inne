@@ -432,6 +432,7 @@ class Userlevel < ActiveRecord::Base
   # Parse binary file with userlevel collection received from N++'s server
   def self.parse(buffer)
     buffer = StringIO.new(buffer.to_s)
+    return false if buffer.size <= 48
 
     # Parse header (48B)
     header = Struct.new(:date, :count, :page, :type, :qt, :mode, :cache, :max, :unknown)
@@ -439,9 +440,9 @@ class Userlevel < ActiveRecord::Base
     return false if !USERLEVEL_TABS.key?(header.qt) || header.count <= 0
 
     # Parse map headers (44B each)
-    RawMap = Struct.new(:id, :author_id, :author, :favs, :date, :count, :title, :tiles, :objects)
+    rawMap = Struct.new(:id, :author_id, :author, :favs, :date, :count, :title, :tiles, :objects)
     maps = Array.new(header.count).map do
-      RawMap.new(*ioparse(buffer, 'l<2a16l<a16')).tap do |map|
+      rawMap.new(*ioparse(buffer, 'l<2a16l<a16')).tap do |map|
         map.author = parse_str(map.author)
         map.date = Time.strptime(map.date, DATE_FORMAT_NPP)
       end
@@ -464,9 +465,9 @@ class Userlevel < ActiveRecord::Base
       len, map.count = ioparse(buffer, 'L<S<')
       assert_left(buffer, len - 6)
       data = Zlib::Inflate.inflate(buffer.read(len - 6)) rescue next
-      map.title = parse_str(data[Map.OFFSET_TITLE - 8, 128 + 16 + 2])
-      map.tiles = data[Map.OFFSET_TILES - 8, Map.ROWS * Map.COLUMNS].bytes.each_slice(Map.COLUMNS).to_a
-      map.objects = data[Map.OFFSET_OBJECTS - 8..].bytes.each_slice(5).to_a
+      map.title = parse_str(data[OFFSET_TITLE - 8, 128 + 16 + 2])
+      map.tiles = data[OFFSET_TILES - 8, ROWS * COLUMNS].bytes.each_slice(COLUMNS).to_a
+      map.objects = data[OFFSET_OBJECTS - 8..].bytes.each_slice(5).to_a
     end
 
     # Update database
