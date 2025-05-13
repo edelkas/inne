@@ -699,22 +699,42 @@ module Map
     }
   end
 
-  #            \\\ Dump map data into N++ binary userlevel format ///
-  # The object counts are automatically computed if not specified. But having the
-  #   parameter is useful for object count hacks, as well as for hashing (which requires
-  #   modifying the object data in a certain way, see complete_object_data). Also,
-  #   note that the counts for locked / trap door switches are set to 0, which
-  #   is also what the game does, except when hashing (counts should be provided
-  #   in that case anyway).
-  # Data can be dumped in query mode, which is the format used in userlevel queries.
-  #   It differs mainly in that it lacks an 8 byte mini header that individual
-  #   map files do contain.
-  # Most keyword arguments relative to the map data can normally be ignored:
-  #   - Recommendable ones are mode and title.
-  #   - In query mode, the author ID is set as well.
-  #   - All the others are normally unset to the default values in the game.
-  # For hashing, only set the mode and title, and no query mode.
-  # TODO: Add detailed format documentation.
+  #----------------------------------------------------------------------------#
+  #                           MAP FILE DOCUMENTATION                           |
+  #----------------------------------------------------------------------------#
+  #     4B - Version       (only in files, not queries)                        |
+  #     4B - File size     (only in files, not queries)                        |
+  #     4B - Level ID      (-1, not set)                                       |
+  #     4B - Mode          (0 = solo, 1 = coop, 2 = race, 3 = hc)              |
+  #     4B - Query type    (37, not set, see QT_ enum)                         |
+  #     4B - Author ID     (-1, not set, except in queries)                    |
+  #     4B - Fav count     (0, not set)                                        |
+  #    10B - System time   (0, not set)                                        |
+  #   128B - Title         (ASCII only, padded)                                |
+  #    16B - Author name   (0, not set)                                        |
+  #     2B - Padding       (0)                                                 |
+  #   966B - Tile data     (42 * 23 matrix)                                    |
+  #    80B - Object counts (40 shorts)                                         |
+  #   Rest - Object data   (5-tuples)                                          |
+  #----------------------------------------------------------------------------#
+  #          \\\ Dumping map data into N++ binary userlevel format ///         |
+  #----------------------------------------------------------------------------#
+  #   Object counts  are automatically computed if  not stated. But having the |
+  # the parameter is useful for object count hacks, as well as hashing  (which |
+  # entails modifying the object data in a certain way, complete_object_data). |
+  # Also, note that the  counts for locked / trap door  switches are set to 0, |
+  # which is  also what the game does,  except when hashing  (counts should be |
+  # provided in that case anyway).                                             |
+  #   Data can be dumped in query mode,  which is the format used in userlevel |
+  # provided.  It differs mainly  in that it lacks an 8 byte  mini header that |
+  # individual map files do contain.                                           |
+  #   Most keyword arguments relative to the map data can normally be ignored: |
+  #   - Recommendable ones are mode and title.                                 |
+  #   - In query mode, the author ID is set as well.                           |
+  #   - All the others are normally unset to the default values in the game.   |
+  # For hashing, only set the mode and title, and no query mode.               |
+  #----------------------------------------------------------------------------#
+
   def self.dump_level(
       tiles,               # Matrix of tiles
       objects,             # List of objects
