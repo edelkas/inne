@@ -1027,6 +1027,11 @@ def parse_initial(event)
   !event.is_a?(Discordrb::Events::ComponentEvent)
 end
 
+# Parse interpolated scores
+def parse_frac(msg)
+  !!msg[/\bfrac(tion(al)?)?\b/] || !!msg[/\binterpolated?\b/]
+end
+
 # Whether the response should be spoilered or not
 def parse_spoiler(msg, h = nil, channel = nil)
   old_enough = true

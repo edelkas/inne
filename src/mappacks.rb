@@ -447,7 +447,8 @@ module MappackHighscoreable
       pluck:      true,  # Pluck or keep Rails relation
       aliases:    false, # Use player names or display names
       metanet_id: nil,   # Player making the request if coming from CLE
-      page:       0      # Index of page to fetch
+      page:       0,     # Index of page to fetch
+      fraction:   false  # Include fractional field
     )
     m = 'hs' if !['hs', 'sr', 'gm'].include?(m)
     names = aliases ? 'IF(display_name IS NOT NULL, display_name, name)' : 'name'
@@ -466,6 +467,10 @@ module MappackHighscoreable
     # Handle standard boards
     if ['hs', 'sr'].include?(m) && !use_manual
       attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
+      if fraction
+        attr_names << 'fraction'
+        attrs << 'fraction'
+      end
       board = scores.where("rank_#{m} IS NOT NULL")
       if score
         board = board.order("score_#{m} #{m == 'hs' ? 'DESC' : 'ASC'}, date ASC")
@@ -1403,7 +1408,7 @@ class MappackScore < ActiveRecord::Base
 
   # Calculate the score using ntrace
   def ntrace_score
-    return false if !highscoreable || !demo || !demo.demo
+    return false if !highscoreable || !demo&.demo
     nsim = NSim.new(highscoreable.dump_level, [demo.demo])
     nsim.run
     ret = nsim.score || false
@@ -1412,6 +1417,24 @@ class MappackScore < ActiveRecord::Base
   rescue => e
     lex(e, 'ntrace testing failed')
     nil
+  end
+
+  # Calculate the interpolated fractional frame using Sim's tool
+  def seed_fraction
+    # Map or demo not available, cannot compute
+    if !highscoreable || !demo&.demo
+      update(fraction: -1)
+      return :lost
+    end
+
+    nsim = NSim.new(highscoreable.dump_level, [demo.demo])
+    nsim.run
+    frac = nsim.frac
+    nsim.destroy
+    update(fraction: frac || -1)
+    return frac ? :good : :bad
+  rescue => e
+    lex(e, 'Fraction computation failed')
   end
 end
 

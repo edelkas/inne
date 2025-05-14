@@ -459,7 +459,6 @@ _thread do
   run_bot
   set_channels
   start_discord_tasks
-  ld("Connected to Discord")
 end
 succ("Loaded outte (%.2fs)" % [Time.now - $boot_time])
 binding.pry if DEBUG

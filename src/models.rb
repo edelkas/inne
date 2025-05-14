@@ -882,7 +882,7 @@ module Highscoreable
   # function in MappackHighscoreable
   def leaderboard(*args, **kwargs)
     ul = is_userlevel?
-    attr_names = %W[rank id score name metanet_id replay_id cool star]
+    attr_names = %W[rank id score name metanet_id replay_id]
     attrs = [
       'rank',
       "#{ul ? 'userlevel_' : ''}scores.id",
@@ -891,7 +891,14 @@ module Highscoreable
       'metanet_id',
       'replay_id'
     ]
-    attrs.push('cool', 'star') if !ul
+    if kwargs[:fraction]
+      attr_names << 'fraction'
+      attrs << 'fraction'
+    end
+    if !ul
+      attr_names << 'cool' << 'star'
+      attrs << 'cool' << 'star'
+    end
     if !kwargs.key?(:pluck) || kwargs[:pluck]
       pclass = ul ? 'userlevel_players' : 'players'
       scores.joins("INNER JOIN `#{pclass}` ON `#{pclass}`.`id` = `player_id`")
@@ -904,9 +911,10 @@ module Highscoreable
   def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
-    boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20).each_with_index.select{ |_, r|
+    boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, fraction: !is_vanilla?).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
     }.sort_by{ |_, r| full ? r : ranks.index(r) }
+    field = !is_mappack? ? 'score' : "score_#{board}"
 
     # Figure out if cheated scores need to be inserted
     if cheated && SHOW_CHEATERS && is_vanilla? && !full
@@ -916,7 +924,7 @@ module Highscoreable
                               .pluck(:name, '`score` / 60.0', :metanet_id, :replay_id)
       cheated_scores.map!{ |s|
         h = {}
-        h['score']      = s[1].to_f
+        h[field]        = s[1].to_f
         h['name']       = s[0]
         h['metanet_id'] = s[2]
         h['replay_id']  = s[3]
@@ -926,29 +934,32 @@ module Highscoreable
         [h, -1]
       }
       boards += cheated_scores
-      boards.sort_by!{ |s, _| [-(s['score'] * 60).round, s['replay_id']] }
+      boards.sort_by!{ |s, _| [-(s[field] * 60).round, s['replay_id']] }
     end
 
+    # Scale scores stored as frame counts
+    boards.each{ |s, _| s[field] /= 60.0 } if is_mappack? && board == 'hs' || is_userlevel?
+
     # Figure out if interpolated fractional scores need to be used instead
-    frac &&= is_vanilla? && is_level?
-    close_calls = []
+    frac &&= is_level? && ['hs', 'sr'].include?(board)
     equals = []
     if frac
-      boards.each{ |s, _| s['score'] = round_score(s['score']) } # Normalize scores
+      if is_vanilla?
+        boards.each{ |s, _| s[field] = round_score(s[field]) } # Normalize scores
+        fractions = Archive.where(highscoreable: self).pluck(:replay_id, :fraction).to_h
+      end
       cools = false
-      fractions = Archive.where(highscoreable: self).pluck(:replay_id, :fraction).to_h rescue {}
       boards.each{ |s, _|
-        fraction = fractions[s['replay_id']]
+        fraction = is_vanilla? ? fractions[s['replay_id']] : s['fraction']
         next s['question'] = true if !fraction || !fraction.between?(0, 1)
-        s['score'] -= (1 - fraction) / 60.0
+        if board == 'hs'
+          s[field] -= (1 - fraction) / 60.0
+        elsif board == 'sr'
+          s[field] += 1 - fraction
+        end
       }
-      boards.sort_by!{ |s, _| [-s['score'], s['replay_id']] }
-      close_calls = boards.select{ |s, _| !s['question'] }
-                          .group_by{ |s, _| s['score'].round(3) }
-                          .select{ |_, list| list.size > 1 }
-                          .map{ |_, list| list.map{ |s, _| s['replay_id'] } }
-                          .flatten
-      equals = boards.group_by{ |s, _| s['score'] }
+      boards.sort_by!{ |s, _| [board == 'hs' ? -s[field] : s[field], s['replay_id']] }
+      equals = boards.group_by{ |s, _| s[field] }
                      .select{ |_, list| list.size > 1 }
                      .map{ |_, list| list.map{ |s, _| s['replay_id'] } }
                      .flatten
@@ -957,7 +968,6 @@ module Highscoreable
     # Calculate padding
     hs = board == 'hs'
     name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
-    field = !is_mappack? ? 'score' : "score_#{board}"
     score_padding = sp > 0 ? sp : boards.map{ |s, _|
       is_mappack? && hs || is_userlevel? ? s[field] / 60.0 : s[field]
     }.max.to_i.to_s.length + (!is_mappack? || hs ? 4 : 0)
@@ -965,9 +975,9 @@ module Highscoreable
     # Print scores
     boards.map{ |s, r|
       Scorish.format(
-        name_padding, score_padding, cools: cools, stars: stars, mode: board, t_rank: r,
-        mappack: is_mappack?, userlevel: is_userlevel?, h: s,
-        prec: frac, equal: equals.include?(s['replay_id'])
+        name_padding, score_padding, cools: cools, stars: stars, mode: board,
+        t_rank: r, mappack: is_mappack?, userlevel: is_userlevel?, h: s,
+        frac: frac, equal: equals.include?(s['replay_id'])
       )
     }
   end
@@ -1527,21 +1537,20 @@ end
 # Implemented by Score and MappackScore
 module Scorish
 
-  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, prec: false, equal: false)
+  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, frac: false, equal: false)
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
     cheat = !!h['cheated']
+    prec = frac && mode == 'hs'
 
     # Compose each element
-    t_star   = mappack || !stars ? '' : (h['star'] ? '*' : ' ')
+    t_star   = userlevel || mappack || !stars ? '' : (h['star'] ? '*' : ' ')
     t_rank   = cheat ? 'xx' : t_rank || h['rank'] || '--'
     t_rank   = Highscoreable.format_rank(t_rank)
     t_player = format_string(h['name'], name_padding)
     f_score  = !mappack ? 'score' : "score_#{mode}"
-    s_score  = mappack && hs || userlevel ? 60.0 : 1
-    t_score  = h[f_score] / s_score
-    t_fmt    = !mappack || hs ? "%#{score_padding}.#{prec ? 6 : 3}f" : "%#{score_padding}d"
-    t_score  = t_fmt % [t_score]
+    t_fmt    = !mappack || hs || frac ? "%#{score_padding}.#{prec ? 6 : 3}f" : "%#{score_padding}d"
+    t_score  = t_fmt % [h[f_score]]
     t_cool   = !mappack && cools && h['cool'] ? " 😎" : ""
     t_eql    = equal && !h['question'] ? ' =' : ''
     t_quest  = h['question'] ? ' ?' : ''
@@ -2852,6 +2861,24 @@ class Archive < ActiveRecord::Base
     #}
 
     ret
+  end
+
+  # Calculate the interpolated fractional frame using Sim's tool
+  def seed_fraction
+    # Map or demo not available, cannot compute
+    if !highscoreable || lost || !demo&.demo
+      update(fraction: -1) if lost
+      return :lost
+    end
+
+    nsim = NSim.new(highscoreable.map.dump_level, [demo.demo])
+    nsim.run
+    frac = nsim.frac
+    nsim.destroy
+    update(fraction: frac || -1)
+    return frac ? :good : :bad
+  rescue => e
+    lex(e, 'Fraction computation failed')
   end
 
   # Returns the rank of the player at a particular point in time

@@ -999,28 +999,42 @@ end
 
 # Computes the interpolated scores using NSim and seeds them in the archives table
 def seed_fractional_scores(event)
-  list = Archive.where(fraction: nil, highscoreable_type: Level)
-  bad = 0
-  lost = 0
-  good = 0
-  count = list.count
-  list.find_each.with_index{ |ar, i|
-    if ar.lost || !ar.demo&.demo
-      ar.update(fraction: -1)
-      lost += 1
-    else
-      nsim = NSim.new(ar.highscoreable.map.dump_level, [ar.demo.demo])
-      nsim.run
-      frac = nsim.frac
-      nsim.destroy
-      ar.update(fraction: frac || -1)
-      !frac ? (bad += 1) : (good += 1)
-    end
-    print("Seeded #{ANSI.format(i + 1, fg: ANSI::BLUE)} / #{ANSI.format(count, fg: ANSI::BLUE)} fractional scores ")
-    print("(#{ANSI.format(good, fg: ANSI::GREEN)} good, #{ANSI.format(bad, fg: ANSI::RED)} bad, ")
-    print("#{ANSI.format(lost, fg: ANSI::RED)} lost)\r")
+  # Fetch scores whose fraction needs to be computed
+  list1 = Archive.where(fraction: nil, highscoreable_type: Level, tab: 0)
+  list2 = MappackScore.where(fraction: nil, highscoreable_type: MappackLevel, tab: 0)
+  count = list1.count + list2.count
+  counts = { good: 0, bad: 0, lost: 0 }
+  batch_size = 100
+  start_time = Time.now
+
+  # Progress logger
+  logger = -> {
+    time = format_timespan(Time.now - start_time)
+    print(
+      "Seeded "\
+      "#{ANSI.format(counts.values.sum, fg: ANSI::BLUE)} / "\
+      "#{ANSI.format(count,             fg: ANSI::BLUE)} fractional scores ("\
+      "#{ANSI.format(counts[:good],     fg: ANSI::GREEN)} good, "\
+      "#{ANSI.format(counts[:bad],      fg: ANSI::RED)} bad, "\
+      "#{ANSI.format(counts[:lost],     fg: ANSI::RED)} lost) ["\
+      "#{ANSI.format(time,              fg: ANSI::YELLOW)}]\r"
+    )
   }
+
+  # Seed vanilla fractions
+  list1.find_each(batch_size: batch_size).with_index{ |score, i|
+    counts[score.seed_fraction] += 1
+    logger.call
+  }
+
+  # Seed mappack fractions
+  list2.find_each(batch_size: batch_size).with_index{ |score, i|
+    counts[score.seed_fraction] += 1
+    logger.call
+  }
+
   puts
+  succ("Finished seeding fractional scores")
 end
 
 

@@ -14,6 +14,7 @@ Ongoing:
   * Ditto for userlevel_histories
   * Remove metanet_id field from both tables
 
+- Add fractional scores to the nav scores function.
 - For the logs we shouldn't be reading the whole file and painting all lines every time we browse a 10 line page.
 - Add ephemeral messages in useful places (e.g. a button that says "Screenshot" when querying scores or viceversa)
 - Ability to subscribe to certain things, like new maps by some user, or lost 0ths/top20s in vanilla/mappack/userlevels, or any new 0th, ...

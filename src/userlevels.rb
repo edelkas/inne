@@ -1154,15 +1154,16 @@ def send_userlevel_scores(event)
   msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
   msg.sub!(/\w*scores\w*/i, '')
   msg.squish!
+  frac = parse_frac(msg)
   send_userlevel_individual(event, msg){ |map|
     map[:query].update_scores if !OFFLINE_STRICT
-    output = "Scores for userlevel #{verbatim(map[:query].title)} "
+    output = "#{format_frac(frac)} scores for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
     output += "from #{verbatim(map[:query].date.strftime('%F'))}"
     count = map[:query].completions
     header = format_header(output)
-    boards = format_block(map[:query].format_scores)
+    boards = format_block(map[:query].format_scores(frac: frac))
     footer = count && count >= 20 ? "Scores: **#{count}**" : ''
     event << header + boards + footer
   }
