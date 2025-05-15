@@ -1096,7 +1096,6 @@ module Highscoreable
       score = o[:score].format(pad_name, pad_score, false, board, i)
       color = Highscoreable.format_diff_change(c, diff, diff_score, pad_rank, pad_change, board != 'sr')
       score.gsub!(/(\S+)$/, color + '\1' + ANSI.reset) if RICH_DIFFS && !diff_score && color != ANSI.none
-      #score = color + score + ANSI.reset if RICH_DIFFS
       "#{score} #{diff}"
     }
   rescue => e
@@ -1150,13 +1149,9 @@ module Highscoreable
     s1  = scores.first.score.to_s
     s2  = scores.last.score.to_s
     d   = (0...max).find{ |i| s1[i] != s2[i] }
-    if !d.nil?
-      d     = -(max - d - 5) - (max - d < 4 ? 1 : 0)
-      cools = scores.size.times.find{ |i| scores[i].score < s1.to_f.truncate(d) }
-    else
-      cools = 0
-    end
-    cools
+    return 0 if !d
+    d = -(max - d - 5) - (max - d < 4 ? 1 : 0)
+    scores.size.times.find{ |i| scores[i].score < s1.to_f.truncate(d) }
   end
 
   # The next function navigates through highscoreables.
@@ -1564,6 +1559,7 @@ module Scorish
   def format(name_padding = DEFAULT_PADDING, score_padding = 0, cools = true, mode = 'hs', t_rank = nil)
     h = self.as_json
     h['name'] = player.print_name if !h.key?('name')
+    h['score_hs'] /= 60.0 if highscoreable.is_mappack?
     Scorish.format(name_padding, score_padding, cools: cools, mode: mode, t_rank: t_rank, mappack: self.is_a?(MappackScore), h: h)
   end
 

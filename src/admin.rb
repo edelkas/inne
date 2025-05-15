@@ -1000,8 +1000,8 @@ end
 # Computes the interpolated scores using NSim and seeds them in the archives table
 def seed_fractional_scores(event)
   # Fetch scores whose fraction needs to be computed
-  list1 = Archive.where(fraction: nil, highscoreable_type: Level, tab: 0)
-  list2 = MappackScore.where(fraction: nil, highscoreable_type: MappackLevel, tab: 0)
+  list1 = Archive.where(fraction: nil, highscoreable_type: Level)
+  list2 = MappackScore.where(fraction: nil, highscoreable_type: MappackLevel)
   count = list1.count + list2.count
   counts = { good: 0, bad: 0, lost: 0 }
   batch_size = 100
