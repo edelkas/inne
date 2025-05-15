@@ -1154,7 +1154,7 @@ def send_userlevel_scores(event)
   msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
   msg.sub!(/\w*scores\w*/i, '')
   msg.squish!
-  frac = parse_frac(msg)
+  frac = false # parse_frac(msg)
   send_userlevel_individual(event, msg){ |map|
     map[:query].update_scores if !OFFLINE_STRICT
     output = "#{format_frac(frac)} scores for userlevel #{verbatim(map[:query].title)} "

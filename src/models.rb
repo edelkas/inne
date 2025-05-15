@@ -914,7 +914,8 @@ module Highscoreable
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, fraction: !is_vanilla?).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
     }.sort_by{ |_, r| full ? r : ranks.index(r) }
-    field = !is_mappack? ? 'score' : "score_#{board}"
+    sfield = !is_mappack? ? 'score' : "score_#{board}"
+    rfield = !is_mappack? ? 'replay_id' : 'id'
 
     # Figure out if cheated scores need to be inserted
     if cheated && SHOW_CHEATERS && is_vanilla? && !full
@@ -924,60 +925,60 @@ module Highscoreable
                               .pluck(:name, '`score` / 60.0', :metanet_id, :replay_id)
       cheated_scores.map!{ |s|
         h = {}
-        h[field]        = s[1].to_f
+        h[sfield]       = s[1].to_f
         h['name']       = s[0]
         h['metanet_id'] = s[2]
-        h['replay_id']  = s[3]
+        h[rfield]       = s[3]
         h['cool']       = false
         h['star']       = false
         h['cheated']    = true
         [h, -1]
       }
       boards += cheated_scores
-      boards.sort_by!{ |s, _| [-(s[field] * 60).round, s['replay_id']] }
+      boards.sort_by!{ |s, _| [-(s[sfield] * 60).round, s[rfield]] }
     end
 
     # Scale scores stored as frame counts
-    boards.each{ |s, _| s[field] /= 60.0 } if is_mappack? && board == 'hs' || is_userlevel?
+    boards.each{ |s, _| s[sfield] /= 60.0 } if is_mappack? && board == 'hs' || is_userlevel?
 
     # Figure out if interpolated fractional scores need to be used instead
     frac &&= is_level? && ['hs', 'sr'].include?(board)
     equals = []
     if frac
       if is_vanilla?
-        boards.each{ |s, _| s[field] = round_score(s[field]) } # Normalize scores
+        boards.each{ |s, _| s[sfield] = round_score(s[sfield]) } # Normalize scores
         fractions = Archive.where(highscoreable: self).pluck(:replay_id, :fraction).to_h
       end
       cools = false
       boards.each{ |s, _|
-        fraction = is_vanilla? ? fractions[s['replay_id']] : s['fraction']
+        fraction = is_vanilla? ? fractions[s[rfield]] : s['fraction']
         next s['question'] = true if !fraction || !fraction.between?(0, 1)
         if board == 'hs'
-          s[field] -= (1 - fraction) / 60.0
+          s[sfield] -= (1 - fraction) / 60.0
         elsif board == 'sr'
-          s[field] += 1 - fraction
+          s[sfield] += 1 - fraction
         end
       }
-      boards.sort_by!{ |s, _| [board == 'hs' ? -s[field] : s[field], s['replay_id']] }
-      equals = boards.group_by{ |s, _| s[field] }
+      boards.sort_by!{ |s, _| [board == 'hs' ? -s[sfield] : s[sfield], s[rfield]] }
+      equals = boards.group_by{ |s, _| s[sfield] }
                      .select{ |_, list| list.size > 1 }
-                     .map{ |_, list| list.map{ |s, _| s['replay_id'] } }
+                     .map{ |_, list| list.map{ |s, _| s[rfield] } }
                      .flatten
     end
 
     # Calculate padding
-    hs = board == 'hs'
+    float = !is_mappack? || board == 'hs' || frac
     name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
-    score_padding = sp > 0 ? sp : boards.map{ |s, _|
-      is_mappack? && hs || is_userlevel? ? s[field] / 60.0 : s[field]
-    }.max.to_i.to_s.length + (!is_mappack? || hs ? 4 : 0)
+    score_padding = sp > 0 ? sp : boards.map{ |s, _| s[sfield] }.max.to_i.to_s.length
+    score_padding += 4 if float
+    score_padding += 3 if frac && board == 'hs'
 
     # Print scores
     boards.map{ |s, r|
       Scorish.format(
         name_padding, score_padding, cools: cools, stars: stars, mode: board,
         t_rank: r, mappack: is_mappack?, userlevel: is_userlevel?, h: s,
-        frac: frac, equal: equals.include?(s['replay_id'])
+        frac: frac, equal: equals.include?(s[rfield])
       )
     }
   end
@@ -3411,7 +3412,6 @@ module APIServer extend self
           res['Cache-Control'] = 'public, max-age=31536000'
           res.status = 200
           res.body = File.binread(path)
-          puts "TEST"
         else
           res.status = 404
           res.body = "Favicon not found"
