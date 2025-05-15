@@ -482,6 +482,9 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 #    Provides 3rd party leaderboards hosted in outte's database, that people
 #    with the corresponding tool can connect to, so they can highscore custom
 #    mappacks.
+# 3) API
+#    Provides certain outte functionality that can be called externally (e.g.
+#    from a browser) as opposed to from Discord or N++.
 
 SOCKET      = true  # Whether to open sockets or not
 SOCKET_PORT = 8126  # Port for CLE's TCP server
@@ -498,6 +501,11 @@ INTEGRITY_CHECKS = true            # Verity replay security hashes
 WARN_INTEGRITY   = true            # Warn when players submit scores with invalid hashes
 WARN_VERSION     = false           # Warning for score submissions with old map versions
 LOCAL_LOGIN      = true            # Try to login user ourselves if Metanet fails
+
+# API-specific variables
+API_ON      = true
+API_PORT    = 9119
+API_FAVICON = 'molebruh'
 
 # <---------------------------------------------------------------------------->
 # <------                        GAME VARIABLES                          ------>

@@ -770,7 +770,10 @@ def start_general_tasks
   Scheduler.add("Monitor database", freq: SQL_DELAY, force: false, log: false) { monitor_db } if SQL_MONITOR
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
-  $threads << Thread.new { Server::on } if SOCKET && !DO_NOTHING
+  $threads << Thread.new { NPPServer::on } if SOCKET && !DO_NOTHING
+
+  # Start API to provide external outte functionality
+  $threads << Thread.new { APIServer::on } if API_ON && !DO_NOTHING
 end
 
 # These tasks perform periodic operations querying Metanet's database (e.g. to

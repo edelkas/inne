@@ -3297,7 +3297,7 @@ module Sock extend self
   end
 end
 
-module Server extend self
+module NPPServer extend self
   extend Sock
 
   def on
@@ -3379,5 +3379,49 @@ module Server extend self
 
   def fwd(req, res)
     respond(res, CLE_FORWARD ? forward(req) : nil)
+  end
+end
+
+module APIServer extend self
+  extend Sock
+
+  def on
+    start(API_PORT, 'API')
+  end
+
+  def off
+    stop('API')
+  end
+
+  def handle(req, res)
+    res.status = 403
+    res.body = ''
+    query = req.path.split('/').last
+    case req.request_method
+    when 'GET'
+      case query
+      when nil
+        res.status = 200
+        res.body = "Welcome to outte's public API!"
+      when 'favicon.ico'
+        path = File.join(PATH_AVATARS, API_FAVICON + '.png')
+        if File.file?(path)
+          res['Content-Type'] = 'image/png'
+          res['Content-Length'] = File.size(path)
+          res['Cache-Control'] = 'public, max-age=31536000'
+          res.status = 200
+          res.body = File.binread(path)
+          puts "TEST"
+        else
+          res.status = 404
+          res.body = "Favicon not found"
+        end
+      end
+    when 'POST'
+      req.continue # Respond to "Expect: 100-continue"
+    end
+  rescue => e
+    lex(e, "API socket failed to parse request for: #{req.path}")
+    nil
   end
 end
