@@ -688,6 +688,10 @@ module Highscoreable
   # the 0th and Nth scores.
   # @par small:     Whether to find smallest or largest differences
   # @par player_id: Include only levels where the 0th is owned by player
+  # TODO: We can optimize this further with a single query:
+  #       SELECT MAX(`score`) - MIN(`score`) WHERE ... GROUP BY `highscoreable_id`
+  # TODO: Add fractional spread. We can INNER JOIN with the archives table and do:
+  #       ROUND(MAX(`archives`.`score` - (1 - `fraction`)) - MIN(`archives`.`score` - (1 - `fraction`)), 3) AS frac
   def self.spreads(n, type, tabs, small = false, player_id = nil, full = false, mappack = nil, board = 'hs')
     # Sanitize parameters
     n      = n.clamp(0,19)
@@ -743,6 +747,8 @@ module Highscoreable
   # @par player_id: Exclude levels where the player already has a score
   # @par maxed:     Filter and sort differently for maxes and maxables
   # @par rank:      Return rankings of people with most scores in maxed / maxable levels
+  # TODO: Change so that levels with all scores being equal also count towards being maxed,
+  #       even if it's less than 20 due to cheaters. Ditto for maxables.
   def self.ties(type, tabs, player_id = nil, maxed = false, rank = false, mappack = nil, board = 'hs')
     type = ensure_type(type)
     bench(:start) if BENCHMARK

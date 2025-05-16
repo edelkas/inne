@@ -1,20 +1,3 @@
-Ongoing:
-- Animated traces:
-  * Anim scores
-  * For multiple players, perhaps color gold differently depending on how many players have collected / remain to collect each piece.
-  * Precompute bounding boxes for all frames, and use this to estimate how long the encoding might take, then decide if it's worth it to update the Discord message with progress information, such as frames rendered or percentage done.
-  * Remove level name from msg, so that it may not interfere with other parameters of the command.
-  * Ensure each trace is always drawn over the previous one, by adding a condition that will not paint a pixel if it's already been painted by a previous trace.
-  * Interpolate between frames, so that we can trace at slower speeds at 50fps, or basically at any speed.
-  * Other ideas: anti-aliasing, bezier curves, frame counter / timer, controls for which segment of the run gets animated (instead of the whole thing), more than 4 players, changing line colors (perhaps to reflect speed or direction changes), ...
-- Display names and implicit player parsing do not work for userlevels now. Merge userlevel_players with players:
-  * Add metanet_id column to userlevel_scores
-  * Merge userlevel_players (not already in players) with players
-  * Fill in proper player_id in userlevel_scores by looking at the metanet_id
-  * Ditto for userlevel_histories
-  * Remove metanet_id field from both tables
-
-- Add fractional scores to the nav scores function.
 - For the logs we shouldn't be reading the whole file and painting all lines every time we browse a 10 line page.
 - Add ephemeral messages in useful places (e.g. a button that says "Screenshot" when querying scores or viceversa)
 - Ability to subscribe to certain things, like new maps by some user, or lost 0ths/top20s in vanilla/mappack/userlevels, or any new 0th, ...
@@ -128,12 +111,28 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 - Add hs scores around mine in 2nd leaderboard.
 - Add outte command to choose what to put in the 2nd/3rd leaderboard (toggle between hs, sr, g--, etc, with different rank ranges too)
 
+\\ ------------------------ frac scores -----------------------
+
+- Add frac scores to nav scores function.
+- Add fractional spreads.
+- Return scores closesr to making it to the next frame, or closest to the current frame (i.e. fractions closest to 0 and 1). Perhaps allow to limit this to framewars, where it's more interesting.
+
 \\ ------------------------ ntrace ------------------------
 
+# Traces
 - Option to change color of plot line with time (let's say, loop through rainbow as many times as specified, or once), to aid readability for long runs with many crosses.
 - Look into matplotlib blitting, or implement it myself
 - Try using Python itself, rather than Ruby's wrapper, to see if it's quicker
 - Try optimizing it in C altogether
+
+# Anims
+- Anim scores
+- For multiple players, perhaps color gold differently depending on how many players have collected / remain to collect each piece.
+- Precompute bounding boxes for all frames, and use this to estimate how long the encoding might take, then decide if it's worth it to update the Discord message with progress information, such as frames rendered or percentage done.
+- Remove level name from msg, so that it may not interfere with other parameters of the command.
+- Ensure each trace is always drawn over the previous one, by adding a condition that will not paint a pixel if it's already been painted by a previous trace.
+- Interpolate between frames, so that we can trace at slower speeds at 50fps, or basically at any speed.
+- Other ideas: anti-aliasing, bezier curves, frame counter / timer, controls for which segment of the run gets animated (instead of the whole thing), more than 4 players, changing line colors (perhaps to reflect speed or direction changes), ...
 
 \\ ------------------------ nprofile ------------------------
 
@@ -151,6 +150,13 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 - Dithering.
 
 \\ ------------------------ Userlevels ------------------------
+
+- Display names and implicit player parsing do not work for userlevels now. Merge userlevel_players (and possibly userlevel_authors) with players:
+  * Add metanet_id column to userlevel_scores
+  * Merge userlevel_players (not already in players) with players
+  * Fill in proper player_id in userlevel_scores by looking at the metanet_id
+  * Ditto for userlevel_histories
+  * Remove metanet_id field from userlevel_scores and userlevel_histories
 
 - We need to update all maps regularly, for the ++'s, etc.
 - Userlevel of the day (filter by levels with at least n scores and at least a certain delta of scores to prevent impossible and maxed levels)
