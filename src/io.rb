@@ -1029,7 +1029,7 @@ end
 
 # Parse interpolated scores
 def parse_frac(msg)
-  !!msg[/\bfrac(tion(al)?)?\b/] || !!msg[/\binterpolated?\b/]
+  !!msg[/\bfrac(tion(al)?)?\b/i] || !!msg[/\binterpolated?\b/i]
 end
 
 # Whether the response should be spoilered or not

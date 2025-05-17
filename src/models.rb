@@ -3302,6 +3302,37 @@ module Sock extend self
   rescue => e
     lex(e, "Failed to stop #{name} server")
   end
+
+  # Ensure certain required parameters are present in the URL query
+  def enforce_params(req, res, params)
+    missing = params - req.query.keys
+    return true if missing.empty?
+    missing = missing.map{ |par| '"' + par + '"' }.join(', ')
+    res.status = 400
+    res.body = "Parameters #{missing} missing."
+    false
+  end
+
+  # Send raw data as a response
+  def send_data(res, data, type: 'application/octet-stream', name: nil, inline: true, cache: nil)
+    disposition = inline ? 'inline' : 'attachment'
+    res['Content-Type']        = type
+    res['Content-Length']      = data.length
+    res['Content-Disposition'] = "#{disposition}; filename=\"#{name || 'data.bin'}\""
+    res['Cache-Control']       = "public, max-age=#{cache}" unless !cache
+    res.status = 200
+    res.body = data
+  end
+
+  # Sends a raw file as a response
+  def send_file(res, file, type: 'application/octet-stream', name: nil, inline: true, cache: nil)
+    if !File.file?(file)
+      res.status = 404
+      res.body = "File not found"
+      return
+    end
+    send_data(res, File.binread(file), type: type, name: name || File.basename(file), inline: inline, cache: cache)
+  end
 end
 
 module NPPServer extend self
@@ -3403,24 +3434,27 @@ module APIServer extend self
   def handle(req, res)
     res.status = 403
     res.body = ''
-    query = req.path.split('/').last
+    route = req.path.split('/').last
     case req.request_method
     when 'GET'
-      case query
+      case route
       when nil
         res.status = 200
         res.body = "Welcome to outte's public API!"
       when 'favicon.ico'
         path = File.join(PATH_AVATARS, API_FAVICON + '.png')
-        if File.file?(path)
-          res['Content-Type'] = 'image/png'
-          res['Content-Length'] = File.size(path)
-          res['Cache-Control'] = 'public, max-age=31536000'
-          res.status = 200
-          res.body = File.binread(path)
+        send_file(res, path, type: 'image/png', cache: 365 * 86400)
+      when 'screenshot'
+        return if !enforce_params(req, res, ['id', 'palette'])
+        ret = handle_screenshot(req.query)
+        if !ret.key?(:file)
+          res.status = 400
+          res.body = ret[:msg] || 'Unknown query error'
+        elsif !ret[:file]
+          res.status = 500
+          res.body = 'Error generating screenshot'
         else
-          res.status = 404
-          res.body = "Favicon not found"
+          send_data(res, ret[:file], type: 'image/png', name: ret[:name])
         end
       end
     when 'POST'
@@ -3429,5 +3463,12 @@ module APIServer extend self
   rescue => e
     lex(e, "API socket failed to parse request for: #{req.path}")
     nil
+  end
+
+  def handle_screenshot(query)
+    level = Level.find_by(id: query['id'].to_i)
+    return { msg: 'Level not found' } if !level
+    return { msg: "Palette #{query['palette']} doesn't exist" } if !Map::THEMES.include?(query['palette'])
+    { file: level.map.screenshot(query['palette']), name: level.name }
   end
 end
