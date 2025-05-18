@@ -3303,7 +3303,7 @@ module Sock extend self
     lex(e, "Failed to stop #{name} server")
   end
 
-  # Ensure certain required parameters are present in the URL query
+  # Ensure certain required parameters are present in the URL query (works for GET, not POST)
   def enforce_params(req, res, params)
     missing = params - req.query.keys
     return true if missing.empty?
@@ -3444,9 +3444,13 @@ module APIServer extend self
       when 'favicon.ico'
         path = File.join(PATH_AVATARS, API_FAVICON + '.png')
         send_file(res, path, type: 'image/png', cache: 365 * 86400)
+      end
+    when 'POST'
+      req.continue # Respond to "Expect: 100-continue"
+      query = req.query_string.split('&').map{ |s| s.split('=') }.to_h
+      case route
       when 'screenshot'
-        return if !enforce_params(req, res, ['id', 'palette'])
-        ret = handle_screenshot(req.query)
+        ret = handle_screenshot(query, req.body)
         if !ret.key?(:file)
           res.status = 400
           res.body = ret[:msg] || 'Unknown query error'
@@ -3457,18 +3461,31 @@ module APIServer extend self
           send_data(res, ret[:file], type: 'image/png', name: ret[:name])
         end
       end
-    when 'POST'
-      req.continue # Respond to "Expect: 100-continue"
     end
   rescue => e
     lex(e, "API socket failed to parse request for: #{req.path}")
     nil
   end
 
-  def handle_screenshot(query)
-    level = Level.find_by(id: query['id'].to_i)
+  def handle_screenshot(params, payload)
+    # Parse highscoreable
+    level = Level.find_by(id: params['id'].to_i)
     return { msg: 'Level not found' } if !level
-    return { msg: "Palette #{query['palette']} doesn't exist" } if !Map::THEMES.include?(query['palette'])
-    { file: level.map.screenshot(query['palette']), name: level.name }
+
+    # Parse palette
+    if payload && !payload.empty?
+      changed = Map.change_custom_palette(payload)
+      return { msg: 'Provided palette data is corrupt' } if !changed
+      palette = 'custom'
+    elsif params['palette']
+      palette_idx = Map::THEMES.index(params['palette'])
+      return { msg: "Palette #{params['palette']} doesn't exist" } if !palette_idx
+      palette = Map::THEMES[palette_idx]
+    else
+      palette = 'vasquez'
+    end
+
+    # Generate screenshot
+    { file: level.map.screenshot(palette), name: level.name }
   end
 end

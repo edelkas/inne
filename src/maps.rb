@@ -160,8 +160,46 @@ module Map
     "toxin",          "TR-808",          "tycho",         "vasquez",
     "vectrex",        "vintage",         "virtual",       "vivid",
     "void",           "waka",            "witchy",        "wizard",
-    "wyvern",         "xenon",           "yeti"
+    "wyvern",         "xenon",           "yeti",          "custom"
   ]
+
+  PALETTE_FILES = {
+    "background"           => { position:  0, size:  6 },
+    "ninja"                => { position:  1, size:  4 },
+    "entityMine"           => { position:  2, size:  4 },
+    "entityGold"           => { position:  3, size:  3 },
+    "entityDoorExit"       => { position:  4, size:  8 },
+    "entityDoorExitSwitch" => { position:  5, size:  5 },
+    "entityDoorRegular"    => { position:  6, size:  1 },
+    "entityDoorLocked"     => { position:  7, size:  8 },
+    "entityDoorTrap"       => { position:  8, size:  8 },
+    "entityLaunchPad"      => { position:  9, size:  2 },
+    "entityOneWayPlatform" => { position: 10, size:  2 },
+    "entityDroneChaingun"  => { position: 11, size:  2 },
+    "entityDroneLaser"     => { position: 12, size:  4 },
+    "entityDroneZap"       => { position: 13, size:  2 },
+    "entityDroneChaser"    => { position: 14, size:  2 },
+    "entityFloorGuard"     => { position: 15, size:  2 },
+    "entityBounceBlock"    => { position: 16, size:  2 },
+    "entityRocket"         => { position: 17, size:  4 },
+    "entityTurret"         => { position: 18, size:  5 },
+    "entityThwomp"         => { position: 19, size:  3 },
+    "entityEvilNinja"      => { position: 20, size:  2 },
+    "entityDualLaser"      => { position: 21, size:  2 },
+    "entityBoostPad"       => { position: 22, size:  2 },
+    "entityBat"            => { position: 23, size:  3 },
+    "entityEyeBat"         => { position: 24, size:  2 },
+    "entityShoveThwomp"    => { position: 25, size:  3 },
+    "headbands"            => { position: 26, size: 17 },
+    "explosions"           => { position: 27, size:  4 },
+    "timeBar"              => { position: 28, size:  8 },
+    "timeBarRace"          => { position: 29, size: 17 },
+    "fxNinja"              => { position: 30, size:  2 },
+    "fxDroneZap"           => { position: 31, size:  2 },
+    "fxFloorguardZap"      => { position: 32, size:  2 },
+    "menu"                 => { position: 33, size: 42 },
+    "editor"               => { position: 34, size: 10 }
+  }
 
   # Palette file and X offsets for the main sections
   PALETTE = ChunkyPNG::Image.from_file(PATH_PALETTES)
@@ -236,6 +274,21 @@ module Map
   NV14_DRONE_TYPE_ZAP      = 0
   NV14_DRONE_TYPE_LASER    = 1
   NV14_DRONE_TYPE_CHAINGUN = 2
+
+  # Change the colors of the last row in the palette image, intended to temporarily
+  # store a custom palette.
+  def self.change_custom_palette(json)
+    palette = JSON.parse(json)
+    return false if PALETTE_FILES.keys.sort != palette.keys.sort
+    return false if palette.any?{ |k, v| !v.is_a?(Array) || v.size != PALETTE_FILES[k][:size] }
+    palette.sort_by{ |k, v| PALETTE_FILES[k][:position] }.map(&:last).flatten.each_with_index{ |color, i|
+      PALETTE[i, PALETTE.height - 1] = ChunkyPNG::Color.from_hex(color)
+    }
+    true
+  rescue => e
+    lex(e, 'Failed to parse palette payload')
+    false
+  end
 
   # TODO: Perhaps store object data without transposing, hence being able to skip
   #       the decoding when dumping
