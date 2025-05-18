@@ -3364,8 +3364,8 @@ module NPPServer extend self
     # Always log players in, regardless of mappack
     return respond(res, Player.login(mappack, req)) if method == 'POST' && query == METANET_POST_LOGIN
 
-    # Automatically forward requests for certain mappacks that lack custom boards
-    return fwd(req, res) if ['rdx'].include?(mappack)
+    # Automatically forward requests for unknown or disabled mappacks
+    return fwd(req, res) if !Mappack.find_by(enabled: true, code: mappack)
 
     # CUSE requests only affect userlevel searching
     if mappack == 'cuse'

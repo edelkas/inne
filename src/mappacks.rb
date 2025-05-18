@@ -379,11 +379,13 @@ class Mappack < ActiveRecord::Base
   end
 
   # Set some of the mappack's info on command, which isn't parsed from the files
-  def set_info(name: nil, author: nil, date: nil, channel: nil, version: nil)
-    self.update(name: name) if name
-    self.update(authors: author) if author
+  def set_info(name: nil, author: nil, date: nil, channel: nil, version: nil, enabled: false, public: false)
+    self.update(name:    name)    if name
+    self.update(authors: author)  if author
     self.update(version: version) if version
-    self.update(date: Time.strptime(date, '%Y/%m/%d').strftime(DATE_FORMAT_MYSQL)) if date
+    self.update(enabled: enabled) if !enabled.nil?
+    self.update(public:  public)  if !public.nil?
+    self.update(date:    Time.strptime(date, '%Y/%m/%d').strftime(DATE_FORMAT_MYSQL)) if date
     channel.each{ |c|
       if is_num(c)
         ch = find_channel(id: c.strip.to_i)

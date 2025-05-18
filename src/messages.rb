@@ -1182,14 +1182,16 @@ end
 def send_mappacks(event, page: nil)
   msg = parse_message(event)
   short = !!msg[/short/i]
-  count = Mappack.count
+  priv = !!msg[/private/i] && event.user.id == BOTMASTER_ID
+  klass = priv ? Mappack.all : Mappack.where(public: true)
+  count = klass.count
   counts = MappackLevel.group(:mappack_id).count
   page_size = 10
   page = parse_page(msg, page, false, event.message.components)
   pag = compute_pages(count, page, page_size)
-  list = Mappack.all.order(date: :desc).offset(pag[:offset]).limit(page_size).map{ |m|
+  list = klass.order(date: :desc).offset(pag[:offset]).limit(page_size).map{ |m|
     fields = []
-    fields << m.code.upcase
+    fields << m.code.upcase + (!m.enabled || !m.public ? '*' : '')
     fields << m.name.to_s unless short
     fields << m.authors.to_s unless short
     fields << m.date.strftime('%Y/%b/%d') rescue ''

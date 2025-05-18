@@ -138,10 +138,16 @@ end
 
 def send_mappack_info(event)
   flags = parse_flags(event)
-  mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
+  mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false, priv: true)
   perror("You need to provide a mappack.") if !mappack
   channels = flags[:channels].split.map(&:strip) if flags.key?(:channels)
-  mappack.set_info(name: flags[:name], author: flags[:author], date: flags[:date], channel: channels, version: flags[:version])
+  enabled = flags.key?(:enabled) ? true : flags.key?(:disbled) ? false : nil
+  public = flags.key?(:public) ? true : flags.key?(:private) ? false : nil
+  mappack.set_info(
+    name: flags[:name], author: flags[:author], date: flags[:date],
+    channel: channels, version: flags[:version], enabled: enabled,
+    public: public
+  )
   flags.delete(:mappack)
   flags = flags.map{ |k, v| "#{k} to #{verbatim(v)}" unless v.nil? }.compact.to_sentence
   event << "Set mappack #{verbatim(mappack.code)} #{flags}."

@@ -360,7 +360,7 @@ def parse_h_by_id_once(
 
   # Find highscoreable
   klass = mappack ? type.mappack : type
-  res = klass.find_by(name: str)
+  res = klass.find_by(public: true, name: str)
   res ? ["Single match found for #{match}", [res]] : ['', []]
 rescue
   ['', []]
@@ -571,7 +571,8 @@ end
 # event    - Parse everything from the Discordrb event
 # explicit - Disables implicit parsing
 # vanilla  - Converts Metanet mappack to nil (i.e. no mappack)
-def parse_mappack(msg = nil, user = nil, channel = nil, event: nil, explicit: false, vanilla: true)
+# priv     - Also parse mappacks with private visibility
+def parse_mappack(msg = nil, user = nil, channel = nil, event: nil, explicit: false, vanilla: true, priv: false)
   # Fetch params
   if event
     msg     = parse_message(event)
@@ -583,11 +584,12 @@ def parse_mappack(msg = nil, user = nil, channel = nil, event: nil, explicit: fa
   text = msg && !msg.strip.empty?
   term = parse_term(msg, quoted: [], final: ['for'])
   mappack = nil
+  klass = priv ? Mappack : Mappack.where(public: true)
 
   # Parse mappack explicitly in different ways
-  mappack = Mappack.find_by(name: msg.strip[/\w+/i])            if text
-  mappack = Mappack.find_by(name: term)                         if text && !mappack
-  mappack = Mappack.find_by(code: msg.scan(/\b[A-Z0-9]{3}\b/i)) if text && !mappack
+  mappack = klass.find_by(name: msg.strip[/\w+/i])            if text
+  mappack = klass.find_by(name: term)                         if text && !mappack
+  mappack = klass.find_by(code: msg.scan(/\b[A-Z0-9]{3}\b/i)) if text && !mappack
 
   # Parse mappack implicitly
   mappack = default_mappack(user, channel) if !mappack && !explicit
