@@ -397,6 +397,11 @@ class Userlevel < ActiveRecord::Base
     get_data(uri, data, err, qt, page, mode)
   end
 
+  # For compatibility with Level, Episode and Story
+  def self.mappack
+    Userlevel
+  end
+
   #----------------------------------------------------------------------------#
   #                       USERLEVEL QUERY DOCUMENTATION                        |
   #----------------------------------------------------------------------------#

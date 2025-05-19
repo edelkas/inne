@@ -3469,8 +3469,17 @@ module APIServer extend self
 
   def handle_screenshot(params, payload)
     # Parse highscoreable
-    level = Level.find_by(id: params['id'].to_i)
-    return { msg: 'Level not found' } if !level
+    h = nil
+    [Level, Episode, Story, Userlevel].each{ |type|
+      id = params["#{type.to_s.downcase}_id"]
+      next if !id
+      ul = type == Userlevel
+      key = ul ? :id : :name
+      h = type.find_by(key => id)
+      h = type.mappack.find_by(key => id) if !h && !ul
+      return { msg: "#{type} #{id} not found" } if !h
+    }
+    return { msg: 'Highscoreable must be supplied via "level_id", "episode_id", "story_id" or "userlevel_id"' } if !h
 
     # Parse palette
     if payload && !payload.empty?
@@ -3486,6 +3495,10 @@ module APIServer extend self
     end
 
     # Generate screenshot
-    { file: level.map.screenshot(palette), name: level.name }
+    filename = h.is_userlevel? ? h.id.to_s : h.name
+    { file: Map.screenshot(palette, h: h), name: filename + '.png' }
+  rescue => e
+    lex(e, 'Failed to handle API screenshot request')
+    { file: nil }
   end
 end
