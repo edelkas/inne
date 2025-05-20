@@ -537,6 +537,7 @@ def send_screenshot(event, map = nil, ret: false, id: nil, palette: nil)
   h = h.map
   max_v = h.version
   version = version ? [max_v, [1, version.to_i].max].min : max_v
+  bench(:start) if BENCH_IMAGES
   screenshot = Map.screenshot(palette, file: true, h: h, spoiler: spoiler, v: version)
   perror("Failed to generate screenshot!") if screenshot.nil?
 

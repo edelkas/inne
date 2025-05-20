@@ -1148,6 +1148,7 @@ def send_userlevel_screenshot(event, userlevel = nil)
     output += "from #{verbatim(map[:query].date.strftime('%F'))} "
     output += "using palette #{verbatim(h[:palette])}:"
     event << output
+    bench(:start) if BENCH_IMAGES
     send_file(event, map[:query].screenshot(h[:palette]), map[:query].id.to_s + ".png", true)
   }
 rescue => e

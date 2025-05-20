@@ -2100,7 +2100,6 @@ module Map
     )
 
     return nil if h.nil?
-    bench(:start) if BENCHMARK && !BENCH_IMAGES
 
     anim = false if !FEATURE_ANIMATE
     gif = !nsim.empty?
@@ -2122,6 +2121,7 @@ module Map
       context_gif  = nil
       context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v, anim: anim, trace: trace).merge(inputs: inputs, blank: blank)
       res = nil
+      bench(:step, 'Parsing', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 
       # Render each highscoreable
       multi = !h.is_a?(Array) && h.is_episode? && gif && anim
@@ -2175,8 +2175,6 @@ module Map
       # Return binary data for PNG / GIF
       res
     end
-
-    bench(:step) if BENCHMARK && !BENCH_IMAGES
 
     return nil if !res
     file ? tmp_file(res, filename, binary: true) : res
