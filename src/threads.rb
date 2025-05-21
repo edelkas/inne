@@ -592,6 +592,18 @@ def update_userlevel_tabs
   }
 end
 
+# Re-download a full page of userlevels for each mode, in reverse order of
+# last update. This way we keep certain stats (notably ++'s, but potentially
+# also author name changes) up-to-date.
+def update_userlevel_data
+  [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |mode|
+    id = Userlevel.where(mode: mode).order('map_update IS NOT NULL, map_update').first.id
+    page = Userlevel.where("`mode` = #{mode} AND `id` > #{id}").count / PART_SIZE
+    Userlevel.parse(Userlevel.get_levels(QT_NEWEST, page, mode))
+    dbg("Updated userlevel page #{page} of mode #{mode}")
+  }
+end
+
 ############ LOTD FUNCTIONS ############
 
 # Daily reminders for eotw and cotm
@@ -798,6 +810,9 @@ def start_metanet_tasks
 
   # Gradually update all userlevel scores (every 5 secs)
   Scheduler.add("Userlevel chunk", force: false, log: false) { update_all_userlevels_chunk } if DO_EVERYTHING || UPDATE_USER_GLOB
+
+  # Gradually update all userlevel data (every hour)
+  Scheduler.add("Userlevel data", freq: USERLEVEL_DATA_RATE, force: false, log: false) { update_userlevel_data } if DO_EVERYTHING || UPDATE_USER_INFO
 end
 
 # These tasks perform operations relying on a Discord connection to the N++

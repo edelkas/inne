@@ -158,7 +158,6 @@ Perhaps we should look into using acquire_connection (and release_connection) in
   * Ditto for userlevel_histories
   * Remove metanet_id field from userlevel_scores and userlevel_histories
 
-- We need to update all maps regularly, for the ++'s, etc.
 - Userlevel of the day (filter by levels with at least n scores and at least a certain delta of scores to prevent impossible and maxed levels)
 - Add Metanet levels to the db.
 

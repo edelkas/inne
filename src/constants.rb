@@ -433,6 +433,7 @@ UPDATE_USERLEVELS = false # Thread to regularly download newest userlevel scores
 UPDATE_USER_GLOB  = false # Thread to continuously (but slowly) download all userlevel scores
 UPDATE_USER_HIST  = false # Thread to regularly update userlevel highscoring histories
 UPDATE_USER_TABS  = false # Thread to regularly update userlevel tabs (best, featured, top, hardest)
+UPDATE_USER_INFO  = true  # Thread to regularly re-download userlevel data (favs, name changes, ...)
 REPORT_METANET    = false # Thread to regularly post Metanet's highscoring report
 REPORT_USERLEVELS = false # Thread to regularly post userlevels' highscoring report
 
@@ -452,6 +453,7 @@ REPORT_UPDATE_SIZE          =   7 * 24 * 60 * 60
 SUMMARY_UPDATE_SIZE         =   1 * 24 * 60 * 60
 USERLEVEL_SCORE_FREQUENCY   =       24 * 60 * 60
 USERLEVEL_UPDATE_RATE       =                  5
+USERLEVEL_DATA_RATE         =        1 * 60 * 60
 USERLEVEL_HISTORY_FREQUENCY =       24 * 60 * 60
 USERLEVEL_REPORT_FREQUENCY  =       24 * 60 * 60
 USERLEVEL_TAB_FREQUENCY     =       24 * 60 * 60
