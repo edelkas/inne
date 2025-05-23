@@ -359,9 +359,13 @@ def parse_h_by_id_once(
   str.prepend(code + '-') if vanilla && mappack
 
   # Find highscoreable
-  klass = mappack ? type.mappack : type
-  res = klass.joins('INNER JOIN `mappacks` ON `mappacks`.`id` = `mappack_id`')
-             .where("`mappacks`.`public` = 1").find_by(name: str)
+  if mappack
+    res = type.mappack
+              .joins('INNER JOIN `mappacks` ON `mappacks`.`id` = `mappack_id`')
+              .where("`mappacks`.`public` = 1").find_by(name: str)
+  else
+    res = type.find_by(name: str)
+  end
   res ? ["Single match found for #{match}", [res]] : ['', []]
 rescue => e
   lex(e, 'Failed to parse highscoreable by ID')
