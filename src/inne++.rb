@@ -73,6 +73,9 @@
 #         DO_NOTHING         - Don't execute any threads (e.g. score update).  #
 #         DO_EVERYTHING      - Execute all threads.                            #
 #                                                                              #
+# 5)  Optionally, build the native C extension by running the build.sh script  #
+#     stored in the /ext folder. See the README for more instructions.         #
+#                                                                              #
 # ////// Other notes:                                                          #
 #                                                                              #
 # - Edit and save the source files in UTF8.                                    #

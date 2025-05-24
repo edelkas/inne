@@ -214,7 +214,7 @@ The project includes a native module writen in C using the [Ruby C API](https://
 
 To build it, it suffices to run the [build.sh](https://github.com/edelkas/inne/blob/master/ext/build.sh) script. Alternatively, you can generate the Makefile with [extconf.rb](https://github.com/edelkas/inne/blob/master/ext/extconf.rb), then _Make_ it manually, and finally copy it to the `/lib` directory (not present in the Github repo because the `.so` file is git-ignored).
 
-When the module is required in Ruby it calls the entry point function `Init_cinne()` defined in [main.c](https://github.com/edelkas/inne/blob/master/ext/main.c). You'll know it's been properly included if the global constant `C_INNE` is defined.
+When the module is required in Ruby it calls the entry point function `Init_cinne()` defined in [main.c](https://github.com/edelkas/inne/blob/master/ext/main.c). You'll know it's been properly included if the global constant `C_INNE` is defined. Nevertheless, it should be optional, as all functions have Ruby alternatives, but it's highly recommended.
 
 ### Final remarks
 
