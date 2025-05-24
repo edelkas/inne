@@ -16,6 +16,7 @@
     - [Configuring your environment](#configuring-your-environment)
     - [Configuring the database](#configuring-the-database)
     - [Configuring the bot](#configuring-the-bot)
+    - [Building the C native extension](#building-the-c-native-extension)
     - [Final remarks](#final-remarks)
 - [Credits](#credits)
 
@@ -206,6 +207,14 @@ Additionally you may be particularly interested in the following sections of the
 - The **benchmarking** variables may come in handy if you're working on improving the performance of some function.
 - The **task** variables are useful for enabling/disabling individual background tasks, for testing purposes.
 - The **Discord** variables have some interesting settings of the bot's behaviour.
+
+### Building the C native extension
+
+The project includes a native module writen in C using the [Ruby C API](https://silverhammermba.github.io/emberb/c/) (also see the [official docs](https://github.com/ruby/ruby/blob/master/doc/extension.rdoc)), the code is located in the [ext](https://github.com/edelkas/inne/tree/master/ext) folder. This API allows to communicate directly with the underlying C implementation of Ruby, greatly speeding up most tasks.
+
+To build it, it suffices to run the [build.sh](https://github.com/edelkas/inne/blob/master/ext/build.sh) script. Alternatively, you can generate the Makefile with [extconf.rb](https://github.com/edelkas/inne/blob/master/ext/extconf.rb), then _Make_ it manually, and finally copy it to the `/lib` directory (not present in the Github repo because the `.so` file is git-ignored).
+
+When the module is required in Ruby it calls the entry point function `Init_cinne()` defined in [main.c](https://github.com/edelkas/inne/blob/master/ext/main.c). You'll know it's been properly included if the global constant `C_INNE` is defined.
 
 ### Final remarks
 
