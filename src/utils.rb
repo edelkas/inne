@@ -1764,6 +1764,16 @@ class NSim
   attr_accessor :ppc
   Collision = Struct.new(:id, :index, :state)
 
+  # One-shot usage of the simulator, shortcut to avoid creation and cleanup of NSim objects
+  def self.run(map_data, demo_data, basic_sim: true, basic_render: true, silent: false, &block)
+    return if !block_given?
+    nsim = new(map_data, demo_data)
+    nsim.run(basic_sim: basic_sim, basic_render: basic_render, silent: silent)
+    ret = yield(nsim)
+    nsim.destroy
+    ret
+  end
+
   def initialize(map_data, demo_data)
     @splits_mode    = map_data.is_a?(Array)
     @map_data       = map_data

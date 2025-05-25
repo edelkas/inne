@@ -2874,10 +2874,7 @@ class Archive < ActiveRecord::Base
       return :lost
     end
 
-    nsim = NSim.new(highscoreable.map.dump_level, [demo.demo])
-    nsim.run
-    frac = nsim.frac
-    nsim.destroy
+    frac = NSim.run(highscoreable.map.dump_level, [demo.demo]){ |nsim| nsim.frac }
     update(fraction: frac || -1)
     return frac ? :good : :bad
   rescue => e

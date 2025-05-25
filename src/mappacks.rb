@@ -441,7 +441,8 @@ module MappackHighscoreable
   end
 
   # Return leaderboards, filtering obsolete scores and sorting appropiately
-  # depending on the mode (hs / sr).
+  # depending on the mode (hs / sr). Only scores with non-null rank field
+  # are returned. Gold boards work differently.
   def leaderboard(
       m         = 'hs',  # Playing mode (hs, sr, gm)
       score     = false, # Sort by score and date instead of rank (used for computing the rank)
@@ -1429,10 +1430,7 @@ class MappackScore < ActiveRecord::Base
       return :lost
     end
 
-    nsim = NSim.new(highscoreable.dump_level, [demo.demo])
-    nsim.run
-    frac = nsim.frac
-    nsim.destroy
+    frac = NSim.run(highscoreable.dump_level, [demo.demo]){ |nsim| nsim.frac }
     update(fraction: frac || -1)
     return frac ? :good : :bad
   rescue => e
