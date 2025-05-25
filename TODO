@@ -112,9 +112,24 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 
 \\ ------------------------ frac scores -----------------------
 
+- Possibility to compute fractional scores live on submission (all should use OPTIONAL parameter):
+  * Add flag in constants to determine whether fractional scores should be computed live, and
+    for what highscoreables / mappacks.
+  * Modify MappackHighscoreable.leaderboard so that scores are optionally sorted by fractional score.
+  * Modify MappackHighscoreable.get_scores so that fractional scores are sent.
+  * Modify MappackHighscoreable.update_ranks to take fraction into account when computing tied_rank.
+  * Modify MappackHighscoreable.delete_obsoletes to take fraction into account when listing keepies.
+  * Modify MappackScore.add to consider fractional score for PBs to determine when to save the score.
+    Also in this function, if fraction has been computed, persist it in the .create.
+  * Modify MappackScore.patch_score to also use fraction when finding "max" (current PB).
+  * Ditto in MappackScore.wipe when finding current PB.
+    We should probably abstract this "find current PB" functionality. It's used in at least
+    3 places (those 2, and .add).
+
+- Add task to regularly compute missing fractional scores.
 - Add frac scores to nav scores function.
 - Add fractional spreads.
-- Return scores closesr to making it to the next frame, or closest to the current frame (i.e. fractions closest to 0 and 1). Perhaps allow to limit this to framewars, where it's more interesting.
+- Return scores closest to making it to the next frame, or closest to the current frame (i.e. fractions closest to 0 and 1). Perhaps allow to limit this to framewars, where it's more interesting.
 
 \\ ------------------------ ntrace ------------------------
 
