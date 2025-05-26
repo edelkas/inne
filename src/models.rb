@@ -887,6 +887,7 @@ module Highscoreable
   # Arguments are unused, but they're necessary to be compatible with the corresponding
   # function in MappackHighscoreable
   def leaderboard(*args, **kwargs)
+    return scores if kwargs[:pluck] == false # not nil!
     ul = is_userlevel?
     attr_names = %W[rank id score name metanet_id replay_id]
     attrs = [
@@ -897,24 +898,15 @@ module Highscoreable
       'metanet_id',
       'replay_id'
     ]
-    if kwargs[:fraction]
-      attr_names << 'fraction'
-      attrs << 'fraction'
-    end
-    if !ul
-      attr_names << 'cool' << 'star'
-      attrs << 'cool' << 'star'
-    end
-    if !kwargs.key?(:pluck) || kwargs[:pluck]
-      pclass = ul ? 'userlevel_players' : 'players'
-      scores.joins("INNER JOIN `#{pclass}` ON `#{pclass}`.`id` = `player_id`")
-            .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
-    else
-      scores
-    end
+    attr_names << 'cool' << 'star' if !ul
+    attrs      << 'cool' << 'star' if !ul
+    pclass = ul ? 'userlevel_players' : 'players'
+    scores.joins("INNER JOIN `#{pclass}` ON `#{pclass}`.`id` = `player_id`")
+          .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
   end
 
-  def format_scores_board(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
+  # Format a single leaderboard for printing
+  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, fraction: !is_vanilla?).each_with_index.select{ |_, r|
@@ -989,27 +981,33 @@ module Highscoreable
     }
   end
 
-  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false)
-    if !is_mappack? || mode != 'dual'
-      ret = format_scores_board(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
-      ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"] if ret.size == 0
-      ret = ret.join("\n") if join
-      return ret
-    end
-    board_hs = format_scores_board('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
-    board_sr = format_scores_board('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+  # Format a dual leaderboard for printing
+  def format_scores_dual(np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
+    # Fetch scores
+    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+    size = [board_hs.size, board_sr.size].max
+    return [] if size == 0
+
+    # Pad each board for alignment
     length_hs = board_hs.first.length rescue 0
     length_sr = board_sr.first.length rescue 0
-    size = [board_hs.size, board_sr.size].max
-    if size == 0
-      ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"]
-      ret = ret.join("\n") if join
-      return ret
-    end
     board_hs = board_hs.ljust(size, ' ' * length_hs)
     board_sr = board_sr.ljust(size, ' ' * length_sr)
+
+    # Format boards
     header = '     ' + 'Highscore'.center(length_hs - 4) + '   ' + 'Speedrun'.center(length_sr - 4)
     ret = [header, *board_hs.zip(board_sr).map{ |hs, sr| hs.sub(':', ' │') + ' │ ' + sr[4..-1] }]
+  end
+
+  # Format a leaderboard for printing
+  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false)
+    ret = if !is_mappack? || mode != 'dual'
+      format_scores_single(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+    else
+      format_scores_dual(np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+    end
+    ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"] if ret.size == 0
     ret = ret.join("\n") if join
     ret
   end

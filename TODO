@@ -126,6 +126,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
     We should probably abstract this "find current PB" functionality. It's used in at least
     3 places (those 2, and .add).
 
+- Instead of returning the fraction field separately in the .leaderboard methods, perhaps we could integrate it so that they already return the scores adjusted by the fractional part. Careful with nulls though.
 - Add task to regularly compute missing fractional scores.
 - Add frac scores to nav scores function.
 - Add fractional spreads.

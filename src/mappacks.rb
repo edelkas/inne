@@ -465,42 +465,37 @@ module MappackHighscoreable
     if use_manual
       attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
       board = scores.where(id: manual)
-    end
-
-    # Handle standard boards
-    if ['hs', 'sr'].include?(m) && !use_manual
-      attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
-      if fraction
-        attr_names << 'fraction'
-        attrs << 'fraction'
+    else
+      case m
+      when 'hs', 'sr' # Handle standard boards
+        attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
+        attr_names << 'fraction' if fraction
+        attrs      << 'fraction' if fraction
+        board = scores.where("rank_#{m} IS NOT NULL")
+        if score
+          board = board.order("score_#{m} #{m == 'hs' ? 'DESC' : 'ASC'}, date ASC")
+        else
+          board = board.order("rank_#{m} ASC")
+        end
+      when 'gm'       # Handle gold boards
+        attrs = [
+          'MIN(subquery.id) AS id',
+          'MIN(score_gm) AS score_gm',
+          "MIN(#{names}) AS name",
+          'subquery.metanet_id'
+        ]
+        join = %{
+          INNER JOIN (
+            SELECT metanet_id, MIN(gold) AS score_gm
+            FROM mappack_scores
+            WHERE highscoreable_id = #{id} AND highscoreable_type = '#{type}'
+            GROUP BY metanet_id
+          ) AS opt
+          ON mappack_scores.metanet_id = opt.metanet_id AND gold = score_gm
+        }.gsub(/\s+/, ' ').strip
+        subquery = scores.select(:id, :score_gm, :player_id, :metanet_id).joins(join)
+        board = MappackScore.from(subquery).group(:metanet_id).order('score_gm', 'id')
       end
-      board = scores.where("rank_#{m} IS NOT NULL")
-      if score
-        board = board.order("score_#{m} #{m == 'hs' ? 'DESC' : 'ASC'}, date ASC")
-      else
-        board = board.order("rank_#{m} ASC")
-      end
-    end
-
-    # Handle gold boards
-    if m == 'gm' && !use_manual
-      attrs = [
-        'MIN(subquery.id) AS id',
-        'MIN(score_gm) AS score_gm',
-        "MIN(#{names}) AS name",
-        'subquery.metanet_id'
-      ]
-      join = %{
-        INNER JOIN (
-          SELECT metanet_id, MIN(gold) AS score_gm
-          FROM mappack_scores
-          WHERE highscoreable_id = #{id} AND highscoreable_type = '#{type}'
-          GROUP BY metanet_id
-        ) AS opt
-        ON mappack_scores.metanet_id = opt.metanet_id AND gold = score_gm
-      }.gsub(/\s+/, ' ').strip
-      subquery = scores.select(:id, :score_gm, :player_id, :metanet_id).joins(join)
-      board = MappackScore.from(subquery).group(:metanet_id).order('score_gm', 'id')
     end
 
     # Paginate (offset and truncate), fetch player names, and convert to hash
@@ -512,36 +507,19 @@ module MappackHighscoreable
   end
 
   # Return scores in JSON format expected by N++
-  def get_scores(qt = 0, metanet_id = nil)
-    # Determine leaderboard type
-    page = 0
-    case qt
-    when 0
-      m = 'hs'
-    when 1
-      m = 'hs'
-      #page = 1 if metanet_id == BOTMASTER_NPP_ID
-    when 2
-      m = 'sr'
-    end
-
-    # Fetch scores
-    board = leaderboard(m, metanet_id: metanet_id, page: page)
-
-    # Build response
+  def get_scores(qt = 0, metanet_id = nil, page: 0, frac: false)
+    m = qt == 2 ? 'sr' : 'hs'
+    board = leaderboard(m, metanet_id: metanet_id, page: page, fraction: frac)
     res = {}
 
-    #score = board.find_by(metanet_id: metanet_id) if !metanet_id.nil?
-    #res["userInfo"] = {
-    #  "my_score"        => m == 'hs' ? (1000 * score["score_#{m}"].to_i / 60.0).round : 1000 * score["score_#{m}"].to_i,
-    #  "my_rank"         => (score["rank_#{m}"].to_i rescue -1),
-    #  "my_replay_id"    => score.id.to_i,
-    #  "my_display_name" => score.player.name.to_s.remove("\\")
-    #} if !score.nil?
-
+    # Score list
     res["scores"] = board.each_with_index.map{ |s, i|
+      fraction = s['fraction'] if frac
+      s['score_hs'] -= 1 - fraction if fraction && m == 'hs'
+      s['score_sr'] += 1 - fraction if fraction && m == 'sr'
+      s['score_hs'] /= 60.0 if m == 'hs'
       {
-        "score"     => m == 'hs' ? (1000 * s["score_#{m}"].to_i / 60.0).round : 1000 * s["score_#{m}"].to_i,
+        "score"     => (1000 * s["score_#{m}"]).round,
         "rank"      => 20 * page + i,
         "user_id"   => s['metanet_id'].to_i,
         "user_name" => s['name'].to_s.remove("\\"),
@@ -549,12 +527,13 @@ module MappackHighscoreable
       }
     }
 
+    # ID fields
     res["query_type"] = qt
     res["#{self.class.to_s.remove("Mappack").downcase}_id"] = self.inner_id
 
     # Log
     player = Player.find_by(metanet_id: metanet_id)
-    if !player.nil? && !player.name.nil?
+    if !!player&.name
       text = "#{player.name.to_s} requested #{self.name} leaderboards"
     else
       text = "#{self.name} leaderboards requested"
