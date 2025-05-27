@@ -2193,6 +2193,37 @@ class Player < ActiveRecord::Base
     sanitize_filename(print_name)
   end
 
+  # Find the current PB of the player in a mappack highscoreable in a given board
+  def find_pb(h, board, frac: false)
+    return if !h.is_mappack?
+    scores = h.scores.where(player: self)
+    case board
+    when 'hs'
+      score = !frac ? '`score_hs` DESC' : '`score_hs` - (1 - `fraction`) DESC'
+      scores.order(score, :date).first
+    when 'sr'
+      score = !frac ? '`score_sr` ASC' : '`score_sr` + (1 - `fraction`) ASC'
+      scores.order(score, :date).first
+    when 'gm'
+      scores.order(:gold, :date).first
+    when 'gp'
+      scores.order(gold: :desc, date: :asc).first
+    end
+  end
+
+  # Update the rank field of the PB in a given mappack highscoreable, used
+  # mainly when a player's score changes (improves, is patched, is wiped)
+  def update_rank(h, board, frac: false)
+    return if !h.is_mappack? || !['hs', 'sr'].include?(board)
+    rankf = 'rank_' + board
+    trankf = 'tied_' + rankf
+    scores = h.scores.where(player: self)
+    scores.update_all(rankf => nil, trankf => nil)
+    pb = find_pb(h, board, frac: frac)
+    pb.update(rankf => -1, trankf => -1) if pb
+    h.update_ranks(board)
+  end
+
   def scores_by_type_and_tabs(type, tabs, include = nil, mappack = nil, board = 'hs')
     # Fetch complete list of scores
     if mappack.nil?

@@ -600,7 +600,7 @@ module MappackHighscoreable
       score_list.where(rank_hs: nil, rank_sr: nil)
                 .where("gold < #{gold_max} AND gold > #{gold_min}")
                 .where.not(id: keepies)
-                .each(&:wipe)
+                .each(&:destroy)
     }
     true
   rescue => e
@@ -851,10 +851,11 @@ end
 
 class MappackScore < ActiveRecord::Base
   include Scorish
-  has_one :mappack_demo, foreign_key: :id
+  has_one :mappack_demo, foreign_key: :id, dependent: :destroy
   belongs_to :player
   belongs_to :highscoreable, polymorphic: true
   belongs_to :mappack
+  after_destroy :cleanup
   alias_method :demo,  :mappack_demo
   alias_method :demo=, :mappack_demo=
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
@@ -1176,7 +1177,7 @@ class MappackScore < ActiveRecord::Base
   # - A player and a highscoreable, in which case, his current hs PB will be taken
   # - An ID, in which case that specific score will be chosen
   # It performs score validation via gold check before changing it
-  def self.patch_score(id, highscoreable, player, score, silent: false)
+  def self.patch_score(id, highscoreable, player, score, silent: false, frac: false)
     # Find score
     if !id.nil? # If ID has been provided
       s = MappackScore.find_by(id: id)
@@ -1203,18 +1204,13 @@ class MappackScore < ActiveRecord::Base
     silent ? return : perror("The inferred gold count is incorrect") if gold.round < 0 || gold.round > highscoreable.gold
     silent ? return : perror("That score is incompatible with the framecount") if !MappackScore.verify_gold(gold) && !highscoreable.type.include?('Story')
 
-    # Change score
+    # Change score and update rank
     old_score = s.score_hs.to_f / 60.0
     silent ? return : perror("#{player.name}'s score (#{s.id}) in #{highscoreable.name} is already #{'%.3f' % old_score}") if s.score_hs == new_score
     s.update(score_hs: new_score, gold: gold.round)
+    player.update_rank(highscoreable, 'hs', frac: frac)
 
-    # Update player's ranks
-    scores.update_all(rank_hs: nil, tied_rank_hs: nil)
-    max = scores.where(score_hs: scores.pluck(:score_hs).max).order(:date).first
-    max.update(rank_hs: -1, tied_rank_hs: -1) if max
-
-    # Update global ranks
-    highscoreable.update_ranks('hs')
+    # Log
     succ("Patched #{player.name}'s score (#{s.id}) in #{highscoreable.name} from #{'%.3f' % old_score} to #{'%.3f' % score}")
   rescue => e
     lex(e, 'Failed to patch score')
@@ -1333,39 +1329,14 @@ class MappackScore < ActiveRecord::Base
     return
   end
 
-  # Deletes a score, with the necessary cleanup (delete demo, and update ranks if necessary)
-  def wipe
-    # Save attributes before destroying the object
-    hs = rank_hs != nil
-    sr = rank_sr != nil
-    h = highscoreable
-    p = player
-
-    # Destroy demo and score
-    demo.destroy
-    self.destroy
-
-    # Update rank fields, if the score was actually on the boards
-    scores = h.scores.where(player: p) if hs || sr
-
-    if hs
-      scores.update_all(rank_hs: nil, tied_rank_hs: nil)
-      max = scores.where(score_hs: scores.pluck(:score_hs).max).order(:date).first
-      max.update(rank_hs: -1, tied_rank_hs: -1) if max
-      h.update_ranks('hs')
-    end
-
-    if sr
-      scores.update_all(rank_sr: nil, tied_rank_sr: nil)
-      min = scores.where(score_sr: scores.pluck(:score_sr).min).order(:date).first
-      min.update(rank_sr: -1, tied_rank_sr: -1) if min
-      h.update_ranks('sr')
-    end
-
-    true
-  rescue => e
-    lex(e, 'Failed to wipe mappack score.')
-    false
+  # Perform cleanup after destroying a score (delete demo, and update ranks if necessary)
+  def cleanup
+    # Demo is deleted automatically by the :dependent option
+    return if !rank_hs && !rank_sr
+    h = highscoreable_type.constantize.find(highscoreable_id)
+    p = Player.find(player_id)
+    p.update_rank(h, 'hs') if !!rank_hs
+    p.update_rank(h, 'sr') if !!rank_sr
   end
 
   def compare_hashes
@@ -1399,6 +1370,12 @@ class MappackScore < ActiveRecord::Base
   rescue => e
     lex(e, 'ntrace testing failed')
     nil
+  end
+
+  # Return the score adjusted with the fractional part, if it exists
+  def frac_score(board)
+    return nil if !['hs', 'sr'].include?(board) || !fraction
+    board == 'hs' ? score_hs - (1 - fraction) : score_sr + (1 - fraction)
   end
 
   # Calculate the interpolated fractional frame using Sim's tool
