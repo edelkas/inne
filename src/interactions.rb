@@ -424,10 +424,10 @@ def delete_score(event, yes: false)
   perror("Score ID not found in source message.") if !id
   score = MappackScore.find_by(id: id.to_i)
   perror("Mappack score with ID #{id} not found.") if !score
-  deleted = score.wipe
+  score.destroy
 
   msg = "#{score.player.name}'s score (ID #{id}) in #{score.highscoreable.name}"
-  msg = deleted ? "Deleted #{msg}." : "Failed to delete #{msg}."
+  msg = score.destroyed? ? "Deleted #{msg}." : "Failed to delete #{msg}."
   send_message(event, content: msg, append: true)
 end
 

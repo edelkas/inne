@@ -1337,6 +1337,8 @@ class MappackScore < ActiveRecord::Base
     p = Player.find(player_id)
     p.update_rank(h, 'hs') if !!rank_hs
     p.update_rank(h, 'sr') if !!rank_sr
+  rescue => e
+    lex(e, "Destroy cleanup for mappack score #{id} failed")
   end
 
   def compare_hashes

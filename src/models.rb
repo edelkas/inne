@@ -2212,7 +2212,7 @@ class Player < ActiveRecord::Base
   end
 
   # Update the rank field of the PB in a given mappack highscoreable, used
-  # mainly when a player's score changes (improves, is patched, is wiped)
+  # mainly when a player's score changes (is improved, patched or removed)
   def update_rank(h, board, frac: false)
     return if !h.is_mappack? || !['hs', 'sr'].include?(board)
     rankf = 'rank_' + board
@@ -2742,7 +2742,7 @@ end
 class Archive < ActiveRecord::Base
   belongs_to :player
   belongs_to :highscoreable, polymorphic: true
-  has_one :demo, foreign_key: :id
+  has_one :demo, foreign_key: :id, dependent: :destroy
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # Returns the leaderboards at a particular point in time
@@ -2823,7 +2823,7 @@ class Archive < ActiveRecord::Base
     query = Archive.where(metanet_id: HACKERS.keys)
     count = query.count.to_i
     ret['archive_del'] = "Deleted #{count} archives by hackers." unless count == 0
-    query.each(&:wipe)
+    query.each(&:destroy)
 
     # Flag archives by cheaters
     query = Archive.where(metanet_id: CHEATERS.keys, cheated: false)
@@ -2842,7 +2842,7 @@ class Archive < ActiveRecord::Base
     ["Level", "Episode", "Story"].each{ |mode|
       query = Archive.where(highscoreable_type: mode, replay_id: PATCH_IND_DEL[mode.downcase.to_sym])
       count += query.count.to_i
-      query.each(&:wipe)
+      query.each(&:destroy)
     }
     ret['archive_ind_del'] = "Deleted #{count} incorrect archives." unless count == 0
 
@@ -2864,7 +2864,7 @@ class Archive < ActiveRecord::Base
         score:              d.score
       ).order(date: :asc).limit(1000).offset(1)
       count += same.count
-      same.each(&:wipe)
+      same.each(&:destroy)
     }
     ret['duplicates'] = "Deleted #{count} duplicated archives." unless count == 0
 
@@ -2921,12 +2921,6 @@ class Archive < ActiveRecord::Base
 
   def format_score
     "%.3f" % self.score.to_f / 60.0
-  end
-
-  # Remove both the archive and its demo from the DB
-  def wipe
-    demo.destroy
-    self.destroy
   end
 end
 
