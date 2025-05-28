@@ -1181,32 +1181,36 @@ class MappackScore < ActiveRecord::Base
     # Find score
     if !id.nil? # If ID has been provided
       s = MappackScore.find_by(id: id)
-      silent ? return : perror("Mappack score of ID #{id} not found") if s.nil?
+      perror("Mappack score of ID #{id} not found") if !s
       highscoreable = s.highscoreable
       player = s.player
       scores = MappackScore.where(highscoreable: highscoreable, player: player)
-      silent ? return : perror("#{player.name} does not have a score in #{highscoreable.name}") if scores.empty?
     else # If highscoreable and player have been provided
-      silent ? return : perror("#{highscoreable.name} does not belong to a mappack") if !highscoreable.is_mappack?
-      scores = self.where(highscoreable: highscoreable, player: player)
-      silent ? return : perror("#{player.name} does not have a score in #{highscoreable.name}") if scores.empty?
+      perror("#{highscoreable.name} does not belong to a mappack") if !highscoreable.is_mappack?
+      scores = MappackScore.where(highscoreable: highscoreable, player: player)
+      perror("#{player.name} does not have a score in #{highscoreable.name}") if scores.empty?
       s = scores.where.not(rank_hs: nil).first
-      silent ? return : perror("#{player.name}'s leaderboard score in #{highscoreable.name} not found") if s.nil?
+      perror("#{player.name}'s leaderboard score in #{highscoreable.name} not found") if !s
+    end
+
+    # Compute score and frac with NSim if not specified
+    if !score
+      perror("Mappack score #{s.id} has no associated demo.") if !s.demo&.demo
+      res = NSim.run(highscoreable.dump_level, [s.demo.demo]){ |nsim| { score: nsim.score, frac: nsim.frac } }
+      perror("ntrace failed to compute correct score") if !res[:score] || !res[:frac]
+      s.update(fraction: res[:frac])
+      score = res[:score]
     end
 
     # Score integrity checks
-    if !score
-      score = s.ntrace_score
-      silent ? return : perror("ntrace failed to compute correct score") if !score
-    end
     new_score = (score * 60).round
     gold = MappackScore.gold_count(highscoreable.type, new_score, s.score_sr)
-    silent ? return : perror("The inferred gold count is incorrect") if gold.round < 0 || gold.round > highscoreable.gold
-    silent ? return : perror("That score is incompatible with the framecount") if !MappackScore.verify_gold(gold) && !highscoreable.type.include?('Story')
+    perror("The inferred gold count is incorrect") if gold.round < 0 || gold.round > highscoreable.gold
+    perror("That score is incompatible with the framecount") if !MappackScore.verify_gold(gold) && !highscoreable.type.include?('Story')
 
     # Change score and update rank
     old_score = s.score_hs.to_f / 60.0
-    silent ? return : perror("#{player.name}'s score (#{s.id}) in #{highscoreable.name} is already #{'%.3f' % old_score}") if s.score_hs == new_score
+    perror("#{player.name}'s score (#{s.id}) in #{highscoreable.name} is already #{'%.3f' % old_score}") if s.score_hs == new_score
     s.update(score_hs: new_score, gold: gold.round)
     player.update_rank(highscoreable, 'hs', frac: frac)
 
@@ -1214,6 +1218,8 @@ class MappackScore < ActiveRecord::Base
     succ("Patched #{player.name}'s score (#{s.id}) in #{highscoreable.name} from #{'%.3f' % old_score} to #{'%.3f' % score}")
   rescue => e
     lex(e, 'Failed to patch score')
+  rescue OutteError
+    raise unless silent
   end
 
   # Calculate gold count from hs and sr scores
@@ -1361,21 +1367,8 @@ class MappackScore < ActiveRecord::Base
     return hash_c == hash_ruby
   end
 
-  # Calculate the score using ntrace
-  def ntrace_score
-    return false if !highscoreable || !demo&.demo
-    nsim = NSim.new(highscoreable.dump_level, [demo.demo])
-    nsim.run
-    ret = nsim.score || false
-    nsim.destroy
-    ret
-  rescue => e
-    lex(e, 'ntrace testing failed')
-    nil
-  end
-
   # Return the score adjusted with the fractional part, if it exists
-  def frac_score(board)
+  def frac(board)
     return nil if !['hs', 'sr'].include?(board) || !fraction
     board == 'hs' ? score_hs - (1 - fraction) : score_sr + (1 - fraction)
   end
