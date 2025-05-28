@@ -691,7 +691,7 @@ module Highscoreable
   # TODO: We can optimize this further with a single query:
   #       SELECT MAX(`score`) - MIN(`score`) WHERE ... GROUP BY `highscoreable_id`
   # TODO: Add fractional spread. We can INNER JOIN with the archives table and do:
-  #       ROUND(MAX(`archives`.`score` - (1 - `fraction`)) - MIN(`archives`.`score` - (1 - `fraction`)), 3) AS frac
+  #       ROUND(MAX(`archives`.`score` - `fraction`) - MIN(`archives`.`score` - `fraction`), 3) AS frac
   def self.spreads(n, type, tabs, small = false, player_id = nil, full = false, mappack = nil, board = 'hs')
     # Sanitize parameters
     n      = n.clamp(0,19)
@@ -952,9 +952,9 @@ module Highscoreable
         fraction = is_vanilla? ? fractions[s[rfield]] : s['fraction']
         next s['question'] = true if !fraction || !fraction.between?(0, 1)
         if board == 'hs'
-          s[sfield] -= (1 - fraction) / 60.0
+          s[sfield] -= fraction / 60.0
         elsif board == 'sr'
-          s[sfield] += 1 - fraction
+          s[sfield] += fraction
         end
       }
       boards.sort_by!{ |s, _| [board == 'hs' ? -s[sfield] : s[sfield], s[rfield]] }
@@ -2199,10 +2199,10 @@ class Player < ActiveRecord::Base
     scores = h.scores.where(player: self)
     case board
     when 'hs'
-      score = !frac ? '`score_hs` DESC' : '`score_hs` - (1 - `fraction`) DESC'
+      score = !frac ? '`score_hs` DESC' : '`score_hs` - `fraction` DESC'
       scores.order(score, :date).first
     when 'sr'
-      score = !frac ? '`score_sr` ASC' : '`score_sr` + (1 - `fraction`) ASC'
+      score = !frac ? '`score_sr` ASC' : '`score_sr` + `fraction` ASC'
       scores.order(score, :date).first
     when 'gm'
       scores.order(:gold, :date).first

@@ -2028,7 +2028,7 @@ class NSim
   # Run fractional score taken from nclone's terminal output
   def frac(index = 0)
     return if !@valid_flags[index]
-    @stats['fractions'][index] rescue nil
+    1 - @stats['fractions'][index] rescue nil
   end
 
   # Run is finished for this ninja on this frame

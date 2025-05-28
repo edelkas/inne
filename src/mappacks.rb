@@ -473,7 +473,7 @@ module MappackHighscoreable
         board = scores.where("rank_#{m} IS NOT NULL")
         sfield = "`score_#{m}`"
         order = m == 'hs' ? 'DESC' : 'ASC'
-        sfield += " #{m == 'hs' ? '-' : '+'} (1 - `fraction`)" if frac
+        sfield += (m == 'hs' ? ' - ' : ' + ') + '`fraction`' if frac
         board = board.order("#{sfield} #{order}", '`date` ASC')
         #board = board.order("rank_#{m} ASC")
       when 'gm'       # Handle gold boards
@@ -514,8 +514,8 @@ module MappackHighscoreable
     # Score list
     res["scores"] = board.each_with_index.map{ |s, i|
       fraction = s['fraction'] if frac
-      s['score_hs'] -= 1 - fraction if fraction && m == 'hs'
-      s['score_sr'] += 1 - fraction if fraction && m == 'sr'
+      s['score_hs'] -= fraction if fraction && m == 'hs'
+      s['score_sr'] += fraction if fraction && m == 'sr'
       s['score_hs'] /= 60.0 if m == 'hs'
       {
         "score"     => (1000 * s["score_#{m}"]).round,
@@ -1369,7 +1369,7 @@ class MappackScore < ActiveRecord::Base
   # Return the score adjusted with the fractional part, if it exists
   def frac(board)
     return nil if !['hs', 'sr'].include?(board) || !fraction
-    board == 'hs' ? score_hs - (1 - fraction) : score_sr + (1 - fraction)
+    board == 'hs' ? score_hs - fraction : score_sr + fraction
   end
 
   # Calculate the interpolated fractional frame using Sim's tool
