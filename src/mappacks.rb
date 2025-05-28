@@ -571,55 +571,61 @@ module MappackHighscoreable
     sql = <<~SQL
       UPDATE `mappack_scores`
       SET `rank_#{board}` = CASE id #{ranks} END,
-          `tied_rank_#{board}` = CASE id #{ties} END,
+          `tied_rank_#{board}` = CASE id #{ties} END
       WHERE id IN (#{list.map(&:first).join(", ")})
     SQL
     sql(sql)
 
     true
   rescue => e
+    lex(e, "Failed to update ranks for #{self.class} #{id}")
     false
   end
 
-  # Delete all the scores that aren't keepies (were never a hs/sr PB),
-  # and which no longer have the max/min amount of gold collected.
+  # Delete non-essential scores from the db:
+  # - They were never a hs / sr PB.
+  # - They aren't G++ / G-- PBs.
   # If a player is not specified, do this operation for all players present
   # in this highscoreable.
   def delete_obsoletes(player = nil)
+    # Fetch players to clean
     if player
       ids = [player.id]
     else
       ids = scores.group(:player_id).pluck(:player_id)
     end
 
-    ids.each{ |pid|
-      score_list = scores.where(player_id: pid)
-      gold_max = score_list.maximum(:gold)
-      gold_min = score_list.minimum(:gold)
-      pb_hs = nil # Highscore PB
-      pb_sr = nil # Speedrun PB
+    # Delete non-essential scores for each player
+    deleted = ids.inject(0){ |sum, pid|
+    # Fetch player scores
+      query = scores.where(player_id: pid).order(:id)
+      list = query.pluck(:id, :score_hs, :score_sr, :gold)
+
+      # Find gold PBs
+      gold_max = list.max_by(&:last).last
+      gold_min = list.min_by(&:last).last
+
+      # Find scores which were once a hs / sr PB
+      pb_hs = -1
+      pb_sr = 2 ** 16
       keepies = []
-      score_list.order(:id).each{ |s|
-        keepie = false
-        if pb_hs.nil? || s.score_hs > pb_hs
-          pb_hs = s.score_hs
-          keepie = true
-        end
-        if pb_sr.nil? || s.score_sr < pb_sr
-          pb_sr = s.score_sr
-          keepie = true
-        end
-        keepies << s.id if keepie
+      list.each{ |id, score_hs, score_sr, gold|
+        pb_hs = score_hs if score_hs > pb_hs
+        pb_sr = score_sr if score_sr < pb_sr
+        keepies << id if score_hs > pb_hs || score_sr < pb_sr
       }
-      score_list.where(rank_hs: nil, rank_sr: nil)
-                .where("gold < #{gold_max} AND gold > #{gold_min}")
-                .where.not(id: keepies)
-                .each(&:destroy)
+
+      # Delete scores
+      query = query.where(rank_hs: nil, rank_sr: nil)
+                   .where("gold < #{gold_max} AND gold > #{gold_min}")
+                   .where.not(id: keepies.uniq)
+                   .each(&:destroy)
+      sum + query.size
     }
-    true
+    deleted
   rescue => e
     lex(e, 'Failed to delete obsolete scores.')
-    false
+    -1
   end
 
   # Verifies the integrity of a replay by generating the security hash and
