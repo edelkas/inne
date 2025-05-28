@@ -445,13 +445,12 @@ module MappackHighscoreable
   # are returned. Gold boards work differently.
   def leaderboard(
       m         = 'hs',  # Playing mode (hs, sr, gm)
-      score     = false, # Sort by score and date instead of rank (used for computing the rank)
       truncate:   20,    # How many scores to take (0 = all)
       pluck:      true,  # Pluck or keep Rails relation
       aliases:    false, # Use player names or display names
       metanet_id: nil,   # Player making the request if coming from CLE
       page:       0,     # Index of page to fetch
-      fraction:   false  # Include fractional field
+      frac:       false  # Include fractional field
     )
     m = 'hs' if !['hs', 'sr', 'gm'].include?(m)
     names = aliases ? 'IF(display_name IS NOT NULL, display_name, name)' : 'name'
@@ -469,14 +468,14 @@ module MappackHighscoreable
       case m
       when 'hs', 'sr' # Handle standard boards
         attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
-        attr_names << 'fraction' if fraction
-        attrs      << 'fraction' if fraction
+        attr_names << 'fraction' if frac
+        attrs      << 'fraction' if frac
         board = scores.where("rank_#{m} IS NOT NULL")
-        if score
-          board = board.order("score_#{m} #{m == 'hs' ? 'DESC' : 'ASC'}, date ASC")
-        else
-          board = board.order("rank_#{m} ASC")
-        end
+        sfield = "`score_#{m}`"
+        order = m == 'hs' ? 'DESC' : 'ASC'
+        sfield += " #{m == 'hs' ? '-' : '+'} (1 - `fraction`)" if frac
+        board = board.order("#{sfield} #{order}", '`date` ASC')
+        #board = board.order("rank_#{m} ASC")
       when 'gm'       # Handle gold boards
         attrs = [
           'MIN(subquery.id) AS id',
@@ -509,7 +508,7 @@ module MappackHighscoreable
   # Return scores in JSON format expected by N++
   def get_scores(qt = 0, metanet_id = nil, page: 0, frac: false)
     m = qt == 2 ? 'sr' : 'hs'
-    board = leaderboard(m, metanet_id: metanet_id, page: page, fraction: frac)
+    board = leaderboard(m, metanet_id: metanet_id, page: page, frac: frac)
     res = {}
 
     # Score list
@@ -550,7 +549,7 @@ module MappackHighscoreable
   def update_ranks(mode = 'hs', player_id = nil)
     return -1 if !['hs', 'sr'].include?(mode)
     rank = -1
-    board = leaderboard(mode, true, truncate: 0, pluck: false)
+    board = leaderboard(mode, truncate: 0, pluck: false)
     tied_score = board[0]["score_#{mode}"]
     tied_rank = 0
     board.each_with_index{ |s, i|

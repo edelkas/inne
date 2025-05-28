@@ -115,13 +115,13 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 - Possibility to compute fractional scores live on submission (all should use OPTIONAL parameter):
   * Add flag in constants to determine whether fractional scores should be computed live, and
     for what highscoreables / mappacks.
-  * Modify MappackHighscoreable.leaderboard so that scores are optionally sorted by fractional score.
+  x Modify MappackHighscoreable.leaderboard so that scores are optionally sorted by fractional score.
   x Modify MappackHighscoreable.get_scores so that fractional scores are sent.
   * Modify MappackHighscoreable.update_ranks to take fraction into account when computing tied_rank.
   * Modify MappackHighscoreable.delete_obsoletes to take fraction into account when listing keepies.
   * Modify MappackScore.add to consider fractional score for PBs to determine when to save the score.
     Also in this function, if fraction has been computed, persist it in the .create.
-  * Modify MappackScore.patch_score to also use fraction when finding "max" (current PB).
+  x Modify MappackScore.patch_score to also use fraction when finding "max" (current PB).
   x Ditto in MappackScore.wipe when finding current PB.
   x We should probably abstract this "find current PB" functionality. It's used in at least 3 places (those 2, and .add).
 

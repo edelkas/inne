@@ -909,7 +909,7 @@ module Highscoreable
   def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
-    boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, fraction: !is_vanilla?).each_with_index.select{ |_, r|
+    boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
     }.sort_by{ |_, r| full ? r : ranks.index(r) }
     sfield = !is_mappack? ? 'score' : "score_#{board}"
@@ -972,11 +972,11 @@ module Highscoreable
     score_padding += 3 if frac && board == 'hs'
 
     # Print scores
-    boards.map{ |s, r|
+    boards.map.with_index{ |s, r|
       Scorish.format(
         name_padding, score_padding, cools: cools, stars: stars, mode: board,
-        t_rank: r, mappack: is_mappack?, userlevel: is_userlevel?, h: s,
-        frac: frac, equal: equals.include?(s[rfield])
+        t_rank: r, mappack: is_mappack?, userlevel: is_userlevel?, h: s[0],
+        frac: frac, equal: equals.include?(s[0][rfield])
       )
     }
   end
