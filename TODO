@@ -117,13 +117,14 @@ Perhaps we should look into using acquire_connection (and release_connection) in
     for what highscoreables / mappacks.
   x Modify MappackHighscoreable.leaderboard so that scores are optionally sorted by fractional score.
   x Modify MappackHighscoreable.get_scores so that fractional scores are sent.
-  * Modify MappackHighscoreable.update_ranks to take fraction into account when computing tied_rank.
+  x Modify MappackHighscoreable.update_ranks to take fraction into account when computing tied_rank.
   * Modify MappackHighscoreable.delete_obsoletes to take fraction into account when listing keepies.
   * Modify MappackScore.add to consider fractional score for PBs to determine when to save the score.
     Also in this function, if fraction has been computed, persist it in the .create.
   x Modify MappackScore.patch_score to also use fraction when finding "max" (current PB).
   x Ditto in MappackScore.wipe when finding current PB.
   x We should probably abstract this "find current PB" functionality. It's used in at least 3 places (those 2, and .add).
+  * Ensure what happens when frac is NULL in all functions is handled gracefully.
 
 - Instead of returning the fraction field separately in the .leaderboard methods, perhaps we could integrate it so that they already return the scores adjusted by the fractional part. Careful with nulls though.
 - Add task to regularly compute missing fractional scores.

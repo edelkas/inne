@@ -545,25 +545,40 @@ module MappackHighscoreable
 
   # Updates the rank and tied_rank fields of a specific mode, necessary when
   # there's a new score (or when one is deleted later).
-  # Returns the rank of a specific player, if the player_id is passed
-  def update_ranks(mode = 'hs', player_id = nil)
-    return -1 if !['hs', 'sr'].include?(mode)
-    rank = -1
-    board = leaderboard(mode, truncate: 0, pluck: false)
-    tied_score = board[0]["score_#{mode}"]
+  def update_ranks(board, frac: false)
+    # Fetch leaderboard sorted by score and date
+    return false if !['hs', 'sr'].include?(board)
+    list = leaderboard(board, truncate: 0, pluck: false, frac: frac)
+    sfield = "`score_#{board}`"
+    sfield += (board == 'hs' ? ' - ' : ' + ') + '`fraction`' if frac
+    list = list.pluck(:id, sfield)
+    return true if list.empty?
+
+    # Compute ranks and tied ranks
+    tied_score = list[0][1]
     tied_rank = 0
-    board.each_with_index{ |s, i|
-      rank = i if !player_id.nil? && s.player_id == player_id
-      score = mode == 'hs' ? s.score_hs : s.score_sr
-      if mode == 'hs' ? score < tied_score : score > tied_score
+    list.each_with_index{ |s, i|
+      if board == 'hs' ? s[1] < tied_score : s[1] > tied_score
         tied_rank = i
-        tied_score = score
+        tied_score = s[1]
       end
-      s.update("rank_#{mode}".to_sym => i, "tied_rank_#{mode}".to_sym => tied_rank)
+      s << i << tied_rank
     }
-    rank
-  rescue
-    -1
+
+    # Update all rank and tied rank fields in a single SQL query
+    ranks = list.map{ |s| "WHEN #{s[0]} THEN #{s[2]}" }.join(' ')
+    ties = list.map{ |s| "WHEN #{s[0]} THEN #{s[3]}" }.join(' ')
+    sql = <<~SQL
+      UPDATE `mappack_scores`
+      SET `rank_#{board}` = CASE id #{ranks} END,
+          `tied_rank_#{board}` = CASE id #{ties} END,
+      WHERE id IN (#{list.map(&:first).join(", ")})
+    SQL
+    sql(sql)
+
+    true
+  rescue => e
+    false
   end
 
   # Delete all the scores that aren't keepies (were never a hs/sr PB),
