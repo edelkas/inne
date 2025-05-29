@@ -2026,6 +2026,8 @@ class NSim
   end
 
   # Run fractional score taken from nclone's terminal output
+  # Note: (1 - fraction) is how much of the frame has elapsed, thus it must be
+  # in [0, 1). If it were 1, collision wouldn't have happened on this frame.
   def frac(index = 0)
     return if !@valid_flags[index]
     1 - @stats['fractions'][index] rescue nil

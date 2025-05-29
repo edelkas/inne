@@ -513,9 +513,8 @@ module MappackHighscoreable
 
     # Score list
     res["scores"] = board.each_with_index.map{ |s, i|
-      fraction = s['fraction'] if frac
-      s['score_hs'] -= fraction if fraction && m == 'hs'
-      s['score_sr'] += fraction if fraction && m == 'sr'
+      s['score_hs'] -= s['fraction'] if frac && m == 'hs'
+      s['score_sr'] += s['fraction'] if frac && m == 'sr'
       s['score_hs'] /= 60.0 if m == 'hs'
       {
         "score"     => (1000 * s["score_#{m}"]).round,
@@ -587,7 +586,7 @@ module MappackHighscoreable
   # - They aren't G++ / G-- PBs.
   # If a player is not specified, do this operation for all players present
   # in this highscoreable.
-  def delete_obsoletes(player = nil)
+  def delete_obsoletes(player = nil, frac: false)
     # Fetch players to clean
     if player
       ids = [player.id]
@@ -599,7 +598,9 @@ module MappackHighscoreable
     deleted = ids.inject(0){ |sum, pid|
     # Fetch player scores
       query = scores.where(player_id: pid).order(:id)
-      list = query.pluck(:id, :score_hs, :score_sr, :gold)
+      score_hs = frac ? '`score_hs` - `fraction`' : :score_hs
+      score_sr = frac ? '`score_sr` + `fraction`' : :score_sr
+      list = query.pluck(:id, score_hs, score_sr, :gold)
 
       # Find gold PBs
       gold_max = list.max_by(&:last).last
@@ -610,9 +611,9 @@ module MappackHighscoreable
       pb_sr = 2 ** 16
       keepies = []
       list.each{ |id, score_hs, score_sr, gold|
+        keepies << id if score_hs > pb_hs || score_sr < pb_sr
         pb_hs = score_hs if score_hs > pb_hs
         pb_sr = score_sr if score_sr < pb_sr
-        keepies << id if score_hs > pb_hs || score_sr < pb_sr
       }
 
       # Delete scores
@@ -1389,7 +1390,7 @@ class MappackScore < ActiveRecord::Base
 
   # Return the score adjusted with the fractional part, if it exists
   def frac(board)
-    return nil if !['hs', 'sr'].include?(board) || !fraction
+    return nil if !['hs', 'sr'].include?(board) || fraction == 1
     board == 'hs' ? score_hs - fraction : score_sr + fraction
   end
 
@@ -1397,12 +1398,12 @@ class MappackScore < ActiveRecord::Base
   def seed_fraction
     # Map or demo not available, cannot compute
     if !highscoreable || !demo&.demo
-      update(fraction: -1)
+      update(fraction: 1)
       return :lost
     end
 
     frac = NSim.run(highscoreable.dump_level, [demo.demo]){ |nsim| nsim.frac }
-    update(fraction: frac || -1)
+    update(fraction: frac || 1)
     return frac ? :good : :bad
   rescue => e
     lex(e, 'Fraction computation failed')

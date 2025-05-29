@@ -48,7 +48,10 @@ namespace :db do
 
   desc "Execute new migrations"
   task :migrate => :configure_connection do
+    require_relative "#{DIR_SOURCE}/maps.rb"
     require_relative "#{DIR_SOURCE}/models.rb"
+    require_relative "#{DIR_SOURCE}/mappacks.rb"
+    require_relative "#{DIR_SOURCE}/userlevels.rb"
     version = ENV['MIGRATION_VERSION'] ? ENV['MIGRATION_VERSION'].to_i : ENV['VERSION'] ? ENV['VERSION'].to_i : nil
     if rails_at_most('5.2.0')
       ActiveRecord::Migrator.migrate(MIGRATIONS_DIR, version)

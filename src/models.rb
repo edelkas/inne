@@ -950,7 +950,7 @@ module Highscoreable
       cools = false
       boards.each{ |s, _|
         fraction = is_vanilla? ? fractions[s[rfield]] : s['fraction']
-        next s['question'] = true if !fraction || !fraction.between?(0, 1)
+        s['question'] = true if fraction == 1
         if board == 'hs'
           s[sfield] -= fraction / 60.0
         elsif board == 'sr'
@@ -997,7 +997,7 @@ module Highscoreable
 
     # Format boards
     header = '     ' + 'Highscore'.center(length_hs - 4) + '   ' + 'Speedrun'.center(length_sr - 4)
-    ret = [header, *board_hs.zip(board_sr).map{ |hs, sr| hs.sub(':', ' │') + ' │ ' + sr[4..-1] }]
+    [header, *board_hs.zip(board_sr).map{ |hs, sr| hs.sub(':', ' │') + ' │ ' + sr[4..-1] }]
   end
 
   # Format a leaderboard for printing
@@ -2899,12 +2899,12 @@ class Archive < ActiveRecord::Base
   def seed_fraction
     # Map or demo not available, cannot compute
     if !highscoreable || lost || !demo&.demo
-      update(fraction: -1) if lost
+      update(fraction: 1) if lost
       return :lost
     end
 
     frac = NSim.run(highscoreable.map.dump_level, [demo.demo]){ |nsim| nsim.frac }
-    update(fraction: frac || -1)
+    update(fraction: frac || 1)
     return frac ? :good : :bad
   rescue => e
     lex(e, 'Fraction computation failed')
