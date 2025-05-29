@@ -1229,11 +1229,14 @@ class MappackScore < ActiveRecord::Base
     perror("The inferred gold count is incorrect") if gold.round < 0 || gold.round > highscoreable.gold
     perror("That score is incompatible with the framecount") if !MappackScore.verify_gold(gold) && !highscoreable.type.include?('Story')
 
-    # Change score and update rank
+    # Change score and new computed gold count
     old_score = s.score_hs.to_f / 60.0
     perror("#{player.name}'s score (#{s.id}) in #{highscoreable.name} is already #{'%.3f' % old_score}") if s.score_hs == new_score
     s.update(score_hs: new_score, gold: gold.round)
+
+    # Update ranks and remove obsolete scores potentially derived from the change
     player.update_rank(highscoreable, 'hs', frac: frac)
+    highscoreable.delete_obsoletes(player)
 
     # Log
     succ("Patched #{player.name}'s score (#{s.id}) in #{highscoreable.name} from #{'%.3f' % old_score} to #{'%.3f' % score}")

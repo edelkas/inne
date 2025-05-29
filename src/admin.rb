@@ -1007,7 +1007,8 @@ end
 def seed_fractional_scores(event)
   # Fetch scores whose fraction needs to be computed
   list1 = Archive.where(fraction: 1, highscoreable_type: Level)
-  list2 = MappackScore.where(fraction: 1, highscoreable_type: MappackLevel)
+  list2 = MappackScore.joins('INNER JOIN `mappack_levels` ON `mappack_levels`.`id` = `highscoreable_id`')
+                      .where(fraction: 1, highscoreable_type: MappackLevel, mappack_levels: { mode: MODE_SOLO })
   count = list1.count + list2.count
   counts = { good: 0, bad: 0, lost: 0 }
   batch_size = 100
