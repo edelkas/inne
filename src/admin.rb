@@ -128,8 +128,9 @@ def send_mappack_ranks(event)
   h = parse_highscoreable(event, mappack: true)
   board = parse_board(flags[:b])
   perror("Only the hs/sr ranks can be updated") if !['hs', 'sr', nil].include?(board)
-  h.update_ranks('hs') if board == 'hs' || board.nil?
-  h.update_ranks('sr') if board == 'sr' || board.nil?
+  frac = h.mappack.fractional && h.is_level?
+  h.update_ranks('hs', frac: frac) if board == 'hs' || board.nil?
+  h.update_ranks('sr', frac: frac) if board == 'sr' || board.nil?
   board = "hs & sr" if board.nil?
   event << "Updated #{board} ranks for #{h.name}"
 rescue => e

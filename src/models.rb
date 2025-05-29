@@ -2221,7 +2221,7 @@ class Player < ActiveRecord::Base
     scores.update_all(rankf => nil, trankf => nil)
     pb = find_pb(h, board, frac: frac)
     pb.update(rankf => -1, trankf => -1) if pb
-    h.update_ranks(board)
+    h.update_ranks(board, frac: frac)
   end
 
   def scores_by_type_and_tabs(type, tabs, include = nil, mappack = nil, board = 'hs')

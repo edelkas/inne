@@ -119,7 +119,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
   x Modify MappackHighscoreable.get_scores so that fractional scores are sent.
   x Modify MappackHighscoreable.update_ranks to take fraction into account when computing tied_rank.
   x Modify MappackHighscoreable.delete_obsoletes to take fraction into account when listing keepies.
-  * Modify MappackScore.add to consider fractional score for PBs to determine when to save the score.
+  x Modify MappackScore.add to consider fractional score for PBs to determine when to save the score.
     Also in this function, if fraction has been computed, persist it in the .create.
   x Modify MappackScore.patch_score to also use fraction when finding "max" (current PB).
   x Ditto in MappackScore.wipe when finding current PB.

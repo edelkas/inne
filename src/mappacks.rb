@@ -929,6 +929,7 @@ class MappackScore < ActiveRecord::Base
       alert("Score submitted by #{name}: Mappack '#{code}' not found")
       return
     end
+    frac = mappack.fractional
 
     # Find highscoreable
     sid = query[id_field].to_i
@@ -949,6 +950,7 @@ class MappackScore < ActiveRecord::Base
       end if !res.nil?
       return res
     end
+    frac &&= h.is_level?
     action_inc('http_submit')
 
     # Parse demos and compute new scores
@@ -980,42 +982,48 @@ class MappackScore < ActiveRecord::Base
       return res.to_json if INTEGRITY_CHECKS
     end
 
+    # Verify score integrity by performing gold check
+    corrupt = type[:name] != 'Story' && !MappackScore.verify_gold(goldf)
+    corrupt ||= h.gold && gold > h.gold || gold < 0
+
     # Verify additional mappack-wise requirements
     return if !mappack.check_requirements(demos)
 
+    # Conmpute fractional score using NSim
+    if frac
+      res = NSim.run(h.dump_level, [Demo.encode(demos)]){ |nsim|
+        { score: nsim.score, frac: nsim.frac }
+      }
+      fraction = res[:frac] || 1
+
+      # If the sent hs score is corrupt, might as well see if we can patch it now
+      if corrupt && res[:score]
+        new_hs = (60.0 * res[:score]).round
+        new_goldf = MappackScore.gold_count('Level', new_hs, score_sr)
+        if MappackScore.verify_gold(new_goldf)
+          score_hs = new_hs
+          gold = new_goldf.round
+        end
+      end
+    end
+
     # Fetch old PB's
     scores = MappackScore.where(highscoreable: h, player: player)
-    score_hs_max = scores.maximum(:score_hs)
-    score_sr_min = scores.minimum(:score_sr)
+    score_hs_max = scores.maximum(frac ? '`score_hs` - `fraction`' : :score_hs)
+    score_sr_min = scores.minimum(frac ? '`score_sr` + `fraction`' : :score_sr)
     gold_max = scores.maximum(:gold)
     gold_min = scores.minimum(:gold)
 
     # Determine if new score is better and has to be saved
-    res['better'] = 0
-    hs = false
-    sr = false
-    gp = false
-    gm = false
-    if score_hs_max.nil? || score_hs > score_hs_max
-      scores.update_all(rank_hs: nil, tied_rank_hs: nil)
-      res['better'] = 1
-      hs = true
-    end
-    if score_sr_min.nil? || score_sr < score_sr_min
-      scores.update_all(rank_sr: nil, tied_rank_sr: nil)
-      sr = true
-    end
-    if gold_max.nil? || gold > gold_max
-      gp = true
-      gold_max = gold
-    end
-    if gold_min.nil? || gold < gold_min
-      gm = true
-      gold_min = gold
-    end
+    hs = !score_hs_max || (frac ? score_hs - fraction : score_hs) > score_hs_max
+    sr = !score_sr_min || (frac ? score_sr + fraction : score_sr) < score_sr_min
+    gp = !gold_max || gold > gold_max
+    gm = !gold_min || gold < gold_min
+    scores.update_all(rank_hs: nil, tied_rank_hs: nil) if hs
+    scores.update_all(rank_sr: nil, tied_rank_sr: nil) if sr
+    res['better'] = hs || sr ? 1 : 0
 
     # If score improved in either mode
-    id = -1
     if hs || sr || gp || gm
       # Create new score and demo
       score = MappackScore.create(
@@ -1031,13 +1039,13 @@ class MappackScore < ActiveRecord::Base
         metanet_id:    player.metanet_id,
         highscoreable: h,
         date:          Time.now.strftime(DATE_FORMAT_MYSQL),
-        gold:          gold
+        gold:          gold,
+        fraction:      frac ? fraction : 1
       )
-      id = score.id
-      MappackDemo.create(id: id, demo: Demo.encode(demos))
+      MappackDemo.create(id: score.id, demo: Demo.encode(demos))
 
       # Verify hs score integrity by checking calculated gold count
-      if (!MappackScore.verify_gold(goldf) && type[:name] != 'Story') || (h.gold && gold > h.gold) || (gold < 0)
+      if corrupt
         _thread do
           alert("Potentially incorrect hs score submitted by #{name} in #{h.name} (ID #{score.id})", discord: true)
         end
@@ -1045,7 +1053,7 @@ class MappackScore < ActiveRecord::Base
 
       # Warn if the score submitted failed the map data integrity checks, and save it
       # to analyze it later (and possibly polish the hash algorithm)
-      BadHash.find_or_create_by(id: id).update(
+      BadHash.find_or_create_by(id: score.id).update(
         npp_hash: query['ninja_check'],
         score: score_hs_orig
       ) if !legit
@@ -1061,22 +1069,16 @@ class MappackScore < ActiveRecord::Base
     end
 
     # Update ranks and completions if necessary
-    h.update_ranks('hs') if hs
-    h.update_ranks('sr') if sr
-    h.update(completions: h.scores.where.not(rank_hs: nil).count) if hs || sr
+    h.update_ranks('hs', frac: frac) if hs
+    h.update_ranks('sr', frac: frac) if sr
+    h.update(completions: h.scores.distinct.count(:player_id)) if hs || sr || gp || gm
 
     # Delete obsolete scores of the player in the highscoreable
-    h.delete_obsoletes(player)
+    h.delete_obsoletes(player, frac: frac)
 
     # Fetch player's best scores, to fill remaining response fields
-    best_hs = MappackScore.where(highscoreable: h, player: player)
-                          .where.not(rank_hs: nil)
-                          .order(rank_hs: :asc)
-                          .first
-    best_sr = MappackScore.where(highscoreable: h, player: player)
-                          .where.not(rank_sr: nil)
-                          .order(rank_sr: :asc)
-                          .first
+    best_hs = player.find_pb(h, 'hs', frac: frac)
+    best_sr = player.find_pb(h, 'sr', frac: frac)
     rank_hs = best_hs.rank_hs rescue nil
     rank_sr = best_sr.rank_sr rescue nil
     replay_id_hs = best_hs.id rescue nil
@@ -1119,11 +1121,12 @@ class MappackScore < ActiveRecord::Base
       alert("Getting scores: #{type[:name]} #{name} for mappack '#{code}' not found")
       return
     end
+    frac = mappack.fractional && h.is_level?
     name = h.name
 
     # Get scores
     action_inc('http_scores')
-    return h.get_scores(query['qt'].to_i, query['user_id'].to_i)
+    return h.get_scores(query['qt'].to_i, query['user_id'].to_i, frac: frac)
   rescue => e
     lex(e, "Failed to get scores for #{name} in mappack '#{code}'")
     return
@@ -1236,7 +1239,7 @@ class MappackScore < ActiveRecord::Base
 
     # Update ranks and remove obsolete scores potentially derived from the change
     player.update_rank(highscoreable, 'hs', frac: frac)
-    highscoreable.delete_obsoletes(player)
+    highscoreable.delete_obsoletes(player, frac: frac)
 
     # Log
     succ("Patched #{player.name}'s score (#{s.id}) in #{highscoreable.name} from #{'%.3f' % old_score} to #{'%.3f' % score}")
@@ -1365,8 +1368,9 @@ class MappackScore < ActiveRecord::Base
     return if !rank_hs && !rank_sr
     h = highscoreable_type.constantize.find(highscoreable_id)
     p = Player.find(player_id)
-    p.update_rank(h, 'hs') if !!rank_hs
-    p.update_rank(h, 'sr') if !!rank_sr
+    frac = h.mappack.fractional && h.is_level?
+    p.update_rank(h, 'hs', frac: frac) if !!rank_hs
+    p.update_rank(h, 'sr', frac: frac) if !!rank_sr
   rescue => e
     lex(e, "Destroy cleanup for mappack score #{id} failed")
   end
