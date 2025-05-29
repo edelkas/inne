@@ -1368,13 +1368,13 @@ module Episodish
     [name, lvls == 5, owner.name]
   end
 
-  def splits(rank = 0, board: 'hs')
+  def splits(rank = 0, board: 'hs', frac: false)
     scoref  = !is_mappack? ? 'score' : "score_#{board}"
     start   = is_mappack? && board == 'sr' ? 0 : 90.0
     factor  = is_mappack? && board == 'hs' ? 60.0 : 1
     offset  = !is_mappack? || board == 'hs' ? 90.0 : 0
-    scores  = levels.map{ |l| l.leaderboard(board)[rank][scoref] }
-    splits_from_scores(scores, start: start, factor: factor, offset: offset)
+    scores  = levels.map{ |l| l.leaderboard(board, frac: frac)[rank][scoref] }
+    splits_from_scores(scores, start: start, factor: factor, offset: offset, frac: frac)
   rescue => e
     lex(e, 'Failed to compute splits')
     nil
@@ -1568,13 +1568,13 @@ module Scorish
     Scorish.format(name_padding, score_padding, cools: cools, mode: mode, t_rank: t_rank, mappack: self.is_a?(MappackScore), h: h)
   end
 
-  def splits(board = 'hs', event: nil)
+  def splits(board = 'hs', event: nil, frac: false)
     return if !highscoreable.is_episode?
 
     # Speedrun splits do not require nsim
     if board == 'sr'
       scores = Demo.decode(demo.demo, true).map(&:size)
-      splits = splits_from_scores(scores, start: 0, factor: 1, offset: 0)
+      splits = splits_from_scores(scores, start: 0, factor: 1, offset: 0, frac: frac)
       return { valid:  [true] * 5, scores: scores, splits: splits }
     end
     return if !FEATURE_NTRACE

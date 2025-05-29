@@ -113,7 +113,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 \\ ------------------------ frac scores -----------------------
 
 - Possibility to compute fractional scores live on submission (all should use OPTIONAL parameter):
-  * Add flag in constants to determine whether fractional scores should be computed live, and
+  x Add flag in constants to determine whether fractional scores should be computed live, and
     for what highscoreables / mappacks.
   x Modify MappackHighscoreable.leaderboard so that scores are optionally sorted by fractional score.
   x Modify MappackHighscoreable.get_scores so that fractional scores are sent.
@@ -125,6 +125,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
   x Ditto in MappackScore.wipe when finding current PB.
   x We should probably abstract this "find current PB" functionality. It's used in at least 3 places (those 2, and .add).
   * Ensure what happens when frac is missing (i.e. 1) in all functions is handled gracefully.
+  * Test everything thoroughly
 
 - Instead of returning the fraction field separately in the .leaderboard methods, perhaps we could integrate it so that they already return the scores adjusted by the fractional part. Careful with nulls though.
 - Add task to regularly compute missing fractional scores.

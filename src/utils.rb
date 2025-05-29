@@ -1656,16 +1656,18 @@ def round_score(score)
 end
 
 # Calculate episode splits based on the 5 level scores
-def splits_from_scores(scores, start: 90.0, factor: 1, offset: 90.0)
+def splits_from_scores(scores, start: 90.0, factor: 1, offset: 90.0, frac: false)
   acc = start
-  scores.map{ |s| round_score(acc += (s / factor - offset)) }
+  splits = scores.map{ |s| acc += (s / factor - offset) }
+  splits = splits.map{ |s| round_score(s) } unless frac
+  splits
 end
 
 # TODO: Generalize with scale param to sr mode and userlevels/mappacks
-def scores_from_splits(splits, offset: 90.0)
-  splits.each_with_index.map{ |s, i|
-    round_score(i == 0 ? s : s - splits[i - 1] + offset)
-  }
+def scores_from_splits(splits, offset: 90.0, frac: false)
+  scores = splits.each_with_index.map{ |s, i| i == 0 ? s : s - splits[i - 1] + offset }
+  scores = scores.map{ |s| round_score(s) } unless frac
+  scores
 end
 
 # Convert N v1.4 coordinates to N++ coordinates. Since map sizes differ, we

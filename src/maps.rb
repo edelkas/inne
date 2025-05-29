@@ -2343,7 +2343,8 @@ module Map
       TmpMsg.update(event, "-# Updating scores and downloading replays...")
       h.update_scores(fast: true)
     end
-    leaderboard = h.leaderboard(board, pluck: false)
+    frac = parse_frac(msg)
+    leaderboard = h.leaderboard(board, pluck: false, frac: frac)
     ranks = parse_ranks(msg, leaderboard.size).take(MAX_TRACES)
     scores = ranks.map{ |r| leaderboard[r] }.compact
     perror("No scores found in this board.") if scores.empty?
@@ -2501,8 +2502,8 @@ module Map
   end
 
   # Tests whether ntrace is working with this level or not
-  def test_ntrace(ranks: [0], board: 'hs')
-    leaderboard = vanilla.leaderboard(board, pluck: false)
+  def test_ntrace(ranks: [0], board: 'hs', frac: false)
+    leaderboard = vanilla.leaderboard(board, pluck: false, frac: frac)
     scores = ranks.map{ |r| leaderboard[r] }.compact
     return :other if scores.empty?
     demos = scores.map{ |s| s.demo.demo }

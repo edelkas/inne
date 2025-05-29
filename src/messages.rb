@@ -1221,6 +1221,7 @@ def send_analysis(event)
   ranks = parse_ranks(msg, -1)
   board = parse_board(msg, 'hs')
   h     = parse_highscoreable(event, mappack: true)
+  frac  = parse_frac(msg)
 
   # Integrity checks
   perror("Episodes and columns can't be analyzed yet.") if h.is_episode? || h.is_story?
@@ -1229,7 +1230,7 @@ def send_analysis(event)
   perror("This analysis is disabled, figure it out yourself!") if h.is_protected?
 
   # Fetch runs
-  boards = h.leaderboard(board, truncate: 0, pluck: false).all
+  boards = h.leaderboard(board, truncate: 0, pluck: false, frac: frac).all
   analysis = ranks.map{ |rank| [rank, (boards[rank].archive rescue nil)] }.to_h
   missing = analysis.select{ |r, a| a.nil? }.keys
   event << "Warning: #{'Run'.pluralize(missing.size)} with rank #{missing.to_sentence} not found." if !missing.empty?
@@ -1388,6 +1389,7 @@ end
 #   1) The actual episode splits, using SimVYo's tool
 #   2) The IL splits
 # Also return the differences between both
+# TODO: Support fractional scores properly here (probably need to modify nclone)
 def send_splits(event)
   # Parse message parameters
   msg = parse_message(event)
@@ -1397,7 +1399,8 @@ def send_splits(event)
   board = parse_board(msg, 'hs')
   perror("Speedrun mode isn't available for Metanet levels yet.") if !mappack && board == 'sr'
   perror("Splits are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
-  scores = ep.leaderboard(board, pluck: false)
+  frac = false # parse_frac(msg)
+  scores = ep.leaderboard(board, pluck: false, frac: frac)
   rank = parse_range(msg)[0]
   ntrace = board == 'hs' # Requires ntrace
   score = scores[rank]
@@ -1405,7 +1408,7 @@ def send_splits(event)
   warnings = []
 
   # Episode splits and scores
-  res = score.splits(board, event: event)
+  res = score.splits(board, event: event, frac: frac)
   success = !!res
   if success
     valid, ep_splits, ep_scores = res[:valid], res[:splits], res[:scores]
@@ -1414,14 +1417,14 @@ def send_splits(event)
   end
 
   # Level splits and scores
-  lvl_splits = ep.splits(rank, board: board)
+  lvl_splits = ep.splits(rank, board: board, frac: frac)
   if lvl_splits.nil?
     event << "Sorry, that rank doesn't seem to exist for at least some of the levels."
     return
   end
   scoref = !mappack ? 'score' : "score_#{board}"
   factor = mappack && board == 'hs' ? 60.0 : 1
-  lvl_scores = ep.levels.map{ |l| l.leaderboard(board)[rank][scoref] / factor }
+  lvl_scores = ep.levels.map{ |l| l.leaderboard(board, frac: frac)[rank][scoref] / factor }
 
   # Calculate differences
   full = !ntrace || success
