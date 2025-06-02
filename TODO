@@ -1,3 +1,8 @@
+- Get more player info by querying "Around Mine" (and possible "Friends") leaderboards with other Steam IDs, and whenever we find new player IDs, record them in the db. Even better, we can use outte's score in SI-A-00 (and perhaps a few others): Progressively improve the score, fetch the "Around Mine" boards, rinse and repeat. Eventually when we get to the top we have a full map of the leaderboard and, most importantly, of most Metanet players.
+- We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
+  * Recover most scores using NSim.
+  * Recover level scores from episode replays, again using NSim.
+  * Get player names from Player table, UserlevelPlayer table, and UserlevelAuthor table.
 - For the logs we shouldn't be reading the whole file and painting all lines every time we browse a 10 line page.
 - Add ephemeral messages in useful places (e.g. a button that says "Screenshot" when querying scores or viceversa)
 - Ability to subscribe to certain things, like new maps by some user, or lost 0ths/top20s in vanilla/mappack/userlevels, or any new 0th, ...
@@ -129,6 +134,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 
 - Instead of returning the fraction field separately in the .leaderboard methods, perhaps we could integrate it so that they already return the scores adjusted by the fractional part. Careful with nulls though.
 - Add task to regularly compute missing fractional scores.
+- Consider frac scores in total score rankings and similar functions.
 - Add frac scores to nav scores function.
 - Add fractional spreads.
 - Return scores closest to making it to the next frame, or closest to the current frame (i.e. fractions closest to 0 and 1). Perhaps allow to limit this to framewars, where it's more interesting.
