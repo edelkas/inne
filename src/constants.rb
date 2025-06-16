@@ -434,6 +434,7 @@ UPDATE_USER_GLOB  = false # Thread to continuously (but slowly) download all use
 UPDATE_USER_HIST  = false # Thread to regularly update userlevel highscoring histories
 UPDATE_USER_TABS  = false # Thread to regularly update userlevel tabs (best, featured, top, hardest)
 UPDATE_USER_INFO  = false # Thread to regularly re-download userlevel data (favs, name changes, ...)
+COMPUTE_FRACTIONS = false # Thread to regularly monitor new scores and compute their fractions
 REPORT_METANET    = false # Thread to regularly post Metanet's highscoring report
 REPORT_USERLEVELS = false # Thread to regularly post userlevels' highscoring report
 

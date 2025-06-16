@@ -133,7 +133,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
   * Test everything thoroughly
 
 - Instead of returning the fraction field separately in the .leaderboard methods, perhaps we could integrate it so that they already return the scores adjusted by the fractional part. Careful with nulls though.
-- Add task to regularly compute missing fractional scores.
+x Add task to regularly compute missing fractional scores.
 - Consider frac scores in total score rankings and similar functions.
 - Add frac scores to nav scores function.
 - Add fractional spreads.

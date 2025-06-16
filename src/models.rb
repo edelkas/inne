@@ -2904,10 +2904,10 @@ class Archive < ActiveRecord::Base
     end
 
     frac = NSim.run(highscoreable.map.dump_level, [demo.demo]){ |nsim| nsim.frac }
-    update(fraction: frac || 1)
+    update(fraction: frac || 1, simulated: true)
     return frac ? :good : :bad
   rescue => e
-    lex(e, 'Fraction computation failed')
+    lex(e, "Fraction computation failed for archive #{id}")
   end
 
   # Returns the rank of the player at a particular point in time

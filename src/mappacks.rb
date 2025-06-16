@@ -1040,7 +1040,8 @@ class MappackScore < ActiveRecord::Base
         highscoreable: h,
         date:          Time.now.strftime(DATE_FORMAT_MYSQL),
         gold:          gold,
-        fraction:      frac ? fraction : 1
+        fraction:      frac ? fraction : 1,
+        simulated:     frac
       )
       MappackDemo.create(id: score.id, demo: Demo.encode(demos))
 
@@ -1222,7 +1223,7 @@ class MappackScore < ActiveRecord::Base
       perror("Mappack score #{s.id} has no associated demo.") if !s.demo&.demo
       res = NSim.run(highscoreable.dump_level, [s.demo.demo]){ |nsim| { score: nsim.score, frac: nsim.frac } }
       perror("ntrace failed to compute correct score") if !res[:score] || !res[:frac]
-      s.update(fraction: res[:frac])
+      s.update(fraction: res[:frac], simulated: true)
       score = res[:score]
     end
 
@@ -1410,10 +1411,10 @@ class MappackScore < ActiveRecord::Base
     end
 
     frac = NSim.run(highscoreable.dump_level, [demo.demo]){ |nsim| nsim.frac }
-    update(fraction: frac || 1)
+    update(fraction: frac || 1, simulated: true)
     return frac ? :good : :bad
   rescue => e
-    lex(e, 'Fraction computation failed')
+    lex(e, "Fraction computation failed for mappack score #{id}")
   end
 end
 

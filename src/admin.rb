@@ -1005,11 +1005,11 @@ def test_report(event)
 end
 
 # Computes the interpolated scores using NSim and seeds them in the archives table
-def seed_fractional_scores(event)
+def seed_fractional_scores(event, log = true)
   # Fetch scores whose fraction needs to be computed
-  list1 = Archive.where(fraction: 1, highscoreable_type: Level)
+  list1 = Archive.where(lost: false, simulated: false, highscoreable_type: Level)
   list2 = MappackScore.joins('INNER JOIN `mappack_levels` ON `mappack_levels`.`id` = `highscoreable_id`')
-                      .where(fraction: 1, highscoreable_type: MappackLevel, mappack_levels: { mode: MODE_SOLO })
+                      .where(simulated: false, highscoreable_type: MappackLevel, mappack_levels: { mode: MODE_SOLO })
   count = list1.count + list2.count
   counts = { good: 0, bad: 0, lost: 0 }
   batch_size = 100
@@ -1032,17 +1032,17 @@ def seed_fractional_scores(event)
   # Seed vanilla fractions
   list1.find_each(batch_size: batch_size).with_index{ |score, i|
     counts[score.seed_fraction] += 1
-    logger.call
+    logger.call if log
   }
 
   # Seed mappack fractions
   list2.find_each(batch_size: batch_size).with_index{ |score, i|
     counts[score.seed_fraction] += 1
-    logger.call
+    logger.call if log
   }
 
-  puts
-  succ("Finished seeding fractional scores")
+  puts if log
+  succ("Finished seeding fractional scores") if log
 end
 
 

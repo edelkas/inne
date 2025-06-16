@@ -12,7 +12,7 @@
 # but this is hardly ever relevant.
 class ChangeFractionDefault < ActiveRecord::Migration[5.1]
   def change
-    [Archive, MappackScore].each do |klass|
+    [Archive, MappackScore, UserlevelScore].each do |klass|
       # Change current valid values from "remaining time" to "elapsed time"
       klass.where('`fraction` >= 0 AND `fraction` <= 1').update_all('`fraction` = 1 - `fraction`')
 
@@ -24,7 +24,8 @@ class ChangeFractionDefault < ActiveRecord::Migration[5.1]
     end
 
     # Change column defaults
-    change_column_default :archives,       :fraction, from: nil, to: 1
-    change_column_default :mappack_scores, :fraction, from: nil, to: 1
+    change_column_default :archives,         :fraction, from: nil, to: 1
+    change_column_default :mappack_scores,   :fraction, from: nil, to: 1
+    change_column_default :userlevel_scores, :fraction, from: nil, to: 1
   end
 end
