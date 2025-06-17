@@ -1010,7 +1010,9 @@ def seed_fractional_scores(event, log = true)
   list1 = Archive.where(lost: false, simulated: false, highscoreable_type: Level)
   list2 = MappackScore.joins('INNER JOIN `mappack_levels` ON `mappack_levels`.`id` = `highscoreable_id`')
                       .where(simulated: false, highscoreable_type: MappackLevel, mappack_levels: { mode: MODE_SOLO })
-  count = list1.count + list2.count
+  count1 = list1.count
+  count2 = list2.count
+  count = count1 + count2
   counts = { good: 0, bad: 0, lost: 0 }
   batch_size = 100
   start_time = Time.now
@@ -1033,13 +1035,13 @@ def seed_fractional_scores(event, log = true)
   list1.find_each(batch_size: batch_size).with_index{ |score, i|
     counts[score.seed_fraction] += 1
     logger.call if log
-  }
+  } unless count1 == 0
 
   # Seed mappack fractions
   list2.find_each(batch_size: batch_size).with_index{ |score, i|
     counts[score.seed_fraction] += 1
     logger.call if log
-  }
+  } unless count2 == 0
 
   puts if log
   succ("Finished seeding fractional scores") if log

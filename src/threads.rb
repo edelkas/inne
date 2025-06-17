@@ -608,8 +608,6 @@ end
 # and mappack levels in order to simulate them and precompute their fraction
 def compute_new_fractions
   seed_fractional_scores(nil, false)
-ensure
-  sleep(5)
 end
 
 ############ LOTD FUNCTIONS ############
@@ -790,7 +788,7 @@ def start_general_tasks
   Scheduler.add("Monitor database", freq: SQL_DELAY, force: false, log: false) { monitor_db } if SQL_MONITOR
 
   # Monitor new scores and simulate them
-  Scheduler.add("Compute fractions", force: false, log: false) { update_all_userlevels_chunk } if DO_EVERYTHING || UPDATE_USER_GLOB
+  Scheduler.add("Compute fractions", freq: FRACTION_FREQUENCY, force: false, log: false) { compute_new_fractions } if DO_EVERYTHING || COMPUTE_FRACTIONS
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
   $threads << Thread.new { NPPServer::on } if SOCKET && !DO_NOTHING
@@ -820,7 +818,7 @@ def start_metanet_tasks
   Scheduler.add("Userlevel tabs", freq: USERLEVEL_TAB_FREQUENCY, time: 'userlevel_tab') { update_userlevel_tabs } if DO_EVERYTHING || UPDATE_USER_TABS
 
   # Gradually update all userlevel scores (every 5 secs)
-  Scheduler.add("Userlevel chunk", force: false, log: false) { compute_new_fractions } if DO_EVERYTHING || COMPUTE_FRACTIONS
+  Scheduler.add("Userlevel chunk", force: false, log: false) { update_all_userlevels_chunk } if DO_EVERYTHING || UPDATE_USER_GLOB
 
   # Gradually update all userlevel data (every hour)
   Scheduler.add("Userlevel data", freq: USERLEVEL_DATA_RATE, force: false, log: false) { update_userlevel_data } if DO_EVERYTHING || UPDATE_USER_INFO

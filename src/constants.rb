@@ -459,6 +459,7 @@ USERLEVEL_HISTORY_FREQUENCY =       24 * 60 * 60
 USERLEVEL_REPORT_FREQUENCY  =       24 * 60 * 60
 USERLEVEL_TAB_FREQUENCY     =       24 * 60 * 60
 USERLEVEL_DOWNLOAD_CHUNK    =                100
+FRACTION_FREQUENCY          =                 60
 
 # <---------------------------------------------------------------------------->
 # <------                       TWITCH VARIABLES                         ------>

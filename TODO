@@ -1,3 +1,4 @@
+- Speedrun.com support in #speedrunning via their API
 - Get more player info by querying "Around Mine" (and possible "Friends") leaderboards with other Steam IDs, and whenever we find new player IDs, record them in the db. Even better, we can use outte's score in SI-A-00 (and perhaps a few others): Progressively improve the score, fetch the "Around Mine" boards, rinse and repeat. Eventually when we get to the top we have a full map of the leaderboard and, most importantly, of most Metanet players.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
   * Recover most scores using NSim.
