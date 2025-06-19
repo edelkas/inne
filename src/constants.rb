@@ -185,6 +185,7 @@ DIR_FONTS       = "#{DIR_UTILS}/fonts"
 PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
 
 FILENAME_MAPPACK_AUTHORS = 'AUTHORS'
+FILENAME_MAPPACK_SCORES  = 'SCORES'
 FILENAME_LIMIT = 128 # Never surpass 259 (Windows' limit, google MAX_PATH)
 
 # <---------------------------------------------------------------------------->
@@ -500,11 +501,12 @@ QUERY_LIMIT_HARD = 500  # Maximum number of queried userlevels per page
 
 # CLE-specific variables
 PWD              = ENV['NPP_HASH']
-CLE_FORWARD      = true            # Forward unrelated requests to Metanet
-INTEGRITY_CHECKS = true            # Verity replay security hashes
-WARN_INTEGRITY   = true            # Warn when players submit scores with invalid hashes
-WARN_VERSION     = false           # Warning for score submissions with old map versions
-LOCAL_LOGIN      = true            # Try to login user ourselves if Metanet fails
+CLE_FORWARD      = true             # Forward unrelated requests to Metanet
+INTEGRITY_CHECKS = true             # Verity replay security hashes
+WARN_INTEGRITY   = true             # Warn when players submit scores with invalid hashes
+WARN_VERSION     = false            # Warning for score submissions with old map versions
+LOCAL_LOGIN      = true             # Try to login user ourselves if Metanet fails
+DEV_PLAYER_NAME  = '-- DEV TIME --' # Player name to show dev scores
 
 # API-specific variables
 API_ON      = true

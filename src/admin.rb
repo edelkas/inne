@@ -179,6 +179,26 @@ rescue => e
   lex(e, "Error updating mappack completions.", event: event)
 end
 
+def send_mappack_authors(event)
+  flags = parse_flags(event)
+  mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
+  perror("Mappack not found") if !mappack
+  mappack.read_authors
+  event << "Read #{mappack.code.upcase} mappack authors."
+rescue => e
+  lex(e, "Error reading mappack authors.", event: event)
+end
+
+def send_mappack_scores(event)
+  flags = parse_flags(event)
+  mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
+  perror("Mappack not found") if !mappack
+  mappack.read_scores
+  event << "Read #{mappack.code.upcase} mappack scores."
+rescue => e
+  lex(e, "Error reading mappack scores.", event: event)
+end
+
 def send_highscore_plot(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
@@ -1079,11 +1099,13 @@ def respond_special(event)
   return send_shutdown(event, true)      if cmd == 'kill'
   return send_logs(event)                if cmd == 'log'
   return send_log_config(event)          if cmd == 'logconf'
+  return send_mappack_authors(event)     if cmd == 'mappack_authors'
   return send_mappack_completions(event) if cmd == 'mappack_completions'
   return send_mappack_digest(event)      if cmd == 'mappack_digest'
   return send_mappack_info(event)        if cmd == 'mappack_info'
   return send_mappack_patch(event)       if cmd == 'mappack_patch'
   return send_mappack_ranks(event)       if cmd == 'mappack_ranks'
+  return send_mappack_scores(event)      if cmd == 'mappack_scores'
   return send_mappack_seed(event)        if cmd == 'mappack_seed'
   return send_mappack_update(event)      if cmd == 'mappack_update'
   return send_meminfo(event)             if cmd == 'meminfo'

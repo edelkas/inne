@@ -349,6 +349,43 @@ class Mappack < ActiveRecord::Base
     lex(e, "Failed to read authors file for mappack #{verbatim(code)}")
   end
 
+  # Read the score list and write to the db
+  def read_scores(v: nil)
+    v = version || 1 if !v
+
+    # Integrity checks
+    dir = folder(v: v)
+    if !dir
+      err("Directory for mappack #{verbatim(code)} not found")
+      return
+    end
+    path = File.join(dir, FILENAME_MAPPACK_SCORES)
+    if !File.file?(path)
+      err("Scores file for mappack #{verbatim(code)} not found")
+      return
+    end
+
+    # Parse scores file
+    file = File.binread(path)
+    scores = file.split("\n").map{ |l| round_score(l.strip.to_f) }
+    maps = levels.order(:id)
+    if maps.size != scores.size
+      err("Scores file for mappack #{verbatim(code)} has incorrect length (#{scores.size} scores vs #{maps.size} maps)")
+      return
+    end
+
+    # Write scores (framecount assumes no gold)
+    count = maps.size
+    maps.each_with_index{ |m, i|
+      dbg("Adding score #{i + 1} / #{count}...", pad: true, newline: false)
+      framecount = 90 * 60 - (scores[i] * 60.0).round + 1
+      m.update(dev_hs: scores[i], dev_sr: framecount)
+    }
+    Log.clear
+  rescue => e
+    lex(e, "Failed to read scores file for mappack #{verbatim(code)}")
+  end
+
   # Check additional requirements for scores submitted to this mappack
   # For instance, w's Duality coop pack requires that the replays for both
   # players be identical
@@ -512,11 +549,25 @@ module MappackHighscoreable
     board = leaderboard(m, metanet_id: metanet_id, page: page, frac: frac)
     res = {}
 
-    # Score list
-    res["scores"] = board.each_with_index.map{ |s, i|
+    # Adjust scores
+    board.each_with_index.map{ |s, i|
       s['score_hs'] -= s['fraction'] if frac && m == 'hs'
       s['score_sr'] += s['fraction'] if frac && m == 'sr'
       s['score_hs'] /= 60.0 if m == 'hs'
+    }
+
+    # Inject DEV score
+    dev_score = m == 'hs' ? dev_hs : dev_sr
+    if dev_score
+      index = board.index{ |s|
+        m == 'hs' ? s['score_hs'] <= dev_score : s['score_sr'] >= dev_score
+      }
+      score = { "score_#{m}" => dev_score, 'name' => DEV_PLAYER_NAME, 'id' => -1, 'metanet_id' => -1 }
+      board.insert(index || -1, score)
+    end
+
+    # Format response
+    res["scores"] = board.each_with_index.map{ |s, i|
       {
         "score"     => (1000 * s["score_#{m}"]).round,
         "rank"      => 20 * page + i,

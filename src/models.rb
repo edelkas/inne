@@ -906,7 +906,7 @@ module Highscoreable
   end
 
   # Format a single leaderboard for printing
-  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
+  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?).each_with_index.select{ |_, r|
@@ -964,6 +964,25 @@ module Highscoreable
                      .flatten
     end
 
+    # Insert DEV scores if required
+    if dev && is_mappack? && (dev_score = board == 'hs' ? dev_hs : dev_sr)
+      index = boards.index{ |s, _|
+        board == 'hs' ? s[sfield] <= dev_score : s[sfield] >= dev_score
+      }
+      score = {
+        sfield       => round_score(dev_score),
+        'name'       => DEV_PLAYER_NAME,
+        'metanet_id' => -1,
+        rfield       => -1,
+        'cool'       => false,
+        'star'       => false,
+        'fraction'   => 0,
+        'cheated'    => false,
+        'dev'        => true
+      }
+      boards.insert(index || -1, [score, -1])
+    end
+
     # Calculate padding
     float = !is_mappack? || board == 'hs' || frac
     name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
@@ -972,11 +991,13 @@ module Highscoreable
     score_padding += 3 if frac && board == 'hs'
 
     # Print scores
-    boards.map.with_index{ |s, r|
+    rank = -1
+    boards.map{ |s, r|
+      rank += 1 if !s['cheated'] && !s['dev']
       Scorish.format(
         name_padding, score_padding, cools: cools, stars: stars, mode: board,
-        t_rank: r, mappack: is_mappack?, userlevel: is_userlevel?, h: s[0],
-        frac: frac, equal: equals.include?(s[0][rfield])
+        t_rank: rank, mappack: is_mappack?, userlevel: is_userlevel?, h: s,
+        frac: frac, equal: equals.include?(s[rfield])
       )
     }
   end
@@ -1541,11 +1562,12 @@ module Scorish
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
     cheat = !!h['cheated']
+    dev = !!h['dev']
     prec = frac && mode == 'hs'
 
     # Compose each element
     t_star   = userlevel || mappack || !stars ? '' : (h['star'] ? '*' : ' ')
-    t_rank   = cheat ? 'xx' : t_rank || h['rank'] || '--'
+    t_rank   = cheat ? 'xx' : dev ? '++' : t_rank || h['rank'] || '--'
     t_rank   = Highscoreable.format_rank(t_rank)
     t_player = format_string(h['name'], name_padding)
     f_score  = !mappack ? 'score' : "score_#{mode}"
@@ -1558,6 +1580,7 @@ module Scorish
     # Put everything together
     line = "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}#{t_eql}#{t_quest}"
     line = "#{ANSI.red}#{line}#{ANSI.clear}" if cheat
+    line = "#{ANSI.blue}#{line}#{ANSI.clear}" if dev
     line
   end
 
