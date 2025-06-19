@@ -1363,6 +1363,8 @@ class MappackScore < ActiveRecord::Base
   def self.update_completions(mappack: nil)
     bench(:start) if BENCHMARK
     [MappackLevel, MappackEpisode, MappackStory].each{ |type|
+      type.where(mappack ? "mappack_id = #{mappack.id}" : '')
+          .update_all(completions: 0)
       self.where(highscoreable_type: type).where.not(rank_hs: nil)
           .where(mappack ? "mappack_id = #{mappack.id}" : '')
           .group(:highscoreable_id)
@@ -1373,8 +1375,8 @@ class MappackScore < ActiveRecord::Base
           .each{ |count, ids|
             type.where(id: ids).update_all(completions: count)
           }
+      bench(:step) if BENCHMARK
     }
-    bench(:step) if BENCHMARK
   end
 
   def archive

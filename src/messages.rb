@@ -437,7 +437,7 @@ def send_scores(event, map = nil, ret = false)
   board   = 'hs' if !mappack && board == 'dual'
   full    = parse_full(msg)
   cheated = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
-  frac    = parse_frac(msg) && h.is_level? && ['hs', 'sr'].include?(board)
+  frac    = (parse_frac(msg) || mappack && h.mappack.fractional) && h.is_level? && ['hs', 'sr'].include?(board)
 
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
   res     = ""
