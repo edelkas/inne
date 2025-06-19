@@ -379,12 +379,13 @@ class Mappack < ActiveRecord::Base
   end
 
   # Set some of the mappack's info on command, which isn't parsed from the files
-  def set_info(name: nil, author: nil, date: nil, channel: nil, version: nil, enabled: false, public: false)
-    self.update(name:    name)    if name
-    self.update(authors: author)  if author
-    self.update(version: version) if version
-    self.update(enabled: enabled) if !enabled.nil?
-    self.update(public:  public)  if !public.nil?
+  def set_info(name: nil, author: nil, date: nil, channel: nil, version: nil, enabled: false, public: false, fractional: false)
+    self.update(name:       name)        if name
+    self.update(authors:    author)      if author
+    self.update(version:    version)     if version
+    self.update(enabled:    enabled)     if !enabled.nil?
+    self.update(public:     public)      if !public.nil?
+    self.update(fractional: fractional)  if !fractional.nil?
     self.update(date:    Time.strptime(date, '%Y/%m/%d').strftime(DATE_FORMAT_MYSQL)) if date
     channel.each{ |c|
       if is_num(c)
@@ -991,20 +992,23 @@ class MappackScore < ActiveRecord::Base
 
     # Conmpute fractional score using NSim
     if frac
-      res = NSim.run(h.dump_level, [Demo.encode(demos)]){ |nsim|
+      sim_res = NSim.run(h.dump_level, [Demo.encode(demos)]){ |nsim|
         { score: nsim.score, frac: nsim.frac }
       }
-      fraction = res[:frac] || 1
+      fraction = sim_res[:frac] || 1
 
       # If the sent hs score is corrupt, might as well see if we can patch it now
-      if corrupt && res[:score]
-        new_hs = (60.0 * res[:score]).round
+      if corrupt && sim_res[:score]
+        new_hs = (60.0 * sim_res[:score]).round
         new_goldf = MappackScore.gold_count('Level', new_hs, score_sr)
         if MappackScore.verify_gold(new_goldf)
           score_hs = new_hs
           gold = new_goldf.round
         end
       end
+
+      # Modify response
+      res['score'] = (1000.0 * (score_hs - fraction) / 60.0).round
     end
 
     # Fetch old PB's
@@ -1084,7 +1088,7 @@ class MappackScore < ActiveRecord::Base
     rank_sr = best_sr.rank_sr rescue nil
     replay_id_hs = best_hs.id rescue nil
     replay_id_sr = best_sr.id rescue nil
-    res['rank'] = rank_hs || rank_sr || -1
+    res['rank'] = frac ? (1000000.0 * fraction / 60.0).round : rank_hs || rank_sr || -1
     res['replay_id'] = replay_id_hs || replay_id_sr || -1
 
     # Finish
