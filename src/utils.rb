@@ -102,7 +102,7 @@ module Log extend self
   @modes_file = LEVELS[LOG_LEVEL_FILE] || LEVELS[:quiet]
 
   def fmt(str, mode)
-    "#{MODES[mode][:fmt]}#{str}#{RESET}"
+    "#{MODES[mode][:fmt]}#{str}#{RESET}".force_encoding('UTF-8')
   end
 
   def bold(str)
