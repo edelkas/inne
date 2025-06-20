@@ -567,13 +567,20 @@ module MappackHighscoreable
     end
 
     # Format response
+    # Note:
+    #   In the replay ID field we use the lower 22 bits to store the actual ID, and
+    #   the higher 10 bits to encode the rank. That way scores with lower rank will
+    #   also have a lower replay ID, so when the game re-sorts ties by replay ID in
+    #   the Global  boards, they will actually be sorted properly  according to the
+    #   full precision of the frac scores, as opposed to just the milliseconds.  We
+    #   can later recover the correct ID in get_replay with basic bit manipulation.
     res["scores"] = board.each_with_index.map{ |s, i|
       {
         "score"     => (1000 * s["score_#{m}"]).round,
         "rank"      => 20 * page + i,
         "user_id"   => s['metanet_id'].to_i,
         "user_name" => s['name'].to_s.remove("\\"),
-        "replay_id" => s['id'].to_i
+        "replay_id" => pack_replay_id(i, s['id'].to_i)
       }
     }
 
@@ -1042,6 +1049,7 @@ class MappackScore < ActiveRecord::Base
     return if !mappack.check_requirements(demos)
 
     # Conmpute fractional score using NSim
+    patched = false
     if frac
       sim_res = NSim.run(h.dump_level, [Demo.encode(demos)]){ |nsim|
         { score: nsim.score, frac: nsim.frac }
@@ -1055,6 +1063,7 @@ class MappackScore < ActiveRecord::Base
         if MappackScore.verify_gold(new_goldf)
           score_hs = new_hs
           gold = new_goldf.round
+          patched = true
         end
       end
 
@@ -1103,7 +1112,7 @@ class MappackScore < ActiveRecord::Base
       # Verify hs score integrity by checking calculated gold count
       if corrupt
         _thread do
-          alert("Potentially incorrect hs score submitted by #{name} in #{h.name} (ID #{score.id})", discord: true)
+          alert("#{patched ? 'Auto-patched p' : 'P'}otentially incorrect hs score submitted by #{name} in #{h.name} (ID #{score.id})", discord: true)
         end
       end
 
@@ -1195,6 +1204,7 @@ class MappackScore < ActiveRecord::Base
       alert("Getting replay: Replay ID not provided")
       return
     end
+    rank, replay_id = unpack_replay_id(query['replay_id'].to_i)
 
     # Parse type (no type = level)
     type = TYPES.find{ |_, h| query['qt'].to_i == h[:qt] }[1] rescue nil
@@ -1215,22 +1225,22 @@ class MappackScore < ActiveRecord::Base
     name = !player.nil? ? player.name : "ID:#{query['user_id']}"
 
     # Find score and perform integrity checks
-    score = MappackScore.find_by(id: query['replay_id'].to_i)
+    score = MappackScore.find_by(id: replay_id)
     if score.nil?
       return forward(req) if CLE_FORWARD
-      alert("Getting replay: Score with ID #{query['replay_id']} not found")
+      alert("Getting replay: Score with ID #{replay_id} not found")
       return
     end
 
     if score.highscoreable.mappack.code != code
       return forward(req) if CLE_FORWARD
-      alert("Getting replay: Score with ID #{query['replay_id']} is not from mappack '#{code}'")
+      alert("Getting replay: Score with ID #{replay_id} is not from mappack '#{code}'")
       return
     end
 
     if score.highscoreable.basetype != type[:name]
       return forward(req) if CLE_FORWARD
-      alert("Getting replay: Score with ID #{query['replay_id']} is not from a #{type[:name].downcase}")
+      alert("Getting replay: Score with ID #{replay_id} is not from a #{type[:name].downcase}")
       return
     end
 
@@ -1240,16 +1250,16 @@ class MappackScore < ActiveRecord::Base
     # Find replay
     demo = score.demo
     if demo.nil? || demo.demo.nil?
-      alert("Getting replay: Replay with ID #{query['replay_id']} not found")
+      alert("Getting replay: Replay with ID #{replay_id} not found")
       return
     end
 
     # Return replay
-    dbg("#{name} requested replay #{query['replay_id']}")
+    dbg("#{name} requested replay #{replay_id} (#{query['replay_id'].to_i})")
     action_inc('http_replay')
-    score.dump_replay
+    score.dump_replay(rank)
   rescue => e
-    lex(e, "Failed to get replay with ID #{query['replay_id']} from mappack '#{code}'")
+    lex(e, "Failed to get replay with ID #{replay_id} from mappack '#{code}'")
     return
   end
 
@@ -1401,12 +1411,13 @@ class MappackScore < ActiveRecord::Base
   end
 
   # Dumps replay data (header + compressed demo data) in format used by N++
-  def dump_replay
+  def dump_replay(rank = 0)
     type = TYPES[highscoreable.basetype]
+    replay_id = pack_replay_id(rank, id)
 
     # Build header
     replay = [type[:rt]].pack('L<')               # Replay type (0 lvl/sty, 1 ep)
-    replay << [id].pack('L<')                     # Replay ID
+    replay << [replay_id].pack('L<')              # Replay ID
     replay << [highscoreable.inner_id].pack('L<') # Level ID
     replay << [player.metanet_id].pack('L<')      # User ID
 

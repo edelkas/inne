@@ -507,6 +507,7 @@ WARN_INTEGRITY   = true             # Warn when players submit scores with inval
 WARN_VERSION     = false            # Warning for score submissions with old map versions
 LOCAL_LOGIN      = true             # Try to login user ourselves if Metanet fails
 DEV_PLAYER_NAME  = '-- DEV TIME --' # Player name to show dev scores
+REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to understand this
 
 # API-specific variables
 API_ON      = true

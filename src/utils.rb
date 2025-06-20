@@ -2132,6 +2132,19 @@ class NSim
   end
 end
 
+# Pack the rank and replay ID of a mappack score into a single (signed) integer
+# that is sent to the game. We use the lower 24 bits for the replay ID, which
+# allows IDs up to ~16M, and the higher 7 bits for the rank, which allows ranks
+# up to 128, although we only need 20 (since we only ever send 1 page at a time)
+def pack_replay_id(rank, replay_id)
+  rank << REPLAY_ID_BITS | replay_id
+end
+
+# Unpack the rank and replay ID from a single integer. See previous function.
+def unpack_replay_id(id)
+  [id >> REPLAY_ID_BITS, id & ((1 << REPLAY_ID_BITS) - 1)]
+end
+
 # <---------------------------------------------------------------------------->
 # <------                           GRAPHICS                             ------>
 # <---------------------------------------------------------------------------->
