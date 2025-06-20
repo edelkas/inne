@@ -81,6 +81,7 @@ class Ninja:
         self.floor_buffer = -1
         self.wall_buffer = -1
         self.launch_pad_buffer = -1
+        self.wall_normal = 0
         self.floor_normalized_x = 0
         self.floor_normalized_y = -1
         self.ceiling_normalized_x = 0
@@ -1131,7 +1132,7 @@ class EntityOneWayPlatform(Entity):
         dy = ninja.ypos - self.ypos
         lateral_dist = dy * self.normal_x - dx * self.normal_y
         direction = (ninja.yspeed * self.normal_x - ninja.xspeed * self.normal_y) * lateral_dist
-        radius_scalar = 0.91 if direction < 0 else 0.51 #The platform has a bigger width if the ninja is moving towards its center.
+        radius_scalar = 0.90 if direction < 0 else 0.51 #The platform has a bigger width if the ninja is moving towards its center.
         if abs(lateral_dist) < radius_scalar * ninja.RADIUS + self.SEMI_SIDE:
             normal_dist = dx * self.normal_x + dy * self.normal_y
             if 0 < normal_dist <= ninja.RADIUS:
