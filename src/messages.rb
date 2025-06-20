@@ -417,7 +417,7 @@ def send_spreads(event)
   mappack = format_mappack(mappack)
   board   = format_board(board)
   frac    = format_frac(frac)
-  event << "#{frac} #{tabs} #{type} #{player} with the #{spread} #{board} spread between 0th and #{rank} #{mappack}:".squish
+  event << format_header("#{tabs} #{type} #{player} with the #{spread} #{frac} #{board} spread between 0th and #{rank} #{mappack}")
   full ? send_file(event, spreads, 'spreads.txt') : event << format_block(spreads)
 rescue => e
   lex(e, "Error performing spreads.", event: event)

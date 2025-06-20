@@ -713,7 +713,7 @@ module Highscoreable
 
     # Fetch spreads
     ret = list.joins(!mappack && frac ? 'INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`' : '')
-              .joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `highscoreable_id`")
+              .joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `#{klass.table_name}`.`highscoreable_id`")
               .where(ids ? { highscoreable_id: ids } : {})
               .where("`#{rfield}` <= #{n}")
               .group(:highscoreable_id)
