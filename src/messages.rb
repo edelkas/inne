@@ -392,6 +392,7 @@ def send_spreads(event)
   full    = parse_full(msg)
   mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
+  frac    = (parse_frac(msg) || mappack&.fractional) && ['hs', 'sr'].include?(board)
   small   = !!(msg =~ /smallest/)
   perror("Metanet maps only have highscore mode for now.") if !mappack && board != 'hs'
   perror("This function is only available for highscore and speedrun modes for now.") if !['hs', 'sr'].include?(board)
@@ -399,10 +400,10 @@ def send_spreads(event)
 
   # Retrieve and format spreads
   sr       = board == 'sr'
-  spreads  = Highscoreable.spreads(n, type, tabs, small, player.nil? ? nil : player.id, full, mappack, board)
+  spreads  = Highscoreable.spreads(n, type, tabs, small, player.nil? ? nil : player.id, full, mappack, board, frac)
   namepad  = spreads.map{ |s| s[0].length }.max
-  scorepad = spreads.map{ |s| s[1] }.max.to_i.to_s.length + (sr ? 0 : 4)
-  fmt      = sr ? 'd' : '.3f'
+  scorepad = spreads.map{ |s| s[1] }.max.to_i.to_s.length + (sr ? (frac ? 4 : 0) : (frac ? 7 : 4))
+  fmt      = sr ? (frac ? '.3f' : 'd') : (frac ? '.6f' : '.3f')
   spreads  = spreads.each_with_index
                     .map { |s, i| "#{"%-#{namepad}s" % s[0]} - #{"%#{scorepad}#{fmt}" % s[1]} - #{s[2]}"}
                     .join("\n")
@@ -415,7 +416,8 @@ def send_spreads(event)
   player  = !player.nil? ? "owned by #{player.print_name} " : ''
   mappack = format_mappack(mappack)
   board   = format_board(board)
-  event << "#{tabs} #{type} #{player} with the #{spread} #{board} spread between 0th and #{rank} #{mappack}:".squish
+  frac    = format_frac(frac)
+  event << "#{frac} #{tabs} #{type} #{player} with the #{spread} #{board} spread between 0th and #{rank} #{mappack}:".squish
   full ? send_file(event, spreads, 'spreads.txt') : event << format_block(spreads)
 rescue => e
   lex(e, "Error performing spreads.", event: event)

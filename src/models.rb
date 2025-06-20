@@ -691,18 +691,19 @@ module Highscoreable
   # full      - Export entire list (vs. top20 only)
   # mappack   - Use a mappack's boards (vs. vanilla)
   # board     - The mode (hs, sr), mappack-only
-  # TODO: Add fractional spread. We can INNER JOIN with the archives table and do:
-  #       ROUND(MAX(`archives`.`score` - `fraction`) - MIN(`archives`.`score` - `fraction`), 3) AS frac
-  def self.spreads(n, type, tabs, small = false, player_id = nil, full = false, mappack = nil, board = 'hs')
+  # frac      - Compute spreads between fractional scores
+  def self.spreads(n, type, tabs, small = false, player_id = nil, full = false, mappack = nil, board = 'hs', frac = false)
     # Sanitize parameters
     n      = n.clamp(0,19)
     type   = ensure_type(type, mappack: !mappack.nil?)
     type   = type.mappack if mappack
+    frac &&= type.include?(Levelish)
     klass  = mappack ? MappackScore.where(mappack: mappack) : Score
-    sfield = (mappack ? "score_#{board}" : 'score').to_sym
-    rfield = (mappack ?  "rank_#{board}" : 'rank').to_sym
+    sfield = mappack ? "`score_#{board}`" : frac ? '`archives`.`score`' : '`score`'
+    sfield += (board == 'hs' ? ' - ' : ' + ') + '`fraction`' if frac
+    rfield = mappack ? "rank_#{board}" : 'rank'
     tname = type.table_name
-    scale  = mappack && board == 'hs' ? 60.0 : 1
+    scale  = mappack && board == 'hs' || !mappack && frac ? 60.0 : 1
     bench(:start) if BENCHMARK
 
     # Fetch list of target scores
@@ -711,13 +712,14 @@ module Highscoreable
     ids = list.where(rfield => 0, player_id: player_id).pluck('`highscoreable_id`') if player_id
 
     # Fetch spreads
-    ret = list.joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `highscoreable_id`")
+    ret = list.joins(!mappack && frac ? 'INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`' : '')
+              .joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `highscoreable_id`")
               .where(ids ? { highscoreable_id: ids } : {})
               .where("`#{rfield}` <= #{n}")
               .group(:highscoreable_id)
-              .order(spread: small ? :asc : :desc, highscoreable_id: :asc)
+              .order("`spread` #{small ? 'ASC' : 'DESC'}", highscoreable_id: :asc)
               .limit(full ? nil : NUM_ENTRIES)
-              .pluck(:highscoreable_id, :name, "(MAX(`#{sfield}`) - MIN(`#{sfield}`)) / #{scale} AS `spread`")
+              .pluck(:highscoreable_id, :name, "(MAX(#{sfield}) - MIN(#{sfield})) / #{scale} AS `spread`")
 
     # Retrieve player names
     pnames = klass.where(highscoreable_type: type.to_s, highscoreable_id: ret.map(&:first), rfield => 0)

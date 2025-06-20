@@ -568,8 +568,8 @@ module MappackHighscoreable
 
     # Format response
     # Note:
-    #   In the replay ID field we use the lower 22 bits to store the actual ID, and
-    #   the higher 10 bits to encode the rank. That way scores with lower rank will
+    #   In the replay ID field we use the lower bits to encode the real ID, and the
+    #   the higher bits to encode the rank.  That way scores with a lower rank will
     #   also have a lower replay ID, so when the game re-sorts ties by replay ID in
     #   the Global  boards, they will actually be sorted properly  according to the
     #   full precision of the frac scores, as opposed to just the milliseconds.  We
