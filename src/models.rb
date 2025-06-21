@@ -895,7 +895,7 @@ module Highscoreable
   end
 
   # Format a single leaderboard for printing
-  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true)
+  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
     boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?).each_with_index.select{ |_, r|
@@ -973,11 +973,10 @@ module Highscoreable
     end
 
     # Calculate padding
-    float = !is_mappack? || board == 'hs' || frac
+    float = (!is_mappack? || board == 'hs' || frac) && prec != 0
     name_padding = np > 0 ? np : boards.map{ |s, _| s['name'].to_s.length }.max
     score_padding = sp > 0 ? sp : boards.map{ |s, _| s[sfield] }.max.to_i.to_s.length
-    score_padding += 4 if float
-    score_padding += 3 if frac && board == 'hs'
+    score_padding += float ? (prec > 0 ? prec : frac && board == 'hs' ? 6 : 3) + 1 : 0
 
     # Print scores
     rank = -1
@@ -986,16 +985,16 @@ module Highscoreable
       Scorish.format(
         name_padding, score_padding, cools: cools, stars: stars, mode: board,
         t_rank: rank, mappack: is_mappack?, userlevel: is_userlevel?, h: s,
-        frac: frac, equal: equals.include?(s[rfield])
+        frac: frac, equal: equals.include?(s[rfield]), prec: prec, flags: flags
       )
     }
   end
 
   # Format a dual leaderboard for printing
-  def format_scores_dual(np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false)
+  def format_scores_dual(np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true)
     # Fetch scores
-    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
-    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
+    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
     size = [board_hs.size, board_sr.size].max
     return [] if size == 0
 
@@ -1011,11 +1010,11 @@ module Highscoreable
   end
 
   # Format a leaderboard for printing
-  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false)
+  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true)
     ret = if !is_mappack? || mode != 'dual'
-      format_scores_single(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+      format_scores_single(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
     else
-      format_scores_dual(np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac)
+      format_scores_dual(np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
     end
     ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"] if ret.size == 0
     ret = ret.join("\n") if join
@@ -1547,24 +1546,24 @@ end
 # Implemented by Score and MappackScore
 module Scorish
 
-  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, frac: false, equal: false)
+  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, frac: false, equal: false, prec: -1, flags: true)
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
     cheat = !!h['cheated']
     dev = !!h['dev']
-    prec = frac && mode == 'hs'
+    decimals = (!mappack || hs || frac) && prec != 0 ? (prec > 0 ? prec : hs && frac ? 6 : 3) : 0
 
     # Compose each element
-    t_star   = userlevel || mappack || !stars ? '' : (h['star'] ? '*' : ' ')
+    t_star   = userlevel || mappack || !stars || !flags ? '' : (h['star'] ? '*' : ' ')
     t_rank   = cheat ? 'xx' : dev ? '++' : t_rank || h['rank'] || '--'
     t_rank   = Highscoreable.format_rank(t_rank)
     t_player = format_string(h['name'], name_padding)
     f_score  = !mappack ? 'score' : "score_#{mode}"
-    t_fmt    = !mappack || hs || frac ? "%#{score_padding}.#{prec ? 6 : 3}f" : "%#{score_padding}d"
+    t_fmt    = decimals > 0 ? "%#{score_padding}.#{decimals}f" : "%#{score_padding}d"
     t_score  = t_fmt % [h[f_score]]
-    t_cool   = !mappack && cools && h['cool'] ? " 😎" : ""
-    t_eql    = equal && !h['question'] ? ' =' : ''
-    t_quest  = h['question'] ? ' ?' : ''
+    t_cool   = flags && !mappack && cools && h['cool'] ? " 😎" : ""
+    t_eql    = flags && equal && !h['question'] ? ' =' : ''
+    t_quest  = flags && h['question'] ? ' ?' : ''
 
     # Put everything together
     line = "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}#{t_eql}#{t_quest}"

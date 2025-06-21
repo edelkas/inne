@@ -2343,7 +2343,7 @@ module Map
       TmpMsg.update(event, "-# Updating scores and downloading replays...")
       h.update_scores(fast: true)
     end
-    frac = parse_frac(msg)
+    frac = (parse_frac(msg) || h.is_mappack? && h.mappack.fractional) && h.is_level?
     leaderboard = h.leaderboard(board, pluck: false, frac: frac)
     ranks = parse_ranks(msg, leaderboard.size).take(MAX_TRACES)
     scores = ranks.map{ |r| leaderboard[r] }.compact
@@ -2427,7 +2427,7 @@ module Map
     header << " in #{userlevel ? "userlevel #{verbatim(h.name)} by #{verbatim(h.author.name)}" : h.name}"
     header << " using palette #{verbatim(palette)}:"
     event << header
-    texts = h.format_scores(np: gif ? 0 : 11, mode: board, ranks: ranks, join: false, cools: false, stars: false)
+    texts = h.format_scores(np: gif ? 0 : 11, mode: board, ranks: ranks, join: false, frac: frac, dev: false, prec: frac ? 3 : -1, flags: false)
     if !all_valid
       warning = "**Warning**: #{'Trace'.pluralize(wrong_names.count)}"
       warning << " for #{wrong_names.to_sentence}"

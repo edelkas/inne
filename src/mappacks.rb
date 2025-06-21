@@ -574,7 +574,7 @@ module MappackHighscoreable
     #   the Global  boards, they will actually be sorted properly  according to the
     #   full precision of the frac scores, as opposed to just the milliseconds.  We
     #   can later recover the correct ID in get_replay with basic bit manipulation.
-    res["scores"] = board.each_with_index.map{ |s, i|
+    res["scores"] = board.take(20).each_with_index.map{ |s, i|
       {
         "score"     => (1000 * s["score_#{m}"]).round,
         "rank"      => 20 * page + i,
