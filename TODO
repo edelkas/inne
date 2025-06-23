@@ -133,6 +133,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
   x Ensure what happens when frac is missing (i.e. 1) in all functions is handled gracefully.
   x Test everything thoroughly
 
+- At the moment the final position for the interpolation routine isn't actually taken at the end of the tick function, but during post collision, i.e. after physical collisions but potentially before some logical collisions and before the thinking, which in particular takes care of the jumping logic. This can cause the ninja to suddenly start the next frame already inside the exit door, leading to a fractional frame of exactly 0 and thus poor interpolation.
 - Only store the fractional frame when colliding with the exit door if the current fractional frame is either still unset or is larger than the new one (the lower the better). That way we handle the case where we collide with 2 exit doors on the same frame.
 - Consider edge cases, such as exit switch inside exit door. At the moment, since we interpolate with respect to the position of the exit door, these cases are useless. But this is tricky, because in that scenario the game actually finishes on the next, and so the interpolated score would be higher than the real one.
 - Instead of returning the fraction field separately in the .leaderboard methods, perhaps we could integrate it so that they already return the scores adjusted by the fractional part. Careful with nulls though.

@@ -1558,12 +1558,13 @@ def fix_type(type, single = false)
 end
 
 # find the optimal score / amount of whatever rankings or stat
-def find_max_type(rank, type, tabs, mappack = nil, board = 'hs')
+def find_max_type(rank, type, tabs, mappack = nil, board = 'hs', dev = false)
   # Filter scores by type and tabs
   type = Level if rank == :gm
   type = mappack || rank == :gp ? type.mappack : type.vanilla
   query = mappack || rank == :gp ? type.where(mappack: mappack) : type
   query = query.where(tab: tabs) if !tabs.empty?
+  query = query.where.not("dev_#{board}" => nil) if mappack && dev
 
   # Distinguish ranking type
   case rank
@@ -1613,12 +1614,12 @@ end
 
 # Finds the maximum value a player can reach in a certain ranking
 # If 'empty' we allow no types, otherwise default to Level and Episode
-def find_max(rank, types, tabs, empty = false, mappack = nil, board = 'hs')
+def find_max(rank, types, tabs, empty = false, mappack = nil, board = 'hs', dev = false)
   # Normalize params
   types = normalize_type(types, empty: empty)
 
   # Compute type-wise maxes, and add
-  maxes = [types].flatten.map{ |t| find_max_type(rank, t, tabs, mappack, board) }
+  maxes = [types].flatten.map{ |t| find_max_type(rank, t, tabs, mappack, board, dev) }
   [:avg_points, :avg_rank].include?(rank) ? maxes.first : maxes.sum
 end
 

@@ -20,9 +20,10 @@ def send_list(event, file = true, missing = false, third = false)
   board   = parse_board(msg, 'hs')
   type    = parse_type(msg)
   tabs    = parse_tabs(msg)
+  dev     = parse_dev(msg) && !mappack.nil? && ['hs', 'sr'].include?(board)
   cool    = mappack.nil? ? parse_cool(msg) : false
   star    = mappack.nil? ? parse_star(msg) : false
-  range   = parse_range(msg, cool || star || missing)
+  range   = parse_range(msg, cool || star || missing || dev)
   ties    = parse_ties(msg)
   tied    = parse_tied(msg)
   sing    = (missing ? -1 : 1) * parse_singular(msg)
@@ -39,18 +40,13 @@ def send_list(event, file = true, missing = false, third = false)
   if sing != 0
     list = player.singular(type, tabs, sing == 1 ? false : true)
   else
-    list = player.range_ns(range[0], range[1], type, tabs, ties, tied, cool, star, missing, mappack, board)
+    list = player.range_ns(range[0], range[1], type, tabs, ties, tied, cool, star, missing, mappack, board, dev, join: !high)
   end
 
   # Format list
   if !high
     c = mappack ? 'Mappack'  : ''
     t = mappack ? 'mappack_' : ''
-    join = <<~STR.gsub(/\s+/, ' ').strip
-      LEFT JOIN `#{t}levels`   ON (`#{t}scores`.`highscoreable_type` = '#{c}Level'   AND `#{t}levels`.`id`   = `#{t}scores`.`highscoreable_id`)
-      LEFT JOIN `#{t}episodes` ON (`#{t}scores`.`highscoreable_type` = '#{c}Episode' AND `#{t}episodes`.`id` = `#{t}scores`.`highscoreable_id`)
-      LEFT JOIN `#{t}stories`  ON (`#{t}scores`.`highscoreable_type` = '#{c}Story'   AND `#{t}stories`.`id`  = `#{t}scores`.`highscoreable_id`)
-    STR
     name = <<~STR.gsub(/\s+/, ' ').strip
       CASE
         WHEN `#{t}scores`.`highscoreable_type` = '#{c}Level'   THEN `#{t}levels`.`name`
@@ -71,11 +67,11 @@ def send_list(event, file = true, missing = false, third = false)
     fields << "RPAD(#{name},  #{pad_name},  ' ')"
     fields << "' - '"                             unless board == 'gm'
     fields << "LPAD(#{score}, #{pad_score}, ' ')" unless board == 'gm'
-    list = list.joins(join).pluck("CONCAT(#{fields.join(', ')})").uniq
+    list = list.pluck("CONCAT(#{fields.join(', ')})").uniq
   end
 
   # Format header
-  max1     = find_max(:rank, type, tabs, false, mappack, board)
+  max1     = find_max(:rank, type, tabs, false, mappack, board, dev)
   max2     = player.range_ns(range[0], range[1], type, tabs, ties, tied).count
   full     = !missing || !(cool || star) # max is all scores, not all player's scores
   max      = full ? max1 : max2
@@ -87,11 +83,12 @@ def send_list(event, file = true, missing = false, third = false)
   star     = format_star(star)
   ties     = format_ties(ties)
   tied     = format_tied(tied)
+  dev      = format_dev(dev)
   boardB   = !mappack.nil? ? format_board(board) : ''
   mappackB = format_mappack(mappack)
   count    = list.count
   header = "#{player.print_name} #{missing ? 'is missing' : 'has'} "
-  header << "#{count} out of #{max} #{cool} #{tied} #{boardB} #{tabs} #{type} "
+  header << "#{count} out of #{max} #{cool} #{tied} #{dev} #{boardB} #{tabs} #{type} "
   header << "#{range}#{star} #{sing} scores #{ties} #{mappackB}"
   event << format_header(header, close: '.', upcase: false)
 

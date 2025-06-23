@@ -2291,9 +2291,11 @@ class Player < ActiveRecord::Base
       star    = false, # Scores must be star (ex-0ths)
       missing = false, # Fetch missing scores with the desired properties
       mappack = nil,   # Mappack to use (nil = Metanet)
-      board   = 'hs'   # Leaderboard type
+      board   = 'hs',  # Leaderboard type
+      dev     = false, # Score must be better than the DEV score
+      join:     false  # Join the result set with the highscoreables table
     )
-    return missing(type, tabs, a, b, ties, tied, mappack, board) if missing && !cool && !star
+    return missing(type, tabs, a, b, ties, tied, mappack, board, dev) if missing && !cool && !star
 
     # Return highscoreable names rather than scores
     high = !mappack.nil? && board == 'gm'
@@ -2302,6 +2304,18 @@ class Player < ActiveRecord::Base
     ret = scores_by_type_and_tabs(type, tabs, nil, mappack, board)
     types = "FIELD(`highscoreable_type`, 'Level', 'Episode', 'Story', 'MappackLevel', 'MappackEpisode', 'MappackStory')"
     return ret.order(types, '`highscoreable_id`') if high
+
+    # Optionally join scores with highscoreable tables
+    if join || dev
+      c = mappack ? 'Mappack'  : ''
+      t = mappack ? 'mappack_' : ''
+      join = <<~STR.gsub(/\s+/, ' ').strip
+        LEFT JOIN `#{t}levels`   ON (`#{t}scores`.`highscoreable_type` = '#{c}Level'   AND `#{t}levels`.`id`   = `#{t}scores`.`highscoreable_id`)
+        LEFT JOIN `#{t}episodes` ON (`#{t}scores`.`highscoreable_type` = '#{c}Episode' AND `#{t}episodes`.`id` = `#{t}scores`.`highscoreable_id`)
+        LEFT JOIN `#{t}stories`  ON (`#{t}scores`.`highscoreable_type` = '#{c}Story'   AND `#{t}stories`.`id`  = `#{t}scores`.`highscoreable_id`)
+      STR
+      ret = ret.joins(join)
+    end
 
     # Filter scores by rank
     if mappack.nil? || ['hs', 'sr'].include?(board)
@@ -2314,6 +2328,19 @@ class Player < ActiveRecord::Base
         q = "`#{rank_type}` >= #{a} AND `#{rank_type}` < #{b}"
       end
       ret = ret.where(q)
+    end
+
+    # Filter scores by dev time
+    if dev && !mappack.nil? && ['hs', 'sr'].include?(board)
+      dev_score = <<~STR.gsub(/\s+/, ' ').strip
+        CASE
+          WHEN `mappack_scores`.`highscoreable_type` = 'MappackLevel'   THEN `mappack_levels`.`dev_#{board}`
+          WHEN `mappack_scores`.`highscoreable_type` = 'MappackEpisode' THEN `mappack_episodes`.`dev_#{board}`
+          WHEN `mappack_scores`.`highscoreable_type` = 'MappackStory'   THEN `mappack_stories`.`dev_#{board}`
+          ELSE ''
+        END
+      STR
+      ret = ret.where("`score_#{board}` #{board == 'hs' ? '>' : '<'} (#{dev_score})#{board == 'hs' ? ' * 60.0' : ''}")
     end
 
     # Filter scores by cool and star, if not in a mappack
@@ -2346,13 +2373,14 @@ class Player < ActiveRecord::Base
     counts
   end
 
-  def missing(type, tabs, a, b, ties, tied = false, mappack = nil, board = 'hs')
+  def missing(type, tabs, a, b, ties, tied = false, mappack = nil, board = 'hs', dev = false)
     type = normalize_type(type, mappack: !mappack.nil?)
     bench(:start) if BENCHMARK
     scores = type.map{ |t|
-      ids = range_ns(a, b, t, tabs, ties, tied, false, false, false, mappack, board).pluck(:highscoreable_id)
+      ids = range_ns(a, b, t, tabs, ties, tied, false, false, false, mappack, board, dev).pluck(:highscoreable_id)
       t = t.where(mappack: mappack) if !mappack.nil?
       t = t.where(tab: tabs) if !tabs.empty?
+      t = t.where.not("dev_#{board}" => nil) if mappack && dev
       t.where.not(id: ids).order(:id).pluck(:name)
     }.flatten
     bench(:step) if BENCHMARK

@@ -1040,6 +1040,11 @@ def parse_frac(msg)
   !!msg[/\bfrac(tion(al)?)?\b/i] || !!msg[/\binterpolated?\b/i]
 end
 
+# Scores that are better than the dev's
+def parse_dev(msg)
+  !!msg[/\bdev\b/]
+end
+
 # Whether the response should be spoilered or not
 def parse_spoiler(msg, h = nil, channel = nil)
   old_enough = true
@@ -1050,6 +1055,10 @@ def parse_spoiler(msg, h = nil, channel = nil)
     in_dms = channel.type == channel_type(:dm) rescue false
   end
   !!msg[/\bspoiler\b/i] || !old_enough && !in_dms
+end
+
+def format_dev(dev)
+  dev ? 'over-DEV' : ''
 end
 
 def format_rank(rank)
