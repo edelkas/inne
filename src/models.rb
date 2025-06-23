@@ -905,7 +905,7 @@ module Highscoreable
     rfield = !is_mappack? ? 'replay_id' : 'id'
 
     # Figure out if cheated scores need to be inserted
-    if cheated && SHOW_CHEATERS && is_vanilla? && !full
+    if cheated && SHOW_CHEATERS && is_vanilla?
       cheated_scores = Archive.where(highscoreable: self, expired: false, cheated: true)
                               .joins("INNER JOIN `players` ON `players`.`metanet_id` = `archives`.`metanet_id`")
                               .order('`score` DESC', '`replay_id` ASC')
@@ -979,13 +979,15 @@ module Highscoreable
     score_padding += float ? (prec > 0 ? prec : frac && board == 'hs' ? 6 : 3) + 1 : 0
 
     # Print scores
+    color = !full || boards.size <= 20
     rank = -1
     boards.map{ |s, r|
       rank += 1 if !s['cheated'] && !s['dev']
       Scorish.format(
         name_padding, score_padding, cools: cools, stars: stars, mode: board,
         t_rank: rank, mappack: is_mappack?, userlevel: is_userlevel?, h: s,
-        frac: frac, equal: equals.include?(s[rfield]), prec: prec, flags: flags
+        frac: frac, equal: equals.include?(s[rfield]), prec: prec, flags: flags,
+        color: !color ? nil : s['cheated'] ? ANSI.red : s['dev'] ? ANSI.blue : nil
       )
     }
   end
@@ -1546,7 +1548,7 @@ end
 # Implemented by Score and MappackScore
 module Scorish
 
-  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, frac: false, equal: false, prec: -1, flags: true)
+  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, frac: false, equal: false, prec: -1, flags: true, color: nil)
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
     cheat = !!h['cheated']
@@ -1567,8 +1569,7 @@ module Scorish
 
     # Put everything together
     line = "#{t_star}#{t_rank}: #{t_player} - #{t_score}#{t_cool}#{t_eql}#{t_quest}"
-    line = "#{ANSI.red}#{line}#{ANSI.clear}" if cheat
-    line = "#{ANSI.blue}#{line}#{ANSI.clear}" if dev
+    line = "#{color}#{line}#{ANSI.clear}" if color
     line
   end
 

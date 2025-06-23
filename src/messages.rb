@@ -465,7 +465,7 @@ def send_scores(event, map = nil, ret = false)
   end
 
   # Add cleanliness if it's an episode or a story
-  res << "\n" if full
+  res << "\n" if full && scores.count > 20
   res << "Scores: **#{h.completions}**. " if h.completions && h.completions > 0
   res << send_clean_one(event, true) if (h.is_episode? || h.is_story?) && board != 'gm'
 
