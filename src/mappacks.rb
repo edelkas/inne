@@ -545,8 +545,11 @@ module MappackHighscoreable
 
   # Return scores in JSON format expected by N++
   def get_scores(qt = 0, metanet_id = nil, page: 0, frac: false)
+    # Fetch leaderboard
     m = qt == 2 ? 'sr' : 'hs'
-    board = leaderboard(m, metanet_id: metanet_id, page: page, frac: frac)
+    dev_score = m == 'hs' ? dev_hs : dev_sr
+    count = dev_score ? 19 : 20
+    board = leaderboard(m, truncate: count, metanet_id: metanet_id, page: page, frac: frac)
     res = {}
 
     # Adjust scores
@@ -557,7 +560,6 @@ module MappackHighscoreable
     }
 
     # Inject DEV score
-    dev_score = m == 'hs' ? dev_hs : dev_sr
     if dev_score
       index = board.index{ |s|
         m == 'hs' ? s['score_hs'] <= dev_score : s['score_sr'] >= dev_score
