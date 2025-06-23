@@ -1620,14 +1620,15 @@ class Score < ActiveRecord::Base
       cool    = false, # Include only cool scores
       star    = false, # Include only star scores
       mappack = nil,   # Mappack (nil = Metanet)
-      mode    = 'hs',  # Playing mode
-      old     = false  # Include obsolete scores (only makes sense for mappacks)
+      board   = 'hs',  # Playing mode
+      old     = false, # Include obsolete scores (only makes sense for mappacks)
+      dev     = false  # Include only over-DEV scores
     )
 
     # Adapt params for mappacks, if necessary
     type = fix_type(type)
-    mode = 'hs' if !['hs', 'sr'].include?(mode)
-    ttype = "#{ties ? 'tied_' : ''}rank#{mappack ? "_#{mode}" : ''}".to_sym
+    board = 'hs' if !['hs', 'sr'].include?(board)
+    ttype = "#{ties ? 'tied_' : ''}rank#{mappack ? "_#{board}" : ''}".to_sym
     if !mappack.nil?
       klass = MappackScore.where(mappack: mappack)
       klass = klass.where.not(ttype => nil) unless old
@@ -1647,9 +1648,27 @@ class Score < ActiveRecord::Base
                   .where(!b.blank?  ? "`#{ttype}` < #{b}"  : nil)
     )
     queries.push(
-      queries.last.where(cool ? { cool: true } : nil)
-                  .where(star ? { star: true } : nil)
+      queries.last.where(cool && !mappack ? { cool: true } : nil)
+                  .where(star && !mappack ? { star: true } : nil)
     )
+
+    # Over-DEV scores are special and require a join
+    if dev && mappack
+      join = <<~STR.gsub(/\s+/, ' ').strip
+        LEFT JOIN `mappack_levels`   ON (`mappack_scores`.`highscoreable_type` = 'MappackLevel'   AND `mappack_levels`.`id`   = `mappack_scores`.`highscoreable_id`)
+        LEFT JOIN `mappack_episodes` ON (`mappack_scores`.`highscoreable_type` = 'MappackEpisode' AND `mappack_episodes`.`id` = `mappack_scores`.`highscoreable_id`)
+        LEFT JOIN `mappack_stories`  ON (`mappack_scores`.`highscoreable_type` = 'MappackStory'   AND `mappack_stories`.`id`  = `mappack_scores`.`highscoreable_id`)
+      STR
+      dev_score = <<~STR.gsub(/\s+/, ' ').strip
+        CASE
+          WHEN `mappack_scores`.`highscoreable_type` = 'MappackLevel'   THEN `mappack_levels`.`dev_#{board}`
+          WHEN `mappack_scores`.`highscoreable_type` = 'MappackEpisode' THEN `mappack_episodes`.`dev_#{board}`
+          WHEN `mappack_scores`.`highscoreable_type` = 'MappackStory'   THEN `mappack_stories`.`dev_#{board}`
+          ELSE ''
+        END
+      STR
+      queries[-1] = queries[-1].joins(join).where("`score_#{board}` #{board == 'hs' ? '>' : '<'} (#{dev_score})#{board == 'hs' ? ' * 60.0' : ''}")
+    end
 
     # Return the appropriate filter
     queries[level.clamp(0, queries.size - 1)]
@@ -1666,6 +1685,7 @@ class Score < ActiveRecord::Base
       ties:    false, # Include ties or not.      Def: No.
       cool:    false, # Only include cool scores. Def: No.
       star:    false, # Only include * scores.    Def: No.
+      dev:     false, # Only over-DEV scores.     Def: No.
       mappack: nil,   # Mappack.                  Def: None.
       board:   'hs'   # Highscore or speedrun.    Def: Highscore.
     )
@@ -1685,10 +1705,10 @@ class Score < ActiveRecord::Base
     basetype = type
     type     = [type].flatten.map{ |t| "Mappack#{t.to_s}".constantize } if !mappack.nil?
     level    = 2
-    level    = 1 if mappack || [:maxed, :maxable].include?(ranking)
+    level    = 1 if (mappack && !dev) || [:maxed, :maxable].include?(ranking)
     level    = 0 if [:tied_rank, :avg_lead, :singular, :score, :gp, :gm].include?(ranking)
     old      = [:gp, :gm].include?(ranking)
-    scores   = filter(level, nil, type, tabs, a, b, ties, cool, star, mappack, board, old)
+    scores   = filter(level, nil, type, tabs, a, b, ties, cool, star, mappack, board, old, dev)
     scores   = scores.where.not(player: players) if !mappack.nil? && !players.empty?
 
     # Named fields
@@ -1705,11 +1725,13 @@ class Score < ActiveRecord::Base
                      .order('`count_id` DESC')
                      .count(:id)
     when :tied_rank
-      scores_w  = scores.where("`#{trankf}` >= #{a} AND `#{trankf}` < #{b}")
+      scores_w  = scores.where(!a.blank? ? "`#{trankf}` >= #{a}" : nil)
+                        .where(!b.blank? ? "`#{trankf}` < #{b}"  : nil)
                         .group(:player_id)
                         .order('`count_id` DESC')
                         .count(:id)
-      scores_wo = scores.where("`#{rankf}` >= #{a} AND `#{rankf}` < #{b}")
+      scores_wo = scores.where(!a.blank? ? "`#{rankf}` >= #{a}" : nil)
+                        .where(!b.blank? ? "`#{rankf}` < #{b}"  : nil)
                         .group(:player_id)
                         .order('`count_id` DESC')
                         .count(:id)
@@ -2282,8 +2304,8 @@ class Player < ActiveRecord::Base
   #   scores the player HAS which are missing the cool/star badge.
   #   Otherwise, missing includes all the scores the player DOESN'T have.
   def range_ns(
-      a,               # Bottom rank
-      b,               # Lower rank
+      a,               # Bottom rank (nil = start = 0)
+      b,               # Lower rank (nil = end)
       type,            # Type
       tabs,            # Tab list
       ties,            # Include ties when filtering by rank (use tied rank field)
@@ -2323,12 +2345,14 @@ class Player < ActiveRecord::Base
       rankf = mappack.nil? ? 'rank' : "rank_#{board}"
       trankf = "tied_#{rankf}"
       if tied
-        q = "`#{trankf}` >= #{a} AND `#{trankf}` < #{b} AND NOT (`#{rankf}` >= #{a} AND `#{rankf}` < #{b})"
+        ret = ret.where(!a.blank? ? "`#{trankf}` >= #{a}" : nil)
+                 .where(!b.blank? ? "`#{trankf}` < #{b}"  : nil)
+                 .where(!b.blank? ? "`#{rankf}` >= #{b}"  : nil)
       else
         rank_type = ties ? trankf : rankf
-        q = "`#{rank_type}` >= #{a} AND `#{rank_type}` < #{b}"
+        ret = ret.where(!a.blank? ? "`#{rank_type}` >= #{a}" : nil)
+                 .where(!b.blank? ? "`#{rank_type}` < #{b}"  : nil)
       end
-      ret = ret.where(q)
     end
 
     # Filter scores by dev time

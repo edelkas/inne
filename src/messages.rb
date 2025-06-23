@@ -23,7 +23,7 @@ def send_list(event, file = true, missing = false, third = false)
   dev     = parse_dev(msg) && !mappack.nil? && ['hs', 'sr'].include?(board)
   cool    = mappack.nil? ? parse_cool(msg) : false
   star    = mappack.nil? ? parse_star(msg) : false
-  range   = parse_range(msg, cool || star || missing || dev)
+  range   = parse_range(msg, cool || star || missing || dev, dev)
   ties    = parse_ties(msg)
   tied    = parse_tied(msg)
   sing    = (missing ? -1 : 1) * parse_singular(msg)
@@ -142,7 +142,12 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     'G++',
     'G--'
   ].include?(rtype) # default rank is top20, not top1 (0th)
-  range = !parse_rank(rtype).nil? ? [0, parse_rank(rtype), true] : parse_range(rtype2.nil? ? msg : '', whole)
+  mappack = parse_mappack(event: event)
+  board = parse_board(msg, 'hs')
+  board = 'hs' if !['hs', 'sr'].include?(board)
+  dev = parse_dev(msg) && !mappack.nil?
+  whole ||= dev
+  range = !parse_rank(rtype).nil? ? [0, parse_rank(rtype), true] : parse_range(rtype2.nil? ? msg : '', whole, dev)
   rtype = fix_rtype(rtype, range[1])
   def_level = [
     'score',
@@ -150,9 +155,6 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     'G--'
   ].include?(rtype) # default type is Level
   type  = parse_type(msg, type: type, multiple: true, initial: initial, default: def_level ? Level : nil)
-  mappack = parse_mappack(event: event)
-  board = parse_board(msg, 'hs')
-  board = 'hs' if !['hs', 'sr'].include?(board)
 
   perror("Speedrun mode isn't available for Metanet levels yet.") if board == 'sr' && !mappack
   perror("Gold rankings aren't available for Metanet levels yet.") if ['G++', 'G--'].include?(rtype) && !mappack
@@ -168,45 +170,45 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   case rtype
   when 'average_point'
     rtag  = :avg_points
-    max   = find_max(:avg_points, type, tabs, !initial, mappack, board)
+    max   = find_max(:avg_points, type, tabs, !initial, mappack, board, dev)
   when 'average_top1_lead'
     rtag  = :avg_lead
     max   = nil
   when 'average_rank'
     rtag  = :avg_rank
-    max   = find_max(:avg_rank, type, tabs, !initial, mappack, board)
+    max   = find_max(:avg_rank, type, tabs, !initial, mappack, board, dev)
   when 'point'
     rtag  = :points
-    max   = find_max(:points, type, tabs, !initial, mappack, board)
+    max   = find_max(:points, type, tabs, !initial, mappack, board, dev)
   when 'score'
     rtag  = :score
-    max   = find_max(:score, type, tabs, !initial, mappack, board)
+    max   = find_max(:score, type, tabs, !initial, mappack, board, dev)
   when 'singular_top1'
     rtag  = :singular
-    max   = find_max(:rank, type, tabs, !initial, mappack, board)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
     range[1] = 1
   when 'plural_top1'
     rtag  = :singular
-    max   = find_max(:rank, type, tabs, !initial, mappack, board)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
     range[1] = 0
   when 'tied_top1'
     rtag  = :tied_rank
-    max   = find_max(:rank, type, tabs, !initial, mappack, board)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
   when 'maxed'
     rtag  = :maxed
-    max   = find_max(:maxed, type, tabs, !initial, mappack, board)
+    max   = find_max(:maxed, type, tabs, !initial, mappack, board, dev)
   when 'maxable'
     rtag  = :maxable
-    max   = find_max(:maxable, type, tabs, !initial, mappack, board)
+    max   = find_max(:maxable, type, tabs, !initial, mappack, board, dev)
   when 'G++'
     rtag  = :gp
-    max   = find_max(:gp, type, tabs, !initial, mappack, board)
+    max   = find_max(:gp, type, tabs, !initial, mappack, board, dev)
   when 'G--'
     rtag  = :gm
-    max   = find_max(:gm, type, tabs, !initial, mappack, board)
+    max   = find_max(:gm, type, tabs, !initial, mappack, board, dev)
   else
     rtag  = :rank
-    max   = find_max(:rank, type, tabs, !initial, mappack, board)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
   end
 
   # EXECUTE specific rankings
@@ -220,6 +222,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     ties:    ties,      # Include ties or not.      Def: No.
     cool:    cool,      # Only include cool scores. Def: No.
     star:    star,      # Only include * scores.    Def: No.
+    dev:     dev,       # Only over-DEV scores.     Def: No.
     mappack: mappack,   # Mappack to do rankings.   Def: None.
     board:   board      # Highscore or speedrun.    Def: Highscore.
   )
@@ -262,12 +265,13 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   typeB   = format_type(type, true).downcase
   range   = no_range ? '' : format_range(range[0], range[1])
   star    = format_star(star, long: true)
+  dev     = format_dev(dev)
   rtypeB  = format_rtype(rtype, range: false, basic: true)
   max     = max ? format_max(max, use_min, bd: false) + '. ' : ''
   board   = !mappack.nil? && !no_board ? format_board(board) : ''
   mappack = format_mappack(mappack)
   play    = !play.empty? ? ' without ' + play.map{ |p| "#{verbatim(p.print_name)}" }.to_sentence : ''
-  header  = "#{fullB} #{cool} #{maxed} #{maxable} #{board} #{tabs} #{typeB} #{range} #{rtypeB} s"
+  header  = "#{fullB} #{cool} #{maxed} #{maxable} #{dev} #{board} #{tabs} #{typeB} #{range} #{rtypeB} s"
   header.sub!(/\s+s$/, 's')
   header << " #{format_ties(ties)} #{mappack} #{play}"
   header  = mdtext("Rankings - #{format_header(header, close: '')}", header: 2)

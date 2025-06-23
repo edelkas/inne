@@ -612,7 +612,8 @@ end
 # bottoms, intermediate ranges, etc.
 # 'full' means that if no range has been explicitly provided, then we default
 # to 0th-19th, otherwise we default to 0th-1st.
-def parse_range(msg, full = false)
+# 'complete' means we take all scores, not just the top20
+def parse_range(msg, full = false, complete = false)
   # Parse "topX" and "bottomX"
   rank = parse_rank(msg) || 20
   bott = parse_bottom_rank(msg) || 0
@@ -629,7 +630,10 @@ def parse_range(msg, full = false)
 
   # If no range is provided, default to 0th count
   if dflt
-    if full
+    if complete
+      bott = 0
+      rank = nil
+    elsif full
       bott = 0
       rank = 20
     else
@@ -644,7 +648,7 @@ def parse_range(msg, full = false)
     rank = (inds[1] + 1).clamp(1, 20)
   end
 
-  [bott, rank, bott < rank]
+  [bott, rank, !bott || !rank || bott < rank]
 end
 
 # Parse a message for tabs
@@ -706,7 +710,7 @@ end
 
 # Complete rtype with additional rank info
 def fix_rtype(rtype, rank)
-  rtype += rank.to_s if rtype == 'top'
+  rtype += (rank || 1).to_s if rtype == 'top'
   rtype
 end
 
@@ -1062,7 +1066,7 @@ def format_dev(dev)
 end
 
 def format_rank(rank)
-  rank.to_i == 1 ? '0th' : "top #{rank}"
+  !rank ? '' : rank.to_i == 1 ? '0th' : "top #{rank}"
 end
 
 # Formats a ranking type. These can include the range in some default cases
@@ -1112,11 +1116,13 @@ end
 # This is used for when the calling function actually has other parameters
 # that make is unnecessary to actually print the range
 def format_range(bott, rank, empty = false)
-  return '' if empty
-  if bott == rank - 1
+  return '' if empty || !bott && !rank
+  if bott && rank && bott == rank - 1
     "#{bott.ordinalize}"
-  elsif bott == 0
+  elsif !bott || bott == 0
     format_rank(rank)
+  elsif !rank
+    "sub-#{bott.ordinalize}"
   elsif rank == 20
     format_bottom_rank(bott)
   else

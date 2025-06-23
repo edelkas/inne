@@ -1647,7 +1647,7 @@ def min_scores(type, tabs, empty = false, a = 0, b = 20, star = false, mappack =
   }.sum
 
   # Compute final count
-  c = star ? 1 : b - a
+  c = star ? 1 : a && b ? b - a : 20
   ([mins, MAXMIN_SCORES].min * c / 20.0).to_i
 end
 
