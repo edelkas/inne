@@ -1380,11 +1380,11 @@ module Episodish
   end
 
   def splits(rank = 0, board: 'hs', frac: false)
-    scoref  = !is_mappack? ? 'score' : "score_#{board}"
+    sfield  = !is_mappack? ? 'score' : "score_#{board}"
     start   = is_mappack? && board == 'sr' ? 0 : 90.0
     factor  = is_mappack? && board == 'hs' ? 60.0 : 1
     offset  = !is_mappack? || board == 'hs' ? 90.0 : 0
-    scores  = levels.map{ |l| l.leaderboard(board, frac: frac)[rank][scoref] }
+    scores  = levels.map{ |l| l.leaderboard(board, frac: frac)[rank][sfield] }
     splits_from_scores(scores, start: start, factor: factor, offset: offset, frac: frac)
   rescue => e
     lex(e, 'Failed to compute splits')
@@ -1686,6 +1686,7 @@ class Score < ActiveRecord::Base
       cool:    false, # Only include cool scores. Def: No.
       star:    false, # Only include * scores.    Def: No.
       dev:     false, # Only over-DEV scores.     Def: No.
+      frac:    false, # Use fractional scores.    Def: No.
       mappack: nil,   # Mappack.                  Def: None.
       board:   'hs'   # Highscore or speedrun.    Def: Highscore.
     )
@@ -1701,7 +1702,7 @@ class Score < ActiveRecord::Base
     end
 
     # Normalize parameters and filter scores accordingly
-    type     = fix_type(type, [:avg_lead, :maxed, :maxable].include?(ranking))
+    type     = fix_type(type, [:avg_lead, :score, :maxed, :maxable].include?(ranking))
     basetype = type
     type     = [type].flatten.map{ |t| "Mappack#{t.to_s}".constantize } if !mappack.nil?
     level    = 2
@@ -1714,8 +1715,8 @@ class Score < ActiveRecord::Base
     # Named fields
     rankf  = mappack.nil? ? 'rank' : "rank_#{board}"
     trankf = "tied_#{rankf}"
-    scoref = mappack.nil? ? 'score' : "score_#{board}"
-    scale  = !mappack.nil? && board == 'hs' ? 60.0 : 1.0
+    sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
+    sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
 
     # Perform specific rankings to filtered scores
     bench(:start) if BENCHMARK
@@ -1766,25 +1767,24 @@ class Score < ActiveRecord::Base
                      .average('`' + (ties ? trankf : rankf) + '`')
     when :avg_lead
       scores = scores.where(rankf => [0, 1])
-                     .pluck(:player_id, :highscoreable_id, scoref.to_sym)
+                     .pluck(:player_id, :highscoreable_id, sfield)
                      .group_by{ |s| s[1] }
                      .reject{ |h, s| s.size < 2 }
                      .map{ |h, s| [s[0][0], (s[0][2] - s[1][2]).abs] }
                      .group_by{ |s| s[0] }
-                     .map{ |p, s| [p, s.map(&:last).sum.to_f / s.map(&:last).count / scale] }
+                     .map{ |p, s| [p, s.map(&:last).sum.to_f / s.map(&:last).count] }
                      .sort_by{ |p, s| -s }
     when :score
       asc = !mappack.nil? && board == 'sr'
-      scores = scores.group(:player_id)
-                     .order(asc ? 'COUNT(`id`) DESC' : '', "SUM(`#{scoref}`) #{asc ? 'ASC' : 'DESC'}")
-                     .pluck("`player_id`, SUM(`#{scoref}`), COUNT(`id`)")
+      scores = scores.joins(!mappack && frac ? "INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`" : '')
+                     .where(!mappack && frac ? { archives: { highscoreable_type: type } } : {} )
+                     .group(:player_id)
+                     .order(asc ? 'COUNT(`id`) DESC' : '', "`sfield` #{asc ? 'ASC' : 'DESC'}")
+                     .pluck(:player_id, "SUM(#{sfield}) AS `sfield`", "COUNT(`#{rankf}`)")
                      .map{ |id, score, count|
-                        score = round_score(score.to_f / scale)
-                        [
-                          id,
-                          asc ? score.to_i : score.to_f,
-                          asc ? count : nil
-                        ]
+                        score = round_score(score.to_f) unless frac
+                        score = score.to_i if mappack && board == 'sr' && !frac
+                        [id, score, asc ? count : nil]
                       }
     when :maxed
       scores = scores.where(highscoreable_id: Highscoreable.ties(basetype, tabs, nil, true, true, mappack, board))

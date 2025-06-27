@@ -768,6 +768,11 @@ TABS_NEW = {
   }
 }
 
+TABS_SOLO = TABS_NEW.select{ |k, v| v[:mode] == MODE_SOLO }.keys
+TABS_COOP = TABS_NEW.select{ |k, v| v[:mode] == MODE_COOP }.keys
+TABS_RACE = TABS_NEW.select{ |k, v| v[:mode] == MODE_RACE }.keys
+TABS_SECRET = TABS_NEW.select{ |k, v| v[:secret] }.keys
+
 # <---------------------------------------------------------------------------->
 # <------                     HIGHSCORING VARIABLES                      ------>
 # <---------------------------------------------------------------------------->

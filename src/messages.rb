@@ -155,6 +155,8 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     'G--'
   ].include?(rtype) # default type is Level
   type  = parse_type(msg, type: type, multiple: true, initial: initial, default: def_level ? Level : nil)
+  frac = (parse_frac(msg) || mappack&.fractional) && ['hs', 'sr'].include?(board)
+  frac &&= ['average_top1_lead', 'score'].include?(rtype) || mappack&.fractional
 
   perror("Speedrun mode isn't available for Metanet levels yet.") if board == 'sr' && !mappack
   perror("Gold rankings aren't available for Metanet levels yet.") if ['G++', 'G--'].include?(rtype) && !mappack
@@ -170,45 +172,45 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   case rtype
   when 'average_point'
     rtag  = :avg_points
-    max   = find_max(:avg_points, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:avg_points, type, tabs, !initial, mappack, board, dev, frac)
   when 'average_top1_lead'
     rtag  = :avg_lead
     max   = nil
   when 'average_rank'
     rtag  = :avg_rank
-    max   = find_max(:avg_rank, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:avg_rank, type, tabs, !initial, mappack, board, dev, frac)
   when 'point'
     rtag  = :points
-    max   = find_max(:points, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:points, type, tabs, !initial, mappack, board, dev, frac)
   when 'score'
     rtag  = :score
-    max   = find_max(:score, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:score, type, tabs, !initial, mappack, board, dev, frac)
   when 'singular_top1'
     rtag  = :singular
-    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev, frac)
     range[1] = 1
   when 'plural_top1'
     rtag  = :singular
-    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev, frac)
     range[1] = 0
   when 'tied_top1'
     rtag  = :tied_rank
-    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev, frac)
   when 'maxed'
     rtag  = :maxed
-    max   = find_max(:maxed, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:maxed, type, tabs, !initial, mappack, board, dev, frac)
   when 'maxable'
     rtag  = :maxable
-    max   = find_max(:maxable, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:maxable, type, tabs, !initial, mappack, board, dev, frac)
   when 'G++'
     rtag  = :gp
-    max   = find_max(:gp, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:gp, type, tabs, !initial, mappack, board, dev, frac)
   when 'G--'
     rtag  = :gm
-    max   = find_max(:gm, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:gm, type, tabs, !initial, mappack, board, dev, frac)
   else
     rtag  = :rank
-    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev)
+    max   = find_max(:rank, type, tabs, !initial, mappack, board, dev, frac)
   end
 
   # EXECUTE specific rankings
@@ -223,6 +225,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     cool:    cool,      # Only include cool scores. Def: No.
     star:    star,      # Only include * scores.    Def: No.
     dev:     dev,       # Only over-DEV scores.     Def: No.
+    frac:    frac,      # Use fractional scores.    Def: No.
     mappack: mappack,   # Mappack to do rankings.   Def: None.
     board:   board      # Highscore or speedrun.    Def: Highscore.
   )
@@ -266,12 +269,13 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
   range   = no_range ? '' : format_range(range[0], range[1])
   star    = format_star(star, long: true)
   dev     = format_dev(dev)
+  frac    = format_frac(frac)
   rtypeB  = format_rtype(rtype, range: false, basic: true)
   max     = max ? format_max(max, use_min, bd: false) + '. ' : ''
   board   = !mappack.nil? && !no_board ? format_board(board) : ''
   mappack = format_mappack(mappack)
   play    = !play.empty? ? ' without ' + play.map{ |p| "#{verbatim(p.print_name)}" }.to_sentence : ''
-  header  = "#{fullB} #{cool} #{maxed} #{maxable} #{dev} #{board} #{tabs} #{typeB} #{range} #{rtypeB} s"
+  header  = "#{fullB} #{cool} #{maxed} #{maxable} #{dev} #{frac} #{board} #{tabs} #{typeB} #{range} #{rtypeB} s"
   header.sub!(/\s+s$/, 's')
   header << " #{format_ties(ties)} #{mappack} #{play}"
   header  = mdtext("Rankings - #{format_header(header, close: '')}", header: 2)

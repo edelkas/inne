@@ -1558,7 +1558,7 @@ def fix_type(type, single = false)
 end
 
 # find the optimal score / amount of whatever rankings or stat
-def find_max_type(rank, type, tabs, mappack = nil, board = 'hs', dev = false)
+def find_max_type(rank, type, tabs, mappack = nil, board = 'hs', dev = false, frac = false)
   # Filter scores by type and tabs
   type = Level if rank == :gm
   type = mappack || rank == :gp ? type.mappack : type.vanilla
@@ -1592,21 +1592,25 @@ def find_max_type(rank, type, tabs, mappack = nil, board = 'hs', dev = false)
   when :clean
     0.0
   when :score
+    # Prepare fields
     klass  = !mappack ? Score  : MappackScore.where(mappack: mappack)
-    rfield = !mappack ? :rank  : "rank_#{board}".to_sym
-    sfield = !mappack ? :score : "score_#{board}".to_sym
-    scale  = mappack && board == 'hs' ? 60.0 : 1.0
-    size   = TYPES[type.vanilla.to_s][:size]
+    sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
+    sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
+    tabs   = (tabs.empty? ? TABS_SOLO : tabs) - TABS_SECRET if !type.include?(Levelish)
     count  = query.count
-    query  = klass.where(highscoreable_type: mappack ? MappackLevel : Level, rfield => 0)
-    query  = query.where(tab: tabs) if !tabs.empty?
-    if size > 1
-      table = type.table_name
-      query = query.joins("INNER JOIN `#{table}` ON `highscoreable_id` DIV #{size} = `#{table}`.`id`")
-    end
-    query  = query.sum(sfield) / scale
+
+    # Compute community total score
+    query  = klass.joins(!mappack && frac ? "INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`" : '')
+                  .where(highscoreable_type: mappack ? MappackLevel : Level)
+                  .where(!tabs.empty? ? { tab: tabs } : {})
+                  .group(:highscoreable_id)
+                  .pluck(board == 'hs' ? "MAX(#{sfield})" : "MIN(#{sfield})")
+                  .sum
+
+    # Adjust score
+    size   = TYPES[type.vanilla.to_s][:size]
     query -= count * (size - 1) * 90.0 if board == 'hs'
-    mappack && board == 'sr' ? query.to_i : query.to_f
+    mappack && board == 'sr' && !frac ? query.to_i : query.to_f
   else
     query.count
   end
@@ -1614,12 +1618,12 @@ end
 
 # Finds the maximum value a player can reach in a certain ranking
 # If 'empty' we allow no types, otherwise default to Level and Episode
-def find_max(rank, types, tabs, empty = false, mappack = nil, board = 'hs', dev = false)
+def find_max(rank, types, tabs, empty = false, mappack = nil, board = 'hs', dev = false, frac = false)
   # Normalize params
   types = normalize_type(types, empty: empty)
 
   # Compute type-wise maxes, and add
-  maxes = [types].flatten.map{ |t| find_max_type(rank, t, tabs, mappack, board, dev) }
+  maxes = [types].flatten.map{ |t| find_max_type(rank, t, tabs, mappack, board, dev, frac) }
   [:avg_points, :avg_rank].include?(rank) ? maxes.first : maxes.sum
 end
 
