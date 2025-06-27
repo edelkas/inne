@@ -155,8 +155,8 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     'G--'
   ].include?(rtype) # default type is Level
   type  = parse_type(msg, type: type, multiple: true, initial: initial, default: def_level ? Level : nil)
-  frac = (parse_frac(msg) || mappack&.fractional) && ['hs', 'sr'].include?(board)
-  frac &&= ['average_top1_lead', 'score'].include?(rtype) || mappack&.fractional
+  frac = parse_frac(msg, mappack, board)
+  frac &&= ['average_top1_lead', 'score'].include?(rtype)
 
   perror("Speedrun mode isn't available for Metanet levels yet.") if board == 'sr' && !mappack
   perror("Gold rankings aren't available for Metanet levels yet.") if ['G++', 'G--'].include?(rtype) && !mappack
@@ -397,7 +397,7 @@ def send_spreads(event)
   full    = parse_full(msg)
   mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
-  frac    = (parse_frac(msg) || mappack&.fractional) && ['hs', 'sr'].include?(board)
+  frac    = parse_frac(msg, mappack, board)
   small   = !!(msg =~ /smallest/)
   perror("Metanet maps only have highscore mode for now.") if !mappack && board != 'hs'
   perror("This function is only available for highscore and speedrun modes for now.") if !['hs', 'sr'].include?(board)
@@ -444,7 +444,7 @@ def send_scores(event, map = nil, ret = false)
   board   = 'hs' if !mappack && board == 'dual'
   full    = parse_full(msg)
   cheated = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
-  frac    = (parse_frac(msg) || mappack && h.mappack.fractional) && h.is_level? && ['hs', 'sr'].include?(board)
+  frac    = parse_frac(msg, h&.mappack, board) && h.is_level?
 
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
   res     = ""
@@ -586,13 +586,19 @@ end
 # Returns rank distribution of a player's scores, in both table and histogram form
 def send_stats(event)
   # Parse message parameters
-  msg    = parse_message(event)
-  player = parse_player(event)
-  tabs   = parse_tabs(msg)
-  ties   = parse_ties(msg)
+  msg     = parse_message(event)
+  player  = parse_player(event)
+  tabs    = parse_tabs(msg)
+  ties    = parse_ties(msg)
+  mappack = parse_mappack(event: event)
+  board   = parse_board(msg, 'hs')
+
+  # Integrity checks
+  perror("Metanet boards only support highscore mode") if !mappack && board != 'hs'
+  perror("Stats can only be performed for highscore or speedrun mode") if !['hs', 'sr'].include?(board)
 
   # Retrieve counts and generate table and histogram
-  counts = player.score_counts(tabs, ties)
+  counts = player.score_counts(tabs, ties, mappack, board)
   full_counts = (0..19).map{ |r|
     l = counts[:levels][r].to_i
     e = counts[:episodes][r].to_i
@@ -600,13 +606,13 @@ def send_stats(event)
     [l + e + s, l + e, l, e, s]
   }
   totals = full_counts.reduce([0] * 5) { |sums, curr| sums.zip(curr).map(&:sum) }
-  maxes = [Level, Episode, Story].map{ |t| find_max(:rank, t, tabs) }
+  maxes = [Level, Episode, Story].map{ |t| find_max(:rank, t, tabs, false, mappack, board) }
   maxes.prepend(maxes.sum, maxes[0,2].sum)
   percents = totals.map.with_index{ |tot, i| maxes[i] == 0 ? 0 : (100.0 * tot / maxes[i]).round }
   histogram = make_histogram(full_counts.map(&:first).each_with_index.to_a.map(&:reverse))
 
   # Format response
-  header  = "Player #{format_tabs(tabs)} highscore counts for #{player.print_name}:".squish
+  header  = "Player #{format_tabs(tabs)} #{format_board(board)} counts #{format_mappack(mappack)} for #{player.print_name}"
   widths  = [5, 4, 4, 4, 4]
   pads_d  = widths.map{ |w| "%#{w}d" }.join(' ')
   pads_s  = widths.map{ |w| "%#{w}s" }.join(' ')
@@ -620,7 +626,7 @@ def send_stats(event)
   sep2    = '─' * 4 + '┼' + '─' * (tot.size - 5)
   stats << sep1 << "\n " << counts << "\n" << sep2 << "\n" << tot << "\n" << max << "\n" << per
 
-  send_message(event, content: header + format_block(stats))
+  send_message(event, content: format_header(header) + format_block(stats))
   sleep(0.25)
   send_message(event, content: format_block(histogram))
 rescue => e
@@ -636,29 +642,51 @@ end
 #     and then subtracting the episode 0th score.
 def send_community(event)
   # Parse message parameters
-  msg  = parse_message(event)
-  tabs = parse_tabs(msg)
-  rank = parse_range(msg)[0..1].max - 1
-  has_secrets = !(tabs & [:SS, :SS2]).empty? || tabs.empty?
-  has_episodes = !(tabs - [:SS, :SS2]).empty? || tabs.empty?
+  msg     = parse_message(event)
+  tabs    = parse_tabs(msg)
+  mappack = parse_mappack(event: event)
+  board   = parse_board(msg, 'hs')
+  frac    = parse_frac(msg, mappack, board)
+  has_secrets  = !(tabs & TABS_SECRET).empty? || tabs.empty?
+  has_episodes = !(tabs - TABS_SECRET).empty? || tabs.empty?
+
+  # Integrity checks
+  perror("Metanet boards only support highscore mode") if !mappack && board != 'hs'
+  perror("Stats can only be performed for highscore or speedrun mode") if !['hs', 'sr'].include?(board)
 
   # Retrieve community's total and average scores
-  levels = Score.total_scores(Level, tabs, rank, true)
-  episodes = Score.total_scores(Episode, tabs, rank, false) if has_episodes
-  levels_no_secrets = (has_secrets ? Score.total_scores(Level, tabs, rank, false) : levels) if has_episodes
-  difference = levels_no_secrets[0] - 4 * 90 * episodes[1] - episodes[0] if has_episodes
+  levels = Scorish.total_scores(Level, tabs, true, true, mappack, board, frac)
+  if has_episodes
+    episodes = Scorish.total_scores(Episode, tabs, true, true, mappack, board, frac)
+    levels_no_secrets = has_secrets ? Scorish.total_scores(Level, tabs, false, true, mappack, board, frac) : levels
+    ep_difference = levels_no_secrets[0] - episodes[0]
+    ep_difference -= 4 * 90 * episodes[1] if board == 'hs'
+    ep_difference *= -1 if board == 'sr'
+
+    stories = Scorish.total_scores(Story, tabs, true, true, mappack, board, frac)
+    levels_no_secrets_no_x = Scorish.total_scores(Level, tabs, false, false, mappack, board, frac)
+    sty_difference = levels_no_secrets_no_x[0] - stories[0]
+    sty_difference -= 24 * 90 * stories[1] if board == 'hs'
+    sty_difference *= -1 if board == 'sr'
+  end
+
+  # Format scores
+  rows = []
+  rows << ['', 'Total', 'Average']
+  rows << :sep
+  rows << ['Level scores',   levels[0],   levels[0].to_f   / levels[1]  ]
+  rows << ['Episode scores', episodes[0], episodes[0].to_f / episodes[1]] if has_episodes
+  rows << ['Story scores',   stories[0],  stories[0].to_f  / stories[1] ] if has_episodes
+  rows << :sep if has_episodes
+  rows << ['Episode difference', ep_difference,  ep_difference.to_f  / episodes[1]] if has_episodes
+  rows << ['Story difference',   sty_difference, sty_difference.to_f / stories[1] ] if has_episodes
 
   # Format response
-  pad = ("%.3f" % levels[0]).length
-  str = ''
-  str << "Total level score:     #{"%#{pad}.3f" % [levels[0]]}\n"
-  str << "Total episode score:   #{"%#{pad}.3f" % [episodes[0]]}\n"               if has_episodes
-  str << "Difference:            #{"%#{pad}.3f" % [difference]}\n\n"              if has_episodes
-  str << "Average level score:   #{"%#{pad}.3f" % [levels[0] / levels[1]]}\n"
-  str << "Average episode score: #{"%#{pad}.3f" % [episodes[0] / episodes[1]]}\n" if has_episodes
-  str << "Average difference:    #{"%#{pad}.3f" % [difference / episodes[1]]}\n"  if has_episodes
-  event << "Community's total #{rank.ordinalize} #{format_tabs(tabs)} scores #{format_time}:\n".squish
-  event << format_block(str)
+  board   = mappack ? format_board(board) : ''
+  mappack = format_mappack(mappack)
+  tabs    = format_tabs(tabs)
+  header  = "Community's total #{board} #{tabs} scores #{mappack} #{format_time}"
+  event << format_header(header) + "\n" + format_block(make_table(rows))
 rescue => e
   lex(e, "Error computing community total scores.", event: event)
 end
@@ -946,14 +974,22 @@ end
 # and classifying it by type (columns) and tabs (rows)
 def send_table(event)
   # Parse message parameters
-  msg    = parse_message(event)
-  player = parse_player(event)
-  cool   = parse_cool(msg)
-  star   = parse_star(msg)
-  global = false # Table for a user, or the community
-  ties   = parse_ties(msg)
-  avg    = !!(msg =~ /\baverage\b/i) || !!(msg =~ /\bavg\b/i)
-  rtype = :rank
+  msg     = parse_message(event)
+  player  = parse_player(event)
+  cool    = parse_cool(msg)
+  star    = parse_star(msg)
+  global  = false # Table for a user, or the community
+  ties    = parse_ties(msg)
+  mappack = parse_mappack(event: event)
+  board   = parse_board(msg, 'hs')
+  frac    = parse_frac(msg, mappack, board)
+  avg     = !!(msg =~ /\baverage\b/i) || !!(msg =~ /\bavg\b/i)
+
+  # Integrity checks
+  perror("Metanet boards only support highscore mode") if !mappack && board != 'hs'
+  perror("The table can only be crafted for highscore or speedrun mode") if !['hs', 'sr'].include?(board)
+
+  # Parse table type
   if avg
     if msg   =~ /\bpoint\b/i
       rtype  = :avg_points
@@ -983,7 +1019,8 @@ def send_table(event)
     rtype    = :rank
     header   = "scores"
   end
-  range = parse_range(msg, cool || star || rtype != :rank)
+  range = parse_range(msg, cool || star || ![:rank, :tied_rank].include?(rtype), rtype == :score)
+  frac &&= rtype == :score || mappack&.fractional
 
   # The range must make sense
   if !range[2]
@@ -992,7 +1029,7 @@ def send_table(event)
   end
 
   # Retrieve table (a matrix, first index is type, second index is tab)
-  table = player.table(rtype, ties, range[0], range[1], cool, star)
+  table = player.table(rtype, ties, range[0], range[1], cool, star, mappack, board, frac)
 
   # Construct table. If it's an average measure, we need to retrieve the
   # table of totals first to do the weighed averages.
@@ -1011,11 +1048,11 @@ def send_table(event)
     col = table[2][tab[0]] || 0
     [
       format_tab(tab[0].to_sym),
-      avg ? lvl : round_score(lvl),
-      avg ? ep  : round_score(ep),
-      avg ? col : round_score(col),
-      avg ? wavg([lvl, ep],      totals[i][1..2]) : round_score(lvl + ep),
-      avg ? wavg([lvl, ep, col], totals[i][1..3]) : round_score(lvl + ep + col)
+      avg || frac ? lvl : round_score(lvl),
+      avg || frac ? ep  : round_score(ep),
+      avg || frac ? col : round_score(col),
+      avg ? wavg([lvl, ep],      totals[i][1..2]) : frac ? lvl + ep       : round_score(lvl + ep),
+      avg ? wavg([lvl, ep, col], totals[i][1..3]) : frac ? lvl + ep + col : round_score(lvl + ep + col)
     ]
   }
 
@@ -1038,15 +1075,18 @@ def send_table(event)
   end
 
   # Send response
-  cool  = format_cool(cool)
-  star  = format_star(star)
-  ties  = format_ties(ties)
-  range = format_range(range[0], range[1], [:maxed, :maxable].include?(rtype))
-  name = "#{cool} #{range}#{star} #{header} #{ties}".squish
+  cool    = format_cool(cool)
+  star    = format_star(star)
+  ties    = format_ties(ties)
+  range   = format_range(range[0], range[1], [:maxed, :maxable].include?(rtype))
+  board   = mappack ? format_board(board) : ''
+  mappack = format_mappack(mappack)
+  frac    = format_frac(frac)
+  name    = "#{frac} #{cool} #{board} #{range}#{star} #{header} #{ties}"
   header = "#{name} table".squish
-  player = global ? "" : "#{player.format_name.strip}'s "
-  #event << "#{player} #{global ? header.capitalize : header} #{format_time}:".squish
-  event << format_block(make_table(rows, name.capitalize.pluralize))
+  player = global ? '' : "#{player.format_name.strip}'s"
+  event << format_header("#{player} #{header} #{mappack} #{format_time}")
+  event << format_block(make_table(rows, name.squish.capitalize.pluralize))
 rescue => e
   lex(e, "Error crafting table.", event: event)
 end
@@ -1228,7 +1268,7 @@ def send_analysis(event)
   ranks = parse_ranks(msg, -1)
   board = parse_board(msg, 'hs')
   h     = parse_highscoreable(event, mappack: true)
-  frac  = parse_frac(msg)
+  frac  = parse_frac(msg, mappack, board)
 
   # Integrity checks
   perror("Episodes and columns can't be analyzed yet.") if h.is_episode? || h.is_story?
@@ -1406,7 +1446,7 @@ def send_splits(event)
   board = parse_board(msg, 'hs')
   perror("Speedrun mode isn't available for Metanet levels yet.") if !mappack && board == 'sr'
   perror("Splits are only available for either highscore or speedrun mode.") if !['hs', 'sr'].include?(board)
-  frac = false # parse_frac(msg)
+  frac = false # parse_frac(msg, mappack, board)
   scores = ep.leaderboard(board, pluck: false, frac: frac)
   rank = parse_range(msg)[0]
   ntrace = board == 'hs' # Requires ntrace

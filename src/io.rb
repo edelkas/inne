@@ -1040,8 +1040,11 @@ def parse_initial(event)
 end
 
 # Parse interpolated scores
-def parse_frac(msg)
-  !!msg[/\bfrac(tion(al)?)?\b/i] || !!msg[/\binterpolated?\b/i]
+def parse_frac(msg, mappack = nil, board = 'hs')
+  explicit = !!msg[/\bfrac(tion(al)?)?\b/i] || !!msg[/\binterpolated?\b/i]
+  implicit = mappack&.fractional
+  conditions = ['hs', 'sr'].include?(board)
+  (explicit || implicit) && conditions
 end
 
 # Scores that are better than the dev's

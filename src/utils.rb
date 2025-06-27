@@ -1592,25 +1592,10 @@ def find_max_type(rank, type, tabs, mappack = nil, board = 'hs', dev = false, fr
   when :clean
     0.0
   when :score
-    # Prepare fields
-    klass  = !mappack ? Score  : MappackScore.where(mappack: mappack)
-    sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
-    sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
-    tabs   = (tabs.empty? ? TABS_SOLO : tabs) - TABS_SECRET if !type.include?(Levelish)
-    count  = query.count
-
-    # Compute community total score
-    query  = klass.joins(!mappack && frac ? "INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`" : '')
-                  .where(highscoreable_type: mappack ? MappackLevel : Level)
-                  .where(!tabs.empty? ? { tab: tabs } : {})
-                  .group(:highscoreable_id)
-                  .pluck(board == 'hs' ? "MAX(#{sfield})" : "MIN(#{sfield})")
-                  .sum
-
-    # Adjust score
-    size   = TYPES[type.vanilla.to_s][:size]
-    query -= count * (size - 1) * 90.0 if board == 'hs'
-    mappack && board == 'sr' && !frac ? query.to_i : query.to_f
+    total, count = Scorish.total_scores(Level, tabs, type.include?(Levelish), !type.include?(Storyish), mappack, board, frac)
+    size = TYPES[type.vanilla.to_s][:size]
+    total -= count * (size - 1) * 90.0 / size if board == 'hs'
+    mappack && board == 'sr' && !frac ? total.to_i : total.to_f
   else
     query.count
   end

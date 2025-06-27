@@ -1573,6 +1573,39 @@ module Scorish
     line
   end
 
+  def self.total_scores(type, tabs, secrets, x = true, mappack = nil, board = 'hs', frac = false)
+    bench(:start) if BENCHMARK
+    # Prepare fields
+    klass  = !mappack ? Score : MappackScore.where(mappack: mappack)
+    sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
+    sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
+    tabs   = (tabs.empty? ? TABS_SOLO : tabs) - TABS_SECRET if type.include?(Levelish) && !secrets
+
+    # Ignore X row (assuming it's at the end of the tab)
+    size = TYPES[type.vanilla.to_s][:size]
+    hfield = !mappack ? '`scores`.`highscoreable_id`' : 'MOD(`mappack_scores`.`highscoreable_id`, 20000)'
+    sql_ranges = TABS_NEW.select{ |k, v| v[:mode] == MODE_SOLO && !v[:secret] && v[:x] }
+                        .map{ |k, v|
+                          [
+                            (v[:start] + 5.0 * v[:size] / 6).to_i / size,
+                            (v[:start] + v[:size] - 1).to_i / size
+                          ]
+                        }.map{ |s, e|
+                          "(#{hfield} NOT BETWEEN #{s} AND #{e})"
+                        }.join(' AND ')
+
+    # Compute community total score
+    total = klass.joins(!mappack && frac ? "INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`" : '')
+                  .where(highscoreable_type: mappack ? type.mappack : type.vanilla)
+                  .where(!tabs.empty? ? { tab: tabs } : {})
+                  .where(!x ? sql_ranges : '')
+                  .group(:highscoreable_id)
+                  .pluck(board == 'hs' ? "MAX(#{sfield})" : "MIN(#{sfield})")
+
+    bench(:step) if BENCHMARK
+    [frac ? total.sum : round_score(total.sum), total.count]
+  end
+
   def format(name_padding = DEFAULT_PADDING, score_padding = 0, cools = true, mode = 'hs', t_rank = nil)
     h = self.as_json
     h['name'] = player.print_name if !h.key?('name')
@@ -1890,17 +1923,6 @@ class Score < ActiveRecord::Base
     p.sort_by{ |id, c| ranking == :avg_rank ? c : -c }
      .reject{ |id, c| c == 0 unless [:avg_rank, :avg_lead].include?(ranking) }
      .map{ |id, c| [Player.find(id).name, c] }
-  end
-
-  def self.total_scores(type, tabs, rank, secrets)
-    bench(:start) if BENCHMARK
-    tabs = [:SI, :S, :SL, :SS, :SU, :SS2] if tabs.empty?
-    tabs = tabs - [:SS, :SS2] if !secrets
-    ret = self.where(highscoreable_type: type.to_s, tab: tabs, rank: rank)
-              .pluck('SUM(score)', 'COUNT(score)')
-              .map{ |score, count| [round_score(score.to_f), count.to_i] }
-    bench(:step) if BENCHMARK
-    ret.first
   end
 
   # Tally levels by count of scores under certain conditions
@@ -2387,12 +2409,13 @@ class Player < ActiveRecord::Base
     range_ns(r1, r2, type, tabs, ties).where(star: !missing)
   end
 
-  def score_counts(tabs, ties)
+  def score_counts(tabs, ties, mappack = nil, board = 'hs')
     bench(:start) if BENCHMARK
+    rankf = "`#{ties ? 'tied_' : ''}rank#{mappack ? '_' + board : ''}`"
     counts = {
-      levels:   scores_by_type_and_tabs(Level,   tabs).group(ties ? :tied_rank : :rank).order(ties ? :tied_rank : :rank).count(:id),
-      episodes: scores_by_type_and_tabs(Episode, tabs).group(ties ? :tied_rank : :rank).order(ties ? :tied_rank : :rank).count(:id),
-      stories:  scores_by_type_and_tabs(Story,   tabs).group(ties ? :tied_rank : :rank).order(ties ? :tied_rank : :rank).count(:id)
+      levels:   scores_by_type_and_tabs(Level,   tabs, nil, mappack, board).group(rankf).order(rankf).count(:id),
+      episodes: scores_by_type_and_tabs(Episode, tabs, nil, mappack, board).group(rankf).order(rankf).count(:id),
+      stories:  scores_by_type_and_tabs(Story,   tabs, nil, mappack, board).group(rankf).order(rankf).count(:id)
     }
     bench(:step) if BENCHMARK
     counts
@@ -2525,13 +2548,16 @@ class Player < ActiveRecord::Base
     ret
   end
 
-  def table(rank, ties, a, b, cool = false, star = false)
-    ttype = ties ? 'tied_rank' : 'rank'
+  def table(rank, ties, a, b, cool = false, star = false, mappack = nil, board = 'hs', frac = false)
+    rankf  = !mappack ? 'rank' : "rank_#{board}"
+    trankf = "tied_#{rankf}"
+    ttype = ties ? trankf : rankf
+    klass = !mappack ? scores : mappack_scores.where(mappack: mappack).where.not(rankf => nil)
     [Level, Episode, Story].map do |type|
       if ![:maxed, :maxable].include?(rank)
-        queryBasic = scores.where(highscoreable_type: type)
-                          .where(!cool.blank? ? 'cool = 1' : '')
-                          .where(!star.blank? ? 'star = 1' : '')
+        queryBasic = klass.where(highscoreable_type: mappack ? type.mappack : type)
+                          .where(!cool.blank? && !mappack ? '`cool` = 1' : '')
+                          .where(!star.blank? && !mappack ? '`star` = 1' : '')
         query = queryBasic.where(!a.blank? ? "`#{ttype}` >= #{a}" : '')
                           .where(!b.blank? ? "`#{ttype}` < #{b}" : '')
                           .group(:tab)
@@ -2540,31 +2566,37 @@ class Player < ActiveRecord::Base
       when :rank
         query.count(:id).to_h
       when :tied_rank
-        scores1 = queryBasic.where("`tied_rank` >= #{a} AND `tied_rank` < #{b}")
+        scores1 = queryBasic.where(!a.blank? ? "`#{trankf}` >= #{a}" : '')
+                            .where(!b.blank? ? "`#{trankf}` < #{b}" : '')
                             .group(:tab)
                             .count(:id)
                             .to_h
-        scores2 = queryBasic.where("`rank` >= #{a} AND `rank` < #{b}")
+        scores2 = queryBasic.where(!a.blank? ? "`#{rankf}` >= #{a}" : '')
+                            .where(!b.blank? ? "`#{rankf}` < #{b}" : '')
                             .group(:tab)
                             .count(:id)
                             .to_h
-        scores1.map{ |tab, count| [tab, count - scores2[tab]] }.to_h
+        scores1.map{ |tab, count| [tab, count - scores2[tab].to_i] }.to_h
       when :points
         query.sum("20 - `#{ttype}`").to_h
       when :score
-        query.sum(:score).to_h
+        sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
+        sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
+        query.joins(!mappack && frac ? "INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`" : '')
+             .where(!mappack && frac ? { archives: { highscoreable_type: type } } : {} )
+             .sum(sfield).to_h
       when :avg_points
         query.average("20 - `#{ttype}`").to_h
       when :avg_rank
         query.average(ttype).to_h
       when :maxed
-        Highscoreable.ties(type, [], nil, true, false)
-                 .group_by{ |t| t[0].split("-")[0] }
+        Highscoreable.ties(type, [], nil, true, false, mappack, board)
+                 .group_by{ |t| t[0].split("-")[mappack ? 1 : 0] }
                  .map{ |tab, scores| [formalize_tab(tab), scores.size] }
                  .to_h
       when :maxable
-        Highscoreable.ties(type, [], nil, false, false)
-                 .group_by{ |t| t[0].split("-")[0] }
+        Highscoreable.ties(type, [], nil, false, false, mappack, board)
+                 .group_by{ |t| t[0].split("-")[mappack ? 1 : 0] }
                  .map{ |tab, scores| [formalize_tab(tab), scores.size] }
                  .to_h
       else
