@@ -444,7 +444,7 @@ def send_scores(event, map = nil, ret = false)
   board   = 'hs' if !mappack && board == 'dual'
   full    = parse_full(msg)
   cheated = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
-  frac    = parse_frac(msg, h&.mappack, board) && h.is_level?
+  frac    = parse_frac(msg, mappack ? h&.mappack : nil, board) && h.is_level?
 
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
   res     = ""
@@ -1268,7 +1268,7 @@ def send_analysis(event)
   ranks = parse_ranks(msg, -1)
   board = parse_board(msg, 'hs')
   h     = parse_highscoreable(event, mappack: true)
-  frac  = parse_frac(msg, mappack, board)
+  frac  = parse_frac(msg, h.is_mappack? ? h.mappack : nil, board)
 
   # Integrity checks
   perror("Episodes and columns can't be analyzed yet.") if h.is_episode? || h.is_story?
