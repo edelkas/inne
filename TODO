@@ -113,7 +113,6 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 
 \\ ------------------------ mappacks -----------------------
 
-- Add hs scores around mine in 2nd leaderboard.
 - Add outte command to choose what to put in the 2nd/3rd leaderboard (toggle between hs, sr, g--, etc, with different rank ranges too)
 
 \\ ------------------------ frac scores -----------------------

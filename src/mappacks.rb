@@ -374,13 +374,32 @@ class Mappack < ActiveRecord::Base
       return
     end
 
-    # Write scores (framecount assumes no gold)
+    # Write level scores (framecount assumes no gold)
     count = maps.size
     maps.each_with_index{ |m, i|
-      dbg("Adding score #{i + 1} / #{count}...", pad: true, newline: false)
+      dbg("Adding level score #{i + 1} / #{count}...", pad: true, newline: false)
       framecount = 90 * 60 - (scores[i] * 60.0).round + 1
       m.update(dev_hs: scores[i], dev_sr: framecount)
     }
+
+    # Write episode scores
+    count = episodes.size
+    episodes.each_with_index{ |m, i|
+      dbg("Adding episode score #{i + 1} / #{count}...", pad: true, newline: false)
+      framecount = m.levels.sum(:dev_sr)
+      score = [round_score(90 - (framecount - 5) / 60.0), 0].max
+      m.update(dev_hs: score, dev_sr: framecount)
+    }
+
+    # Write story scores
+    count = stories.size
+    stories.each_with_index{ |m, i|
+      dbg("Adding story score #{i + 1} / #{count}...", pad: true, newline: false)
+      framecount = m.levels.sum(:dev_sr)
+      score = [round_score(90 - (framecount - 25) / 60.0), 0].max
+      m.update(dev_hs: score, dev_sr: framecount)
+    }
+
     Log.clear
   rescue => e
     lex(e, "Failed to read scores file for mappack #{verbatim(code)}")

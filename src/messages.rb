@@ -18,9 +18,9 @@ def send_list(event, file = true, missing = false, third = false)
   msg     = msg.remove!(player.name)
   mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
-  type    = parse_type(msg)
-  tabs    = parse_tabs(msg)
   dev     = parse_dev(msg) && !mappack.nil? && ['hs', 'sr'].include?(board)
+  type    = parse_type(msg, default: dev ? Level : nil)
+  tabs    = parse_tabs(msg)
   cool    = mappack.nil? ? parse_cool(msg) : false
   star    = mappack.nil? ? parse_star(msg) : false
   range   = parse_range(msg, cool || star || missing || dev, dev)
@@ -153,7 +153,7 @@ def send_rankings(event, page: nil, type: nil, tab: nil, rtype: nil, ties: nil)
     'score',
     'G++',
     'G--'
-  ].include?(rtype) # default type is Level
+  ].include?(rtype) || dev # default type is Level
   type  = parse_type(msg, type: type, multiple: true, initial: initial, default: def_level ? Level : nil)
   frac = parse_frac(msg, mappack, board)
   frac &&= ['average_top1_lead', 'score'].include?(rtype)
