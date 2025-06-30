@@ -487,7 +487,7 @@ module MappackHighscoreable
       pluck:      true,  # Pluck or keep Rails relation
       aliases:    false, # Use player names or display names
       metanet_id: nil,   # Player making the request if coming from CLE
-      page:       0,     # Index of page to fetch
+      offset:     0,     # Starting rank of the board
       frac:       false  # Include fractional field
     )
     m = 'hs' if !['hs', 'sr', 'gm'].include?(m)
@@ -536,20 +536,29 @@ module MappackHighscoreable
     end
 
     # Paginate (offset and truncate), fetch player names, and convert to hash
-    board = board.offset(20 * page) if page > 0
+    board = board.offset(offset) if offset > 0
     board = board.limit(truncate) if truncate > 0
     return board if !pluck
-    board.joins("INNER JOIN players ON players.id = player_id")
+    board.joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
          .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
   end
 
   # Return scores in JSON format expected by N++
-  def get_scores(qt = 0, metanet_id = nil, page: 0, frac: false)
-    # Fetch leaderboard
+  def get_scores(qt = 0, metanet_id = nil, frac: false)
+    # Compute offset
     m = qt == 2 ? 'sr' : 'hs'
+    offset = 0
+    if qt == 1 && metanet_id
+      s = scores.where(metanet_id: metanet_id).where.not("rank_#{m}" => nil).first
+      r = s ? s["rank_#{m}"] : nil
+      n = completions
+      offset = [0, [r - 10, n - 20].min].max if r && n && r < n
+    end
+
+    # Fetch leaderboard
     dev_score = m == 'hs' ? dev_hs : dev_sr
     count = dev_score ? 19 : 20
-    board = leaderboard(m, truncate: count, metanet_id: metanet_id, page: page, frac: frac)
+    board = leaderboard(m, truncate: count, metanet_id: metanet_id, offset: offset, frac: frac)
     res = {}
 
     # Adjust scores
@@ -579,7 +588,7 @@ module MappackHighscoreable
     res["scores"] = board.take(20).each_with_index.map{ |s, i|
       {
         "score"     => (1000 * s["score_#{m}"]).round,
-        "rank"      => 20 * page + i,
+        "rank"      => offset + i,
         "user_id"   => s['metanet_id'].to_i,
         "user_name" => s['name'].to_s.remove("\\"),
         "replay_id" => pack_replay_id(i, s['id'].to_i)
