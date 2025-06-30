@@ -856,6 +856,7 @@ def send_worst(event, worst = true)
   full    = parse_full(msg)
   mappack = parse_mappack(event: event)
   board   = parse_board(msg, 'hs')
+  frac    = parse_frac(msg, mappack, board)
   agd     = !!msg[/\bagd?\b/i] || !!msg[/\bg\+\+(\s|$)/i]
   perror("Metanet levels only support highscore mode.") if (board != 'hs' || agd) && !mappack
 
@@ -863,13 +864,13 @@ def send_worst(event, worst = true)
   if agd || board == 'gm'
     list = player.gold_gaps(type, tabs, worst, full, mappack, agd)
   else
-    list = player.score_gaps(type, tabs, worst, full, mappack, board)
+    list = player.score_gaps(type, tabs, worst, full, mappack, board, frac)
   end
   board = 'gp' if agd
-  fmt  = board != 'hs' ? 'd' : '.3f'
+  fmt  = board == 'hs' || frac ? '.3f' : 'd'
   pad1 = list.map{ |level, gap| level.length }.max
-  pad2 = list.map{ |level, gap| gap }.max.to_i.to_s.length + (board != 'hs' ? 0 : 4)
-  list = list.map{ |level, gap| "%-*s - %*#{fmt}" % [pad1, level, pad2, round_score(gap)] }.join("\n")
+  pad2 = list.map{ |level, gap| gap }.max.to_i.to_s.length + (fmt == 'd' ? 0 : 4)
+  list = list.map{ |level, gap| "%-*s - %*#{fmt}" % [pad1, level, pad2, frac ? gap : round_score(gap)] }.join("\n")
 
   # Send response
   adverb  = worst ? 'most' : 'least'
@@ -878,7 +879,8 @@ def send_worst(event, worst = true)
   type    = format_type(type).downcase
   mappack = format_mappack(mappack)
   board   = format_board(board).pluralize
-  event << format_header("#{adverb} improvable #{tabs} #{type} #{board} #{mappack} for #{player.print_name}")
+  frac    = format_frac(frac)
+  event << format_header("#{adverb} improvable #{frac} #{tabs} #{type} #{board} #{mappack} for #{player.print_name}")
   full ? send_file(event, list, "#{worst}.txt") : event << format_block(list)
 rescue => e
   lex(e, "Error getting worst scores.", event: event)

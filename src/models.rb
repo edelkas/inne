@@ -2437,26 +2437,29 @@ class Player < ActiveRecord::Base
 
   # Return highscoreables with the biggest/smallest differences between the player's
   # score and the 0th.
-  def score_gaps(type, tabs, worst = true, full = false, mappack = nil, board = 'hs')
+  def score_gaps(type, tabs, worst = true, full = false, mappack = nil, board = 'hs', frac = false)
     # Prepare params
     type = ensure_type(normalize_type(type))
     type = type.mappack if mappack
     tname = type.table_name
-    sfield = mappack ? "score_#{board}" : 'score'
+    sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
+    sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
     rfield = mappack ? "rank_#{board}" : 'rank'
     klass = mappack ? MappackScore.where(mappack: mappack).where.not(rfield.to_sym => nil) : Score
+    tname2 = klass.table_name
     klass = klass.where(tab: tabs) unless tabs.empty?
-    diff = "ABS(MAX(`#{sfield}`) - MIN(`#{sfield}`))"
-    diff += '/ 60.0' if mappack && board == 'hs'
+    diff = "ABS(MAX(#{sfield}) - MIN(#{sfield}))"
 
     # Calculate gaps
     bench(:start) if BENCHMARK
-    list = klass.joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `highscoreable_id`")
+    list = klass.joins(!mappack && frac ? "INNER JOIN `archives` ON `archives`.`replay_id` = `scores`.`replay_id`" : '')
+                .where(!mappack && frac ? { archives: { highscoreable_type: type } } : {} )
+                .joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `#{tname2}`.`highscoreable_id`")
                 .where(highscoreable_type: type)
-                .where("`#{rfield}` = 0 OR `player_id` = #{self.id}")
+                .where("`#{rfield}` = 0 OR `#{tname2}`.`player_id` = #{self.id}")
                 .group(:highscoreable_id)
                 .having('`diff` > 0')
-                .order("`diff` #{worst ? 'DESC' : 'ASC'}")
+                .order("`diff` #{worst ? 'DESC' : 'ASC'}", :highscoreable_id)
                 .limit(full ? nil : NUM_ENTRIES)
                 .pluck(:name, "#{diff} AS `diff`")
     bench(:step) if BENCHMARK
