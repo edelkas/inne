@@ -3371,6 +3371,129 @@ module Twitch extend self
   end
 end
 
+# Handle Speedrun.com API
+module Speedrun extend self
+
+  # Basic API info
+  API_ROOT    = 'https://www.speedrun.com/api'
+  API_VERSION = 1
+
+  # API routes we use
+  ROUTE_RUNS = 'runs'
+
+  # N series info
+  SERIES_ID = 'g45kx54q'
+  GAMES = {
+    'm1mjnk12' => 'N++',
+    '268wr76p' => 'N+',
+    'v1ponv46' => 'N CE',
+    'y654p8de' => 'N v1.4',
+    'm1mokp62' => 'N v2.0'
+  }
+
+  def uri(route, params)
+    route = route.join('/') if route.is_a?(Array)
+    query = params.map{ |k, v| "#{k}=#{v}" }.join('&')
+    URI("%s/v%d/%s?%s" % [API_ROOT, API_VERSION, route, query])
+  end
+
+  def request(route, params)
+    headers = {
+      'User-Agent' => "inne++ Discord Bot (#{GITHUB_LINK}) discordrb/%s Ruby/%s Rails/%s" % [Discordrb::VERSION, RUBY_VERSION, ActiveRecord.version]
+    }
+    res = Net::HTTP.get_response(uri(route, params))
+    res.is_a?(Net::HTTPSuccess) ? JSON.parse(res.body) : nil
+  end
+
+  def parse_player(data)
+    return { id: nil, name: data['name'] } if data['rel'] == 'guest'
+    limbo = !data['location']
+    {
+      id:           data['id'],
+      name:         data['names']['international'],
+      uri:          data['weblink'],
+      country:      !limbo ? data['location']['country']['names']['international'] : nil,
+      country_code: !limbo ? data['location']['country']['code'] : nil,
+      role:         data['role'],
+      date:         data['signup'] ? Time.parse(data['signup']) : nil
+    }
+  end
+
+  def parse_category(data)
+    {
+      id:          data['id'],
+      name:        data['name'],
+      uri:         data['weblink'],
+      description: data['rules']
+    }
+  end
+
+  def parse_run(data)
+    # Parse embedded player resource, if present
+    if data['players'].is_a?(Hash) && data['players']['data']
+      players = data['players']['data'].map{ |p| parse_player(p) }
+    else
+      players = data['players'].map{ |p| p.symbolize_keys }
+    end
+
+    # Parse embedded category resource, if present
+    if data['category'].is_a?(Hash) && data['category']['data']
+      category = parse_category(data['category']['data'])
+    else
+      category = { id: data['category'] }
+    end
+
+    {
+      game: GAMES[data['game']],
+      uri:  data['weblink'],
+
+      # Times
+      rta: data['times']['realtime_t'].to_i,
+      igt: data['times']['ingame_t'].to_i,
+
+      # Status
+      verified:      data['status']['status'] == 'verified',
+      rejected:      data['status']['status'] == 'rejected',
+      reject_reason: data['status']['reason'],
+      examiner:      data['status']['examiner'],
+
+      # Dates
+      date:           (Time.parse(data['date']) rescue nil),
+      date_submitted: (Time.parse(data['submitted']) rescue nil),
+      date_verified:  (Time.parse(data['status']['verify-date']) rescue nil),
+
+      # Additional embedded resources
+      players:  players,
+      category: category
+    }
+  end
+
+  # Fetch latest runs and check for new ones
+  # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
+  def get_runs(n = 10)
+    runs = []
+    GAMES.map do |id, name|
+      _runs = request(ROUTE_RUNS, { game: id, max: n, orderby: 'submitted', direction: 'desc', embed: 'category,players' })
+      next if !_runs
+      _runs['data'].each{ |run| runs << parse_run(run) }
+    end
+    runs.sort_by{ |run| run[:date_submitted] }.reverse.take(n)
+  end
+
+  # Format latest runs
+  # TODO: Add header, fix padding, add platform
+  def format_runs(runs)
+    runs.map{ |run|
+      names = run[:players].map{ |p| p[:name] }.join(', ')
+      rta   = format_timespan(run[:rta])
+      igt   = format_timespan(run[:igt])
+      date  = run[:date_submitted].strftime('%Y/%m/%d') rescue 'Unknown'
+      "%-6.6s %-12.12s %-24.24s %12.12s %12.12s %s" % [run[:game], run[:category][:name], names, rta, igt, date]
+    }.join("\n")
+  end
+
+end
+
 # This class logs all messages sent by outte, and who it is in response to
 # That way, the user may request to delete the message later by any mechanism
 # we decide to devise

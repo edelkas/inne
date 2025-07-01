@@ -1233,6 +1233,7 @@ end
 
 # Format a timespan in seconds as a string of the form: Xd Xh Xm Xs.
 # Only the relevant figures will appear. The precision can be limited.
+# TODO: Add ms, and parameter to change "now" to "0s" or something
 def format_timespan(time, prec = -1)
   return '' unless time.is_a?(Numeric)
   levels = [

@@ -42,6 +42,8 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event)
+  runs = Speedrun.format_runs(Speedrun.get_runs)
+  event << "Latest submitted N speedruns:\n" + format_block(runs)
 end
 
 def send_color_test(event)
