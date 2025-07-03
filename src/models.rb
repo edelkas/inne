@@ -3654,7 +3654,15 @@ module NPPServer extend self
       res.status = 200
       res.body = body
     end
-    dbg('CLE Response: ' + (body || 'No body')) if $log[:socket] && (!body || body.encoding.name == 'UTF-8')
+
+    # Log response body in terminal (plain text) or file (binary)
+    return if !$log[:socket]
+    if !body || body.encoding.name == 'UTF-8'
+      dbg('CLE Response: ' + (body || 'No body'))
+    else
+      timestamp = Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')
+      File.binwrite(File.join(DIR_LOGS, 'res_' + timestamp), body)
+    end
   end
 
   def fwd(req, res)
