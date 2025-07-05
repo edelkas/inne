@@ -3,6 +3,8 @@
 # sensitive tasks such as giving system info, sanitizing the database, etc.
 # See the method "respond_special" at the end to understand the flow.
 
+require 'gruff'
+
 # Clean database (remove cheated archives, duplicates, orphaned demos, etc)
 # See Archive::sanitize for more details
 def sanitize_archives(event)
@@ -44,6 +46,96 @@ end
 def send_test(event)
   runs = Speedrun.format_runs(Speedrun.get_runs)
   event << "Latest submitted N speedruns:\n" + format_block(runs)
+end
+
+def send_dday_stats
+  maps = Userlevel.joins("INNER JOIN `userlevel_authors` ON `userlevel_authors`.`id` = `author_id`")
+                  .where(date: Time.utc(2025, 7, 4) .. Time.utc(2025, 7, 4, 23, 59, 59))
+  data = maps.pluck(:date, :author_id, '`name`')
+  count = data.size
+  times = data.group_by{ |date, author, name| date.hour }
+              .map{ |hour, list| list.count }
+  sums = times.inject([0]){ |memo, count| memo << memo.last.to_i + count }
+  authors_all = data.group_by{ |date, author, name| author }
+                    .map{ |author, list| [list[0][2].empty? ? 'ID:' + list[0][1].to_s : list[0][2], list.count] }
+                    .sort_by{ |name, count| -count }
+  authors = authors_all.take(10)
+  authors.prepend(["Others", authors_all.map(&:last).sum - authors.map(&:last).sum])
+  authors_by_date_all = data.group_by{ |date, author, name| author }
+                        .map{ |author, list|
+                          by_hour = 24.times.map{ |h| [h, 0] }.to_h
+                          list.each{ |date, author, name| by_hour[date.hour] += 1 }
+                          [list[0][2].empty? ? 'ID:' + list[0][1].to_s : list[0][2], by_hour]
+                        }.sort_by{ |author, list| -list.values.sum }
+  authors_by_date = authors_by_date_all.take(10)
+  by_hour = 24.times.map{ |h| [h, 0] }.to_h
+  authors_by_date_all[10..].each{ |author, list|
+    list.each{ |hour, count| by_hour[hour] += count }
+  }
+  authors_by_date.prepend(["Others", by_hour])
+  authors_cum = authors_by_date.map{ |name, list|
+    sums = list.inject([0]){ |memo, (hour, count)| memo << memo.last.to_i + count }
+    [name, sums]
+  }
+  n = 8
+
+  # Maps per hour
+  g = Gruff::Line.new
+  g.title = "Maps per hour (#{count} total)"
+  g.data('Maps', times)
+  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
+  g.show_vertical_markers = true
+  g.marker_x_count = n
+  g.hide_dots = true
+  g.hide_legend = true
+  g.write('rate.png')
+
+  # Cumulative maps per hour
+  g = Gruff::Line.new
+  g.title = "Cumulative maps per hour (#{count} total)"
+  g.data('Maps', sums)
+  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
+  g.show_vertical_markers = true
+  g.marker_x_count = n
+  g.hide_dots = true
+  g.hide_legend = true
+  g.write('cum.png')
+
+  # Histogram by author
+  g = Gruff::Histogram.new
+  g.title = 'Histogram Graph'
+  g.labels = { 0 => '' }
+  authors.each{ |name, count| g.data(name.to_sym, [count]) }
+  #g.write('bar.png')
+
+  # Pie chart
+  g = Gruff::Pie.new
+  g.title = "Author distribution (100% total)"
+  authors.each{ |name, count| g.data(name.to_sym, [count]) }
+  g.write('pie.png')
+
+  # Stacked area
+  g = Gruff::StackedArea.new
+  g.title = "Author maps per hour (#{count} total)"
+  authors_by_date.each{ |name, list| g.data(name.to_sym, list.values) }
+  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
+  g.write('stacked_rate.png')
+
+  # Cumulative stacked area
+  g = Gruff::StackedArea.new
+  g.title = "Cumulative author maps per hour (#{count} total)"
+  authors_cum.each{ |name, list| g.data(name.to_sym, list) }
+  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
+  g.write('stacked_cum.png')
+
+  # Format message
+  send_file(event, authors_all.map{ |name, count| "%16s - %3d" % [name, count] }.join("\n"))
+  #send_file(event, File.binread('stacked_cum.png'), 'stacked_cum.png', true)
+  #send_file(event, File.binread('stacked_rate.png'), 'stacked_rate.png', true)
+  #send_file(event, File.binread('pie.png'), 'pie.png', true)
+  #send_file(event, File.binread('bar.png'), 'bar.png', true)
+  #send_file(event, File.binread('rate.png'), 'rate.png', true)
+  #send_file(event, File.binread('cum.png'), 'cum.png', true)
 end
 
 def send_color_test(event)
@@ -1091,6 +1183,7 @@ def respond_special(event)
   cmd.downcase!
   action_inc('special_commands')
 
+  return send_dday_stats(event)          if cmd == 'dday_stats'
   return send_debug(event)               if cmd == 'debug'
   return send_delete_score(event)        if cmd == 'delete_score'
   return fill_gold_counts(event)         if cmd == 'fill_gold'
