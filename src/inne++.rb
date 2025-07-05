@@ -205,6 +205,7 @@ end
 
 # Connect to the database
 def connect_db
+  Time.zone = 'UTC'
   ActiveRecord::Base.establish_connection($config)
   GlobalProperty.status_init
   log("Connected to database")
