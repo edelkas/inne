@@ -44,8 +44,8 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event)
-  runs = Speedrun.format_runs(Speedrun.get_runs)
-  event << "Latest submitted N speedruns:\n" + format_block(runs)
+  runs = Speedrun.format_table(Speedrun.get_runs)
+  event << "Latest submitted speedruns:\n" + format_block(runs)
 end
 
 def send_dday_stats

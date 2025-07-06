@@ -3381,6 +3381,21 @@ module Speedrun extend self
   # API routes we use
   ROUTE_RUNS = 'runs'
 
+  # Map common platform IDs to names. We still fetch the platform resource, but
+  # this allows to use custom abbreviated names which are not in the API.
+  PLATFORMS = {
+    '7g6m8erk' => 'DS',
+    'wxeo3zer' => 'DSi',
+    '8gej2n93' => 'PC',
+    'nzelkr6q' => 'PS4',
+    'nzeljv9q' => 'PS4 Pro',
+    '5negk9y7' => 'PSP',
+    '7m6ylw9p' => 'Switch',
+    '3167lw9q' => 'Switch 2',
+    'n568oevp' => 'Xbox 360',
+    'o7e2mx6w' => 'Xbox One'
+  }
+
   # N series info
   SERIES_ID = 'g45kx54q'
   GAMES = {
@@ -3429,8 +3444,17 @@ module Speedrun extend self
       id:          data['id'],
       name:        data['name'],
       uri:         data['weblink'],
-      description: data['rules']
+      description: data['rules'],
+      il:          data['type'] == 'per-level'
     }
+  end
+
+  def parse_variables(data, values)
+    value_map = data.map{ |var|
+      [var['id'], var['values']['values'].map{ |id, val| [id, val['label']] }.to_h]
+    }.to_h
+    name_map = data.map{ |var| [var['id'], var['name']] }.to_h
+    values.map{ |var_id, val_id| [name_map[var_id], value_map[var_id][val_id]] }.to_h
   end
 
   def parse_run(data)
@@ -3438,19 +3462,49 @@ module Speedrun extend self
     if data['players'].is_a?(Hash) && data['players']['data']
       players = data['players']['data'].map{ |p| parse_player(p) }
     else
-      players = data['players'].map{ |p| p.symbolize_keys }
+      players = data['players'].map{ |p| { id: p['id'], name: '-' } }
     end
 
-    # Parse embedded category resource, if present
+    # Parse embedded category and variables resources, if present
     if data['category'].is_a?(Hash) && data['category']['data']
       category = parse_category(data['category']['data'])
+      variables = data['category']['data']['variables']
+      variables = variables ? parse_variables(variables['data'], data['values']) : {}
     else
-      category = { id: data['category'] }
+      category = { id: data['category'], name: '-', il: nil }
+      variables = {}
+    end
+
+    # Parse embedded level resource, if present
+    if data['level'].is_a?(Hash) && data['level']['data']
+      level = data['level']['data']
+      level = level.blank? ? '-' : level['name']
+    else
+      level = '-'
+    end
+
+    # Parse embedded platform resource, if present
+    if PLATFORMS.key?(data['system']['platform'])
+      platform = PLATFORMS[data['system']['platform']]
+    elsif data['platform']
+      platform = data['platform']['data']['name']
+    else
+      platform = '-'
+    end
+
+    # Parse video resource
+    if !data['videos'].blank?
+      links = data['videos']['links']
+      video = !links.empty? ? links[0]['uri'] : nil
+    else
+      video = nil
     end
 
     {
-      game: GAMES[data['game']],
-      uri:  data['weblink'],
+      game:     GAMES[data['game']],
+      uri:      data['weblink'],
+      emulated: data['system']['emulated'],
+      video:    video,
 
       # Times
       rta: data['times']['realtime_t'],
@@ -3468,36 +3522,66 @@ module Speedrun extend self
       date_verified:  (Time.parse(data['status']['verify-date']) rescue nil),
 
       # Additional embedded resources
-      players:  players,
-      category: category
+      players:   players,
+      category:  category,
+      level:     level,
+      platform:  platform,
+      variables: variables
     }
   end
 
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
-  def get_runs(n = 10)
+  def get_runs(count: 10, page: 0, cache: true)
     runs = []
     GAMES.map do |id, name|
-      params = { game: id, max: n, orderby: 'submitted', direction: 'desc', embed: 'category,players' }
+      embeds = 'category.variables,players,platform,level'
+      params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: embeds }
       key = "#{ROUTE_RUNS}:#{params.to_json}"
-      _runs = @@cache.get(key) || request(ROUTE_RUNS, params)
+      _runs = cache && @@cache.get(key) || request(ROUTE_RUNS, params)
       next if !_runs
       @@cache.add(key, _runs)
       JSON.parse(_runs)['data'].each{ |run| runs << parse_run(run) }
     end
-    runs.sort_by{ |run| run[:date_submitted] }.reverse.take(n)
+    runs.sort_by{ |run| run[:date_submitted] }.reverse.take(count)
   end
 
   # Format latest runs
-  # TODO: Add header, fix padding, add platform and status...
-  def format_runs(runs)
-    runs.map{ |run|
-      names = run[:players].map{ |p| p[:name] }.join(', ')
-      rta   = format_timespan(run[:rta], ms: true, iso: true)
-      igt   = format_timespan(run[:igt], ms: true, iso: true)
-      date  = run[:date_submitted].strftime('%Y/%m/%d') rescue 'Unknown'
-      "%-6.6s %-12.12s %-24.24s %12.12s %12.12s %s" % [run[:game], run[:category][:name], names, rta, igt, date]
-    }.join("\n")
+  def format_table(runs, color: true, emoji: false)
+    colors = []
+    runs.map!{ |run|
+      game   = run[:game]
+      system = run[:platform]
+      cat    = run[:category][:name]
+      il     = run[:category][:il]
+      il     = il ? 'IL' : il.nil? ? '?' : 'RTA'
+      type   = run[:level] != '-' ? run[:level] : run[:variables].empty? ? '-' : run[:variables].values.join(', ')
+      names  = run[:players].map{ |p| p[:name] }.join(', ')
+      rta    = format_timespan(run[:rta], ms: true, iso: true)
+      igt    = format_timespan(run[:igt], ms: true, iso: true)
+      date   = run[:date_submitted].strftime('%Y/%m/%d') rescue 'Unknown'
+      status = run[:verified] ? 'VER' : run[:rejected] ? 'REJ' : 'NEW'
+      status += run[:verified] ? ' ✅' : run[:rejected] ? ' ❌' : ' 💥' if emoji
+      colors << (run[:verified] ? ANSI::GREEN : run[:rejected] ? ANSI::RED : ANSI::YELLOW)
+      [game, system, il, cat, type, names, rta, igt, date, status]
+    }
+    header = ["Game", "System", "Type", "Category", "Class", "Players", "RTA", "IGT", "Date", "Status"]
+    align = ['-', '-', '-', '-', '-', '-', '', '', '-', '']
+    max_padding = [6, 8, 4, 32, 32, 32, 12, 12, 10, 12]
+    padding = header.map(&:length)
+    padding = runs.transpose.lazy.zip(padding, max_padding).map{ |col, min, max|
+      col.max_by(&:length).length.clamp(min, max)
+    }.force if !runs.empty?
+    runs.prepend(header)
+    runs.each{ |run|
+      run.map!.with_index{ |field, i| "%#{align[i]}*.*s" % [padding[i], padding[i], field] }
+    }
+    runs[1..-1].each.with_index{ |run, i| run[-1] = ANSI.format(run[-1], bold: true, fg: colors[i]) } if color
+    runs[0].map!{ |field| ANSI.bold + field + ANSI.none }
+    runs.insert(1, :sep)
+    make_table(runs)
+    #runs.map!{ |run| run.join(' ') }
+    #runs.join("\n")
   end
 
 end

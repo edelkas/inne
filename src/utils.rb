@@ -901,6 +901,10 @@ module ANSI extend self
     str.gsub(/\x1B\[[\d;]*m/, '')
   end
 
+  def get_esc(str)
+    str[/\x1B\[[\d;]*m/]
+  end
+
   def format(str, bold: false, faint: false, italic: false, underlined: false, fg: nil, bg: nil, close: true)
     str = str.to_s
     codes = []
@@ -2242,7 +2246,7 @@ end
 # <------                           GRAPHICS                             ------>
 # <---------------------------------------------------------------------------->
 
-# A nice looking progress bar. The style can be split of filled.
+# A nice looking progress bar. The style can be split, filled or ascii.
 def progress_bar(cur, tot, size: 20, style: :split, single: true)
   return '' if tot < 0
   size += 1 if single
@@ -2360,13 +2364,13 @@ def make_table(
     clr = color ? (even ? color_1 : color_2) : ''
     r.each_with_index{ |s, i|
       if s.is_a?(String)
-        clr_once = s[/^\x1B\[\d+m/]
+        og_fmt = ANSI.get_esc(s)
         s = ANSI.unesc(s)
       end
       sign = s.is_a?(Numeric) || is_float(ANSI.unesc(s)) ? '' : '-'
       fmt = s.is_a?(Integer) ? 'd' : s.is_a?(Float) ? '.3f' : 's'
-      table << ver + sp + "#{clr_once || clr}%#{sign}#{widths[i]}#{fmt}" % s + sp
-      table << ANSI.none if clr_once && !color
+      table << ver + sp + "#{og_fmt || clr}%#{sign}#{widths[i]}#{fmt}" % s + sp
+      table << ANSI.none if og_fmt && !color
     }
     table << ver + clear_line
     even = !even
