@@ -3391,6 +3391,11 @@ module Speedrun extend self
     'm1mokp62' => 'N v2.0'
   }
 
+  # Cache to store HTTP requests to the API for a few minutes, specially useful when
+  # navigating paginated lists (e.g. leaderboards). The API limit is 100 requets
+  # per minute, so it's hard to reach, but this way we save time anyway.
+  @@cache = Cache.new
+
   def uri(route, params)
     route = route.join('/') if route.is_a?(Array)
     query = params.map{ |k, v| "#{k}=#{v}" }.join('&')
@@ -3402,7 +3407,7 @@ module Speedrun extend self
       'User-Agent' => "inne++ Discord Bot (#{GITHUB_LINK}) discordrb/%s Ruby/%s Rails/%s" % [Discordrb::VERSION, RUBY_VERSION, ActiveRecord.version]
     }
     res = Net::HTTP.get_response(uri(route, params))
-    res.is_a?(Net::HTTPSuccess) ? JSON.parse(res.body) : nil
+    res.is_a?(Net::HTTPSuccess) ? res.body : nil
   end
 
   def parse_player(data)
@@ -3448,8 +3453,8 @@ module Speedrun extend self
       uri:  data['weblink'],
 
       # Times
-      rta: data['times']['realtime_t'].to_i,
-      igt: data['times']['ingame_t'].to_i,
+      rta: data['times']['realtime_t'],
+      igt: data['times']['ingame_t'],
 
       # Status
       verified:      data['status']['status'] == 'verified',
@@ -3473,15 +3478,18 @@ module Speedrun extend self
   def get_runs(n = 10)
     runs = []
     GAMES.map do |id, name|
-      _runs = request(ROUTE_RUNS, { game: id, max: n, orderby: 'submitted', direction: 'desc', embed: 'category,players' })
+      params = { game: id, max: n, orderby: 'submitted', direction: 'desc', embed: 'category,players' }
+      key = "#{ROUTE_RUNS}:#{params.to_json}"
+      _runs = @@cache.get(key) || request(ROUTE_RUNS, params)
       next if !_runs
-      _runs['data'].each{ |run| runs << parse_run(run) }
+      @@cache.add(key, _runs)
+      JSON.parse(_runs)['data'].each{ |run| runs << parse_run(run) }
     end
     runs.sort_by{ |run| run[:date_submitted] }.reverse.take(n)
   end
 
   # Format latest runs
-  # TODO: Add header, fix padding, add platform
+  # TODO: Add header, fix padding, add platform and status...
   def format_runs(runs)
     runs.map{ |run|
       names = run[:players].map{ |p| p[:name] }.join(', ')

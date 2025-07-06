@@ -484,6 +484,109 @@ rescue => e
   nil
 end
 
+# Simple way to cache results and avoid quick-repeat of (HTTP/db/...) requests
+# TODO: Make thread-safe
+class Cache
+
+  # For web content the key is the URL
+  Entry = Struct.new(:key, :size, :content, :expiry)
+
+  # Capacity in MB, duration in minutes
+  def initialize(capacity: 10, duration: 5)
+    @capacity = 1024 ** 2 * capacity
+    @duration = 60 * duration
+    @entries  = {}
+    start
+  end
+
+  # Check that an entry exists
+  def check(key)
+    @entries.key?(key)
+  end
+
+  # Get the content of an entry
+  def get(key)
+    check(key) ? @entries[key].content : nil
+  end
+
+  # Update the expiry of an entry
+  def tap(key)
+    return if !check(key)
+    @entries[key].expiry = Time.now + @duration
+  end
+
+  # Add or overwrite an entry
+  def add(key, content)
+    remove(key) if check(key)
+    return if !guarantee(content.size)
+    @entries[key] = Entry.new(key, content.size, content, Time.now + @duration)
+  end
+
+  # Remove an entry from the cache
+  def remove(key)
+    @entries.delete(key)
+  end
+
+  # Clear the entire cache
+  def clear
+    @entries = {}
+  end
+
+  private
+
+  # Prune expired entries
+  def prune
+    @entries.each{ |key, entry| remove(key) if entry.expiry <= Time.now }
+  end
+
+  # Start monitoring expired entries
+  def start
+    @thread = Thread.new do
+      loop do
+        sleep(60)
+        prune
+      end
+    end
+  end
+
+  # Stop monitoring expired entries
+  def stop
+    @thread.kill
+    @thread = nil
+  end
+
+  # Compute the total storage of the cache
+  def size
+    @entries.map{ |key, entry| entry.size }.sum
+  end
+
+  # Return the available space remaining in the cache
+  def available
+    @capacity - size
+  end
+
+  # Free _at least_ "space" MB from the cache in order of closest to expiry
+  def free(space)
+    return if space <= 0
+    return clear if space >= @capacity
+    @entries.sort_by{ |key, entry| entry.expiry }
+            .each{ |key, entry|
+              break if space <= 0
+              space -= entry.size
+              remove(key)
+            }
+  end
+
+  # Ensure there's enough space in the cache, if possible
+  def guarantee(space)
+    return false if space > @capacity
+    avail = available
+    return true if space <= avail
+    free(space - avail)
+    true
+  end
+end
+
 # <---------------------------------------------------------------------------->
 # <------                       SYSTEM OPERATIONS                        ------>
 # <---------------------------------------------------------------------------->
