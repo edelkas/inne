@@ -1233,26 +1233,31 @@ end
 
 # Format a timespan in seconds as a string of the form: Xd Xh Xm Xs.
 # Only the relevant figures will appear. The precision can be limited.
-# TODO: Add ms, and parameter to change "now" to "0s" or something
-def format_timespan(time, prec = -1)
+def format_timespan(time, prec = -1, pad: false, ms: false, iso: false)
   return '' unless time.is_a?(Numeric)
+  pad = true if iso
   levels = [
     ['d', 86400],
     ['h',  3600],
     ['m',    60],
     ['s',     1]
   ]
+  levels << (['ms', 0.001]) if ms
   prec = levels.size if prec < 0
   terms = []
   levels.each{ |name, seconds|
     break if prec <= 0
     next if time < seconds
-    terms << "#{(time / seconds).to_i}#{name}"
+    padding = pad && !terms.empty? ? (name == 'ms' ? 3 : 2) : 0
+    terms << "%0*d%s" % [padding, (time / seconds).to_i, !iso ? name : '']
     time %= seconds
     prec -= 1
   }
-  terms << 'now' if terms.empty?
-  terms.join(' ')
+  terms << '-' if terms.empty?
+  str = terms.join(iso ? ':' : ' ')
+  #str[str.rindex(':')] = '.' if iso && ms && time.is_a?(Float) && str.include?(':')
+  str.sub!(/.*\K:/, '.') if iso && ms && time.is_a?(Float)
+  str
 end
 
 # Obtain a custom Discord timestamp. Format:

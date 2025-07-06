@@ -3493,8 +3493,8 @@ module Speedrun extend self
   def format_runs(runs)
     runs.map{ |run|
       names = run[:players].map{ |p| p[:name] }.join(', ')
-      rta   = format_timespan(run[:rta])
-      igt   = format_timespan(run[:igt])
+      rta   = format_timespan(run[:rta], ms: true, iso: true)
+      igt   = format_timespan(run[:igt], ms: true, iso: true)
       date  = run[:date_submitted].strftime('%Y/%m/%d') rescue 'Unknown'
       "%-6.6s %-12.12s %-24.24s %12.12s %12.12s %s" % [run[:game], run[:category][:name], names, rta, igt, date]
     }.join("\n")
