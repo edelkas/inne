@@ -1255,7 +1255,6 @@ def format_timespan(time, prec = -1, pad: false, ms: false, iso: false)
   }
   terms << '-' if terms.empty?
   str = terms.join(iso ? ':' : ' ')
-  #str[str.rindex(':')] = '.' if iso && ms && time.is_a?(Float) && str.include?(':')
   str.sub!(/.*\K:/, '.') if iso && ms && time.is_a?(Float)
   str
 end

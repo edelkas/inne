@@ -3378,7 +3378,7 @@ module Speedrun extend self
   API_ROOT    = 'https://www.speedrun.com/api'
   API_VERSION = 1
 
-  # API routes we use
+  # API routes we use (max count = 200)
   ROUTE_RUNS = 'runs'
 
   # Map common platform IDs to names. We still fetch the platform resource, but
@@ -3532,6 +3532,7 @@ module Speedrun extend self
 
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
+  # TODO: Pagination doesn't work like this, due to mixing multiple lists
   def get_runs(count: 10, page: 0, cache: true)
     runs = []
     GAMES.map do |id, name|

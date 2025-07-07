@@ -205,7 +205,8 @@ end
 #   - func:  The name of the function this button will call
 #   - wrap:  Whether buttons will wrap once you get to the end of the list, or be disabled instead
 #   - force: Force buttons to show even if there's a single page
-def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil, wrap: false, force: false)
+#   - total: Show the total amount of pages, useful for when it's not known
+def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil, wrap: false, force: false, total: true)
   view = Discordrb::Webhooks::View.new if !view
   return view if pages == 1 && !force
   offset_left = wrap && page == 1 ? 1000000000 : -1
@@ -213,7 +214,7 @@ def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = ni
   suf = func ? ':' + func : ''
   interaction_add_navigation_short(
     view,
-    labels:   ["❮", "#{page} / #{pages}", "❯"],
+    labels:   ["❮", page.to_s + (total ? " / #{pages}" : ''), "❯"],
     disabled: [wrap ? false : page == 1, true, wrap ? false : page == pages],
     ids:      [
       "button:nav:#{offset_left}#{suf}",
