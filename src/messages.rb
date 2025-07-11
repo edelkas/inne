@@ -2117,6 +2117,18 @@ rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)
 end
 
+def send_new_speedruns(event, page: nil)
+  page = parse_page(parse_message(event), page, false, event.message.components)
+  runs = Speedrun.get_runs(count: SPEEDRUN_NEW_COUNT, page: page - 1)
+  count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
+  pag = compute_pages(count, page)
+  runs = Speedrun.format_table(runs)
+  output = "Latest submitted speedruns:\n" + format_block(runs)
+  view = Discordrb::Webhooks::View.new
+  #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_new_speedruns', total: false)
+  send_message($speedrun_channel, content: output, components: view)
+end
+
 def mishnub(event)
   youmean = ["More like ", "You mean ", "Mish... oh, ", "Better known as ", "A.K.A. ", "Also known as "]
   mishu   = ["MishNUB,", "MishWho?,"]

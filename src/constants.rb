@@ -87,6 +87,7 @@ GITHUB_LINK = "https://github.com/#{GITHUB_USER}/#{GITHUB_REPO}"
 BOTMASTER_ID           = 204332624288677890  # User ID of the bot manager (Eddy)
 SERVER_ID              = 197765375503368192  # Discord server/guild ID (N++ Server)
 CHANNEL_HIGHSCORES     = 210778111594332181  # #highscores
+CHANNEL_SPEEDRUNNING   = 231135753059565568  # #speedrunning
 CHANNEL_USERLEVELS     = 221721273405800458  # #userlevels
 CHANNEL_NV2            = 197774025844457472  # #nv2
 CHANNEL_CONTENT        = 197793786389200896  # #content-creation
@@ -476,6 +477,17 @@ TWITCH_COOLDOWN  = 2 * 60 * 60 # Cooldown to ping stream by the same user
 TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames here
   "eblan4ikof"
 ]
+
+# <---------------------------------------------------------------------------->
+# <------                    SPEEDRUN API VARIABLES                      ------>
+# <---------------------------------------------------------------------------->
+
+SPEEDRUN_NEW_COUNT = 10 # How many speedruns to show in the most recent list
+
+SPEEDRUN_COLOR_NEW  = 0xf6c42f # Embed bar color for new submitted speedruns
+SPEEDRUN_COLOR_REJ  = 0xf24e43 # Embed bar color for new rejected speedruns
+SPEEDRUN_COLOR_VER  = 0x00cb74 # Embed bar color for new verified speedruns
+SPEEDRUN_COLOR_INFO = 0x93a5a6 # Embed bar color for informational notices
 
 # <---------------------------------------------------------------------------->
 # <------                       SOCKET VARIABLES                         ------>

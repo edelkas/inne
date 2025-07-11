@@ -2715,27 +2715,30 @@ end
 # Set global variables holding references to the main Discord channels the bot uses
 def set_channels(event = nil)
   if !event.nil?
-    $channel         = event.channel
-    $mapping_channel = event.channel
-    $nv2_channel     = event.channel
-    $content_channel = event.channel
-    $ctp_channel     = event.channel
+    $channel          = event.channel
+    $mapping_channel  = event.channel
+    $nv2_channel      = event.channel
+    $content_channel  = event.channel
+    $speedrun_channel = event.channel
+    $ctp_channel      = event.channel
   elsif !TEST
     channels = $bot.servers[SERVER_ID].channels
-    $channel         = channels.find{ |c| c.id == CHANNEL_HIGHSCORES }
-    $mapping_channel = channels.find{ |c| c.id == CHANNEL_USERLEVELS }
-    $nv2_channel     = channels.find{ |c| c.id == CHANNEL_NV2 }
-    $content_channel = channels.find{ |c| c.id == CHANNEL_CONTENT }
-    $ctp_channel     = channels.find{ |c| c.id == CHANNEL_CTP_HIGHSCORES }
+    $channel          = channels.find{ |c| c.id == CHANNEL_HIGHSCORES }
+    $mapping_channel  = channels.find{ |c| c.id == CHANNEL_USERLEVELS }
+    $nv2_channel      = channels.find{ |c| c.id == CHANNEL_NV2 }
+    $content_channel  = channels.find{ |c| c.id == CHANNEL_CONTENT }
+    $speedrun_channel = channels.find{ |c| c.id == CHANNEL_SPEEDRUNNING }
+    $ctp_channel      = channels.find{ |c| c.id == CHANNEL_CTP_HIGHSCORES }
   else
     return
   end
   fix_potato
-  log("Main channel:    #{$channel.name}")         if !$channel.nil?
-  log("Mapping channel: #{$mapping_channel.name}") if !$mapping_channel.nil?
-  log("Nv2 channel:     #{$nv2_channel.name}")     if !$nv2_channel.nil?
-  log("Content channel: #{$content_channel.name}") if !$content_channel.nil?
-  log("CTP channel:     #{$ctp_channel.name}")     if !$ctp_channel.nil?
+  log("Main channel:     #{$channel.name}")          if !$channel.nil?
+  log("Mapping channel:  #{$mapping_channel.name}")  if !$mapping_channel.nil?
+  log("Nv2 channel:      #{$nv2_channel.name}")      if !$nv2_channel.nil?
+  log("Content channel:  #{$content_channel.name}")  if !$content_channel.nil?
+  log("Speedrun channel: #{$speedrun_channel.name}") if !$speedrun_channel.nil?
+  log("CTP channel:      #{$ctp_channel.name}")      if !$ctp_channel.nil?
 end
 
 # Leave all the servers the bot is in which are not specifically white-listed

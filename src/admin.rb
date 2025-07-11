@@ -44,16 +44,9 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event, page: nil)
-  n = 10
-  page = parse_page(parse_message(event), page, false, event.message.components)
-  runs = Speedrun.get_runs(count: n, page: page - 1)
-  count = runs.count < n ? (page - 1) * n + runs.count : page * n + 1
-  pag = compute_pages(count, page)
-  runs = Speedrun.format_table(runs)
-  output = "Latest submitted speedruns:\n" + format_block(runs)
-  view = Discordrb::Webhooks::View.new
-  #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_test', total: false)
-  send_message(event, content: output, components: view)
+  run = Speedrun.get_runs(count: 1).first
+  embed = Speedrun.format_embed(run)
+  send_message(event, embed: embed)
 end
 
 def send_dday_stats

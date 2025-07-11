@@ -3425,6 +3425,16 @@ module Speedrun extend self
     res.is_a?(Net::HTTPSuccess) ? res.body : nil
   end
 
+  def parse_game(data)
+    {
+      id:    data['id'],
+      name:  data['names']['international'],
+      uri:   data['weblink'],
+      date:  Time.parse(data['release-date']),
+      cover: data['assets']['cover-small']['uri']
+    }
+  end
+
   def parse_player(data)
     return { id: nil, name: data['name'] } if data['rel'] == 'guest'
     limbo = !data['location']
@@ -3492,12 +3502,19 @@ module Speedrun extend self
       platform = '-'
     end
 
-    # Parse video resource
+    # Parse video resource, if present
     if !data['videos'].blank?
       links = data['videos']['links']
       video = !links.empty? ? links[0]['uri'] : nil
     else
       video = nil
+    end
+
+    # Parse game resource, if present
+    if data['game'].is_a?(Hash) && data['game']['data']
+      game = parse_game(data['game']['data'])
+    else
+      game = { id: data['game'] }
     end
 
     {
@@ -3522,6 +3539,7 @@ module Speedrun extend self
       date_verified:  (Time.parse(data['status']['verify-date']) rescue nil),
 
       # Additional embedded resources
+      game:      game,
       players:   players,
       category:  category,
       level:     level,
@@ -3533,10 +3551,10 @@ module Speedrun extend self
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
   # TODO: Pagination doesn't work like this, due to mixing multiple lists
-  def get_runs(count: 10, page: 0, cache: true)
+  def get_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
     runs = []
     GAMES.map do |id, name|
-      embeds = 'category.variables,players,platform,level'
+      embeds = 'category.variables,players,platform,level,game'
       params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: embeds }
       key = "#{ROUTE_RUNS}:#{params.to_json}"
       _runs = cache && @@cache.get(key) || request(ROUTE_RUNS, params)
@@ -3551,7 +3569,7 @@ module Speedrun extend self
   def format_table(runs, color: true, emoji: false)
     colors = []
     runs.map!{ |run|
-      game   = run[:game]
+      game   = run[:game][:name]
       system = run[:platform]
       cat    = run[:category][:name]
       il     = run[:category][:il]
@@ -3583,6 +3601,34 @@ module Speedrun extend self
     make_table(runs)
     #runs.map!{ |run| run.join(' ') }
     #runs.join("\n")
+  end
+
+  # Formats a single run as an embed
+  # TODO: Distinguish between new, verified, and rejected. In the description,
+  #       add "Pending verification", or the verifier, or the rejected + reason.
+  def format_embed(run)
+    color = run[:verified] ? SPEEDRUN_COLOR_VER : run[:rejected] ? SPEEDRUN_COLOR_REJ : SPEEDRUN_COLOR_NEW
+    player_name = run[:players].map{ |p| p[:name] }.join(', ')
+    player_url = run[:players][0][:uri]
+    type_name = run[:level] != '-' ? 'Level' : run[:variables].empty? ? '-' : 'Subcategory'
+    type_value = run[:level] != '-' ? run[:level] : run[:variables].empty? ? '-' : run[:variables].values.join(', ')
+    embed = Discordrb::Webhooks::Embed.new(
+      title:       "New #{run[:game][:name]} speedrun verified!",
+      description: nil,
+      url:         run[:uri],
+      color:       color,
+      timestamp:   run[:date_submitted],
+      author:      Discordrb::Webhooks::EmbedAuthor.new(name: player_name, url: player_url),
+      footer:      Discordrb::Webhooks::EmbedFooter.new(text: 'Speedrun.com'),
+      thumbnail:   Discordrb::Webhooks::EmbedThumbnail.new(url: run[:game][:cover])
+    )
+    embed.add_field(name: 'Game', value: run[:game][:name], inline: true)
+    embed.add_field(name: 'Category', value: run[:category][:name], inline: true)
+    embed.add_field(name: type_name, value: type_value, inline: true) unless type_value == '-'
+    embed.add_field(name: 'System', value: run[:platform], inline: true)
+    embed.add_field(name: 'RTA', value: format_timespan(run[:rta], ms: true, iso: true), inline: true)
+    embed.add_field(name: 'IGT', value: format_timespan(run[:igt], ms: true, iso: true), inline: true)
+    embed
   end
 
 end

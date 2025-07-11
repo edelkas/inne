@@ -1355,6 +1355,7 @@ def send_message(
     content:    '',    # Message text
     files:      [],    # Message attachments
     components: nil,   # Message components (buttons, select menus...)
+    embed:      nil,   # Rich embed
     spoiler:    false, # Whether to spoiler the attachments
     db:         true,  # Whether we should register this msg in the db
     edit:       true,  # Whether a component event should edit or send a new msg
@@ -1376,7 +1377,7 @@ def send_message(
   # Config and return if no message
   content.strip!
   files.reject!{ |f| !f.is_a?(File) }
-  return if content.empty? && files.empty?
+  return if content.empty? && files.empty? && embed.nil?
 
   # Include dynamically created components
   components = $components if $components && $components.rows.size > 0
@@ -1401,11 +1402,11 @@ def send_message(
   # Send message (syntax varies depending on event type)
   case dest
   when Discordrb::Channel
-    msg = dest.send(content, false, nil, files, nil, nil, components)
+    msg = dest.send(content, false, embed, files, nil, nil, components)
   when Discordrb::Events::Respondable # Messages, reactions
-    msg = dest.respond(content, false, nil, files, nil, nil, components)
+    msg = dest.respond(content, false, embed, files, nil, nil, components)
   when Discordrb::Events::InteractionCreateEvent # Components, application commands
-    msg = dest.respond(content: content, components: components, wait: true)
+    msg = dest.respond(content: content, embeds: [embed], components: components, wait: true)
   end
   return if !msg
 
