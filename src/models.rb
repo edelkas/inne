@@ -3421,7 +3421,9 @@ module Speedrun extend self
     headers = {
       'User-Agent' => "inne++ Discord Bot (#{GITHUB_LINK}) discordrb/%s Ruby/%s Rails/%s" % [Discordrb::VERSION, RUBY_VERSION, ActiveRecord.version]
     }
-    res = Net::HTTP.get_response(uri(route, params))
+    uri = uri(route, params)
+    dbg("Speedrun API request: #{uri}") if SPEEDRUN_DEBUG_LOGS
+    res = Net::HTTP.get_response(uri)
     res.is_a?(Net::HTTPSuccess) ? res.body : nil
   end
 
@@ -3435,7 +3437,7 @@ module Speedrun extend self
     }
   end
 
-  def parse_player(data)
+  def parse_user(data)
     return { id: nil, name: data['name'] } if data['rel'] == 'guest'
     limbo = !data['location']
     {
@@ -3470,7 +3472,7 @@ module Speedrun extend self
   def parse_run(data)
     # Parse embedded player resource, if present
     if data['players'].is_a?(Hash) && data['players']['data']
-      players = data['players']['data'].map{ |p| parse_player(p) }
+      players = data['players']['data'].map{ |p| parse_user(p) }
     else
       players = data['players'].map{ |p| { id: p['id'], name: '-' } }
     end
@@ -3511,8 +3513,14 @@ module Speedrun extend self
     end
 
     # Parse game resource, if present
+    examiner = data['status']['examiner']
     if data['game'].is_a?(Hash) && data['game']['data']
       game = parse_game(data['game']['data'])
+      mods = data['game']['data']['moderators']
+      if mods.key?('data')
+        mods = mods['data'].map{ |mod| [mod['id'], parse_user(mod)] }.to_h
+        examiner = mods[examiner] if mods.key?(examiner)
+      end
     else
       game = { id: data['game'] }
     end
@@ -3531,7 +3539,7 @@ module Speedrun extend self
       verified:      data['status']['status'] == 'verified',
       rejected:      data['status']['status'] == 'rejected',
       reject_reason: data['status']['reason'],
-      examiner:      data['status']['examiner'],
+      examiner:      examiner,
 
       # Dates
       date:           (Time.parse(data['date']) rescue nil),
@@ -3554,7 +3562,7 @@ module Speedrun extend self
   def get_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
     runs = []
     GAMES.map do |id, name|
-      embeds = 'category.variables,players,platform,level,game'
+      embeds = 'category.variables,players,platform,level,game.moderators'
       params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: embeds }
       key = "#{ROUTE_RUNS}:#{params.to_json}"
       _runs = cache && @@cache.get(key) || request(ROUTE_RUNS, params)
@@ -3604,25 +3612,44 @@ module Speedrun extend self
   end
 
   # Formats a single run as an embed
-  # TODO: Distinguish between new, verified, and rejected. In the description,
-  #       add "Pending verification", or the verifier, or the rejected + reason.
   def format_embed(run)
-    color = run[:verified] ? SPEEDRUN_COLOR_VER : run[:rejected] ? SPEEDRUN_COLOR_REJ : SPEEDRUN_COLOR_NEW
+    # Craft some of the fields
+    game_name   = GAMES[run[:game][:id]]
+    examiner    = run[:examiner].is_a?(Hash) ? "[`#{run[:examiner][:name]}`](#{run[:examiner][:uri]})" : run[:examiner]
     player_name = run[:players].map{ |p| p[:name] }.join(', ')
-    player_url = run[:players][0][:uri]
-    type_name = run[:level] != '-' ? 'Level' : run[:variables].empty? ? '-' : 'Subcategory'
-    type_value = run[:level] != '-' ? run[:level] : run[:variables].empty? ? '-' : run[:variables].values.join(', ')
+    player_url  = run[:players][0][:uri]
+    type_name   = run[:level] != '-' ? 'Level' : run[:variables].empty? ? '-' : 'Subcategory'
+    type_value  = run[:level] != '-' ? run[:level] : run[:variables].empty? ? '-' : run[:variables].values.join(', ')
+
+    # Distinguish by status
+    if run[:verified]
+      color = SPEEDRUN_COLOR_VER
+      title = "✅ New #{game_name} speedrun verified!"
+      desc  = "Run verified by #{examiner}."
+    elsif run[:rejected]
+      color = SPEEDRUN_COLOR_REJ
+      title = "❌ New #{game_name} speedrun rejected!"
+      desc  = "Run rejected by #{examiner} due to:\n" + format_block(run[:reject_reason])
+    else
+      color = SPEEDRUN_COLOR_NEW
+      title = "New #{game_name} speedrun submitted!"
+      desc  = 'Run pending verification.'
+    end
+
+    # Build embed object
     embed = Discordrb::Webhooks::Embed.new(
-      title:       "New #{run[:game][:name]} speedrun verified!",
-      description: nil,
+      title:       title,
+      description: desc,
       url:         run[:uri],
       color:       color,
       timestamp:   run[:date_submitted],
       author:      Discordrb::Webhooks::EmbedAuthor.new(name: player_name, url: player_url),
-      footer:      Discordrb::Webhooks::EmbedFooter.new(text: 'Speedrun.com'),
+      footer:      Discordrb::Webhooks::EmbedFooter.new(text: 'Submitted to Speedrun.com'),
       thumbnail:   Discordrb::Webhooks::EmbedThumbnail.new(url: run[:game][:cover])
     )
-    embed.add_field(name: 'Game', value: run[:game][:name], inline: true)
+
+    # Add inline fields
+    embed.add_field(name: 'Game', value: game_name, inline: true)
     embed.add_field(name: 'Category', value: run[:category][:name], inline: true)
     embed.add_field(name: type_name, value: type_value, inline: true) unless type_value == '-'
     embed.add_field(name: 'System', value: run[:platform], inline: true)

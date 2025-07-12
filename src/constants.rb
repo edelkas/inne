@@ -482,6 +482,8 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 # <------                    SPEEDRUN API VARIABLES                      ------>
 # <---------------------------------------------------------------------------->
 
+SPEEDRUN_DEBUG_LOGS = false # Log useful stuff to the terminal (request URI's, etc)
+
 SPEEDRUN_NEW_COUNT = 10 # How many speedruns to show in the most recent list
 
 SPEEDRUN_COLOR_NEW  = 0xf6c42f # Embed bar color for new submitted speedruns
