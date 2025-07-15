@@ -2117,15 +2117,19 @@ rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)
 end
 
-def send_new_speedruns(event, page: nil)
-  page = parse_page(parse_message(event), page, false, event.message.components)
-  runs = Speedrun.get_runs(count: SPEEDRUN_NEW_COUNT, page: page - 1)
-  count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
-  pag = compute_pages(count, page)
-  runs = Speedrun.format_table(runs)
-  output = "Latest submitted speedruns:\n" + format_block(runs)
+def send_speedruns(event, page: nil)
+  msg = parse_message(event)
+  newest = !!msg[/\bnewest\b/] || !!msg[/\blatest\b/]
   view = Discordrb::Webhooks::View.new
-  #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_new_speedruns', total: false)
+  if newest
+    runs = Speedrun.format_table(Speedrun.get_runs)
+    output = "Latest submitted speedruns:\n" + format_block(runs)
+  else
+    page = parse_page(msg, page, false, event.message.components)
+    count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
+    pag = compute_pages(count, page)
+    interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_speedruns', total: false)
+  end
   send_message($speedrun_channel, content: output, components: view)
 end
 
@@ -2276,6 +2280,7 @@ def respond(event)
   return send_demo_download(event)   if (msg =~ /\breplay\b/i || msg =~ /\bdemo\b/i) && msg =~ /\bdownload\b/i
   return send_download(event)        if msg =~ /\bdownload\b/i
   return send_trace(event)           if msg =~ /\btrace\b/i || msg =~ /\banim/i
+  return send_speedruns(event)       if msg =~ /\bspeed\s*runs?\b/
   return send_lotd(event, Level)     if msg =~ /lotd/i
   return send_lotd(event, Episode)   if msg =~ /eotw/i
   return send_lotd(event, Story)     if msg =~ /cotm/i

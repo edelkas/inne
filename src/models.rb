@@ -3379,7 +3379,12 @@ module Speedrun extend self
   API_VERSION = 1
 
   # API routes we use (max count = 200)
-  ROUTE_RUNS = 'runs'
+  ROUTE_CATEGORIES   = 'categories'
+  ROUTE_GAMES        = 'games'
+  ROUTE_LEADERBOARDS = 'leaderboards'
+  ROUTE_RUNS         = 'runs'
+  ROUTE_SERIES       = 'series'
+  ROUTE_SERIES_GAMES = 'series/%s/games'
 
   # Map common platform IDs to names. We still fetch the platform resource, but
   # this allows to use custom abbreviated names which are not in the API.
@@ -3406,10 +3411,17 @@ module Speedrun extend self
     'm1mokp62' => 'N v2.0'
   }
 
+  # Prefetch some information that hardly changes (games, categories and variables)
+  @@games = GAMES.map{ |k, v| [k, {}] }.to_h
+
   # Cache to store HTTP requests to the API for a few minutes, specially useful when
   # navigating paginated lists (e.g. leaderboards). The API limit is 100 requets
   # per minute, so it's hard to reach, but this way we save time anyway.
   @@cache = Cache.new
+
+  def key(route, params)
+    "#{route}:#{params.to_json}"
+  end
 
   def uri(route, params)
     route = route.join('/') if route.is_a?(Array)
@@ -3418,22 +3430,109 @@ module Speedrun extend self
   end
 
   def request(route, params)
-    headers = {
-      'User-Agent' => "inne++ Discord Bot (#{GITHUB_LINK}) discordrb/%s Ruby/%s Rails/%s" % [Discordrb::VERSION, RUBY_VERSION, ActiveRecord.version]
-    }
     uri = uri(route, params)
+    req = Net::HTTP::Get.new(uri)
+    versions = [RUBY_VERSION, ActiveRecord.version, Discordrb::VERSION]
+    req['User-Agent'] = "inne++ Discord Bot (#{GITHUB_LINK}) Ruby/%s Rails/%s discordrb/%s" % versions
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 1){ |http|
+      http.request(req)
+    }
     dbg("Speedrun API request: #{uri}") if SPEEDRUN_DEBUG_LOGS
-    res = Net::HTTP.get_response(uri)
-    res.is_a?(Net::HTTPSuccess) ? res.body : nil
+    res.is_a?(Net::HTTPSuccess) ? res.body.to_s : nil
+  end
+
+  def get(route, params, cache: true)
+    key = key(route, params)
+    body = cache && @@cache.get(key) || request(route, params)
+    return if !body
+    @@cache.add(key, body)
+    JSON.parse(body)
   end
 
   def parse_game(data)
+    # Parse embedded categories and variables, if present
+    if data['categories']
+      categories = data['categories']['data'].map{ |cat| [cat['id'], parse_category(cat)] }.to_h
+    else
+      categories = {}
+    end
+
+    # Parse embedded mods, if present
+    moderators = data['moderators']
+    if moderators.key?('data')
+      moderators = moderators['data'].map{ |mod| [mod['id'], parse_user(mod)] }.to_h
+    else
+      moderators = moderators.map{ |id, type| [id, { id: id, name: id, type: type }]  }.to_h
+    end
+
+    # Parse embedded platforms, if present. They're embedded as a hash, but otherwise
+    # come a list of platform IDs. Ditto for genres and developers.
+    platforms = data['platforms']
+    if data['platforms'].is_a?(Hash)
+      platforms = platforms['data'].map{ |plat| [plat['id'], parse_platform(plat)] }.to_h
+    else
+      platforms.map{ |id| [id, { id: id, name: id }]  }.to_h
+    end
+
+    # Parse embedded genres, if present
+    genres = data['genres']
+    if data['genres'].is_a?(Hash)
+      genres = genres['data'].map{ |genre| [genre['id'], parse_genre(genre)] }.to_h
+    else
+      genres.map{ |id| [id, { id: id, name: id }]  }.to_h
+    end
+
+    # Parse embedded developers, if present
+    developers = data['developers']
+    if data['developers'].is_a?(Hash)
+      developers = developers['data'].map{ |dev| [dev['id'], parse_developer(dev)] }.to_h
+    else
+      developers.map{ |id| [id, { id: id, name: id }]  }.to_h
+    end
+
+    # Parse embedded levels, if present
+    if data['levels']
+      levels = data['levels']['data'].map{ |level| [level['id'], parse_level(level)] }.to_h
+    else
+      levels = {}
+    end
+
     {
-      id:    data['id'],
-      name:  data['names']['international'],
-      uri:   data['weblink'],
-      date:  Time.parse(data['release-date']),
-      cover: data['assets']['cover-small']['uri']
+      id:         data['id'],
+      name:       data['names']['international'],
+      abbrev:     GAMES[data['id']], # Only for the N series ones
+      uri:        data['weblink'],
+      date:       Time.parse(data['release-date']),
+      cover:      data['assets']['cover-large']['uri'],
+      categories: categories,
+      moderators: moderators,
+      platforms:  platforms,
+      genres:     genres,
+      developers: developers,
+      levels:     levels
+    }
+  end
+
+  def parse_developer(data)
+    {
+      id:   data['id'],
+      name: data['name']
+    }
+  end
+
+  def parse_genre(data)
+    {
+      id:   data['id'],
+      name: data['name']
+    }
+  end
+
+  def parse_platform(data)
+    {
+      id:     data['id'],
+      name:   data['name'],
+      abbrev: PLATFORMS[data['id']], # Only for a few we've set
+      date:   data['released']
     }
   end
 
@@ -3451,22 +3550,61 @@ module Speedrun extend self
     }
   end
 
+  def parse_value(id, data)
+    {
+      id:          id,
+      name:        data['label'],
+      description: data['rules'], # Only present when variable is a sub-category
+      flags:       data['flags']  # Only present when variable is a sub-category
+    }
+  end
+
+  def parse_variable(data)
+    {
+      id:          data['id'],
+      name:        data['name'],
+      default:     data['values']['default'],  # Default value for this variable
+      category:    data['category'],           # nil = applies to all categories
+      subcategory: data['is-subcategory'],     # Leaderboards shown as drop-menus instead of filters
+      mandatory:   data['mandatory'],          # Must be specified on submission
+      custom:      data['user-defined'],       # User sets custom value on submission
+      obsoletes:   data['obsoletes'],          # Runs are considered for leaderboards
+      values:      data['values']['values'].map{ |id, val| [id, parse_value(id, val)] }.to_h
+    }
+  end
+
   def parse_category(data)
+    variables = {}
+    variables = data['variables']['data'].map{ |var|
+      [var['id'], parse_variable(var)]
+    }.to_h if data['variables']
+
+    {
+      id:           data['id'],
+      name:         data['name'],
+      uri:          data['weblink'],
+      description:  data['rules'],
+      il:           data['type'] == 'per-level',
+      player_count: data['players']['value'],
+      player_exact: data['players']['type'] == 'exactly',
+      misc:         data['miscellaneous'],
+      variables:    variables
+    }
+  end
+
+  def parse_video(data)
+    {
+      uri: data['uri']
+    }
+  end
+
+  def parse_level(data)
     {
       id:          data['id'],
       name:        data['name'],
       uri:         data['weblink'],
-      description: data['rules'],
-      il:          data['type'] == 'per-level'
+      description: data['rules']
     }
-  end
-
-  def parse_variables(data, values)
-    value_map = data.map{ |var|
-      [var['id'], var['values']['values'].map{ |id, val| [id, val['label']] }.to_h]
-    }.to_h
-    name_map = data.map{ |var| [var['id'], var['name']] }.to_h
-    values.map{ |var_id, val_id| [name_map[var_id], value_map[var_id][val_id]] }.to_h
   end
 
   def parse_run(data)
@@ -3477,59 +3615,31 @@ module Speedrun extend self
       players = data['players'].map{ |p| { id: p['id'], name: '-' } }
     end
 
-    # Parse embedded category and variables resources, if present
-    if data['category'].is_a?(Hash) && data['category']['data']
-      category = parse_category(data['category']['data'])
-      variables = data['category']['data']['variables']
-      variables = variables ? parse_variables(variables['data'], data['values']) : {}
-    else
-      category = { id: data['category'], name: '-', il: nil }
-      variables = {}
-    end
-
-    # Parse embedded level resource, if present
-    if data['level'].is_a?(Hash) && data['level']['data']
-      level = data['level']['data']
-      level = level.blank? ? '-' : level['name']
-    else
-      level = '-'
-    end
-
-    # Parse embedded platform resource, if present
-    if PLATFORMS.key?(data['system']['platform'])
-      platform = PLATFORMS[data['system']['platform']]
-    elsif data['platform']
-      platform = data['platform']['data']['name']
-    else
-      platform = '-'
-    end
-
     # Parse video resource, if present
-    if !data['videos'].blank?
-      links = data['videos']['links']
-      video = !links.empty? ? links[0]['uri'] : nil
+    if !!data&.[]('videos')&.[]('links')
+      videos = data['videos']['links'].map{ |vid| parse_video(vid) }
     else
-      video = nil
-    end
-
-    # Parse game resource, if present
-    examiner = data['status']['examiner']
-    if data['game'].is_a?(Hash) && data['game']['data']
-      game = parse_game(data['game']['data'])
-      mods = data['game']['data']['moderators']
-      if mods.key?('data')
-        mods = mods['data'].map{ |mod| [mod['id'], parse_user(mod)] }.to_h
-        examiner = mods[examiner] if mods.key?(examiner)
-      end
-    else
-      game = { id: data['game'] }
+      videos = []
     end
 
     {
-      game:     GAMES[data['game']],
+      # Basic info
+      game:     data['game'],
       uri:      data['weblink'],
+      players:  players,
+
+      # Classification of the run
+      category:  data['category'],
+      level:     data['level'],
+      variables: data['values'],
+
+      # User provided info
+      description: data['comment'],
+      videos:      videos,
+
+      # System info
+      platform: data['system']['platform'],
       emulated: data['system']['emulated'],
-      video:    video,
 
       # Times
       rta: data['times']['realtime_t'],
@@ -3539,66 +3649,89 @@ module Speedrun extend self
       verified:      data['status']['status'] == 'verified',
       rejected:      data['status']['status'] == 'rejected',
       reject_reason: data['status']['reason'],
-      examiner:      examiner,
+      examiner:      data['status']['examiner'],
 
       # Dates
       date:           (Time.parse(data['date']) rescue nil),
       date_submitted: (Time.parse(data['submitted']) rescue nil),
-      date_verified:  (Time.parse(data['status']['verify-date']) rescue nil),
-
-      # Additional embedded resources
-      game:      game,
-      players:   players,
-      category:  category,
-      level:     level,
-      platform:  platform,
-      variables: variables
+      date_verified:  (Time.parse(data['status']['verify-date']) rescue nil)
     }
+  end
+
+  # Retrieve game, category and variable information for all N games
+  def get_basic_info
+    embed = 'categories.variables,moderators,platforms,genres,developers,levels'
+    res = get(ROUTE_SERIES_GAMES % SERIES_ID, { embed: embed })
+    return if !res
+    @@games = res['data'].map{ |game| [game['id'], parse_game(game)] }.to_h
   end
 
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
   # TODO: Pagination doesn't work like this, due to mixing multiple lists
   def get_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
-    runs = []
-    GAMES.map do |id, name|
-      embeds = 'category.variables,players,platform,level,game.moderators'
-      params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: embeds }
-      key = "#{ROUTE_RUNS}:#{params.to_json}"
-      _runs = cache && @@cache.get(key) || request(ROUTE_RUNS, params)
-      next if !_runs
-      @@cache.add(key, _runs)
-      JSON.parse(_runs)['data'].each{ |run| runs << parse_run(run) }
-    end
-    runs.sort_by{ |run| run[:date_submitted] }.reverse.take(count)
+    GAMES.map{ |id, name|
+      get_basic_info if @@games[id].empty?
+      params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: 'players' }
+      res = get(ROUTE_RUNS, params, cache: cache)
+      next [] if !res
+      res['data'].map{ |run| parse_run(run) }
+    }.flatten.sort_by{ |run| run[:date_submitted] }.reverse.take(count)
+  end
+
+  def get_boards(game, category, variables: {}, platform: nil, page: 0)
+
+  end
+
+  # Format a run into usable textual fields
+  def format_run(run)
+    # Fetch main components of the run
+    game      = @@games[run[:game]]
+    category  = game[:categories][run[:category]]
+    platform  = game[:platforms][run[:platform]]
+    level     = !!run[:level] ? game[:levels][run[:level]] : nil
+    variables = run[:variables].map{ |var_id, val_id|
+      category[:variables][var_id][:values][val_id][:name]
+    }.join(', ')
+
+    # Format fields
+    {
+      game:     game[:abbrev] || game[:name],
+      platform: platform[:abbrev] || platform[:name],
+      mode:     category[:il] ? 'IL' : category[:il].nil? ? '?' : 'RTA',
+      category: category[:name],
+      type:     !!level ? level[:name] : !run[:variables].empty? ? variables : '-',
+      players:  run[:players].map{ |p| p[:name] }.join(', '),
+      rta:      format_timespan(run[:rta], ms: true, iso: true),
+      igt:      format_timespan(run[:igt], ms: true, iso: true),
+      date:     (run[:date_submitted].strftime('%Y/%m/%d') rescue 'Unknown'),
+      status:   run[:verified] ? 'VER' : run[:rejected] ? 'REJ' : 'NEW',
+      color:    run[:verified] ? ANSI::GREEN : run[:rejected] ? ANSI::RED : ANSI::YELLOW,
+      emoji:    run[:verified] ? '✅' : run[:rejected] ? '❌' : '💥'
+    }
   end
 
   # Format latest runs
   def format_table(runs, color: true, emoji: false)
+    # Draft table fields
     colors = []
     runs.map!{ |run|
-      game   = run[:game][:name]
-      system = run[:platform]
-      cat    = run[:category][:name]
-      il     = run[:category][:il]
-      il     = il ? 'IL' : il.nil? ? '?' : 'RTA'
-      type   = run[:level] != '-' ? run[:level] : run[:variables].empty? ? '-' : run[:variables].values.join(', ')
-      names  = run[:players].map{ |p| p[:name] }.join(', ')
-      rta    = format_timespan(run[:rta], ms: true, iso: true)
-      igt    = format_timespan(run[:igt], ms: true, iso: true)
-      date   = run[:date_submitted].strftime('%Y/%m/%d') rescue 'Unknown'
-      status = run[:verified] ? 'VER' : run[:rejected] ? 'REJ' : 'NEW'
-      status += run[:verified] ? ' ✅' : run[:rejected] ? ' ❌' : ' 💥' if emoji
-      colors << (run[:verified] ? ANSI::GREEN : run[:rejected] ? ANSI::RED : ANSI::YELLOW)
-      [game, system, il, cat, type, names, rta, igt, date, status]
+      run = format_run(run)
+      run[:status] += ' ' + run[:emoji] if emoji
+      colors << run[:color]
+      run.values.take(10)
     }
-    header = ["Game", "System", "Type", "Category", "Class", "Players", "RTA", "IGT", "Date", "Status"]
+
+    # Compute padding (not necessary anymore since we're using make_table)
+    header = ["Game", "System", "Mode", "Category", "Type", "Players", "RTA", "IGT", "Date", "Status"]
     align = ['-', '-', '-', '-', '-', '-', '', '', '-', '']
     max_padding = [6, 8, 4, 32, 32, 32, 12, 12, 10, 12]
     padding = header.map(&:length)
     padding = runs.transpose.lazy.zip(padding, max_padding).map{ |col, min, max|
       col.max_by(&:length).length.clamp(min, max)
     }.force if !runs.empty?
+
+    # Format rows (add header, apply padding and coloring) and craft table
     runs.prepend(header)
     runs.each{ |run|
       run.map!.with_index{ |field, i| "%#{align[i]}*.*s" % [padding[i], padding[i], field] }
@@ -3607,34 +3740,34 @@ module Speedrun extend self
     runs[0].map!{ |field| ANSI.bold + field + ANSI.none }
     runs.insert(1, :sep)
     make_table(runs)
-    #runs.map!{ |run| run.join(' ') }
-    #runs.join("\n")
   end
 
   # Formats a single run as an embed
-  def format_embed(run)
-    # Craft some of the fields
-    game_name   = GAMES[run[:game][:id]]
-    examiner    = run[:examiner].is_a?(Hash) ? "[`#{run[:examiner][:name]}`](#{run[:examiner][:uri]})" : run[:examiner]
-    player_name = run[:players].map{ |p| p[:name] }.join(', ')
-    player_url  = run[:players][0][:uri]
-    type_name   = run[:level] != '-' ? 'Level' : run[:variables].empty? ? '-' : 'Subcategory'
-    type_value  = run[:level] != '-' ? run[:level] : run[:variables].empty? ? '-' : run[:variables].values.join(', ')
+  def format_embed(run, emoji: true)
+    # Format fields
+    game = @@games[run[:game]]
+    fields = format_run(run)
+    examiner = game[:moderators][run[:examiner]]
+    examiner = "[`#{examiner[:name]}`](#{examiner[:uri]})" if examiner
+    player_url = run[:players][0][:uri]
+    type = !!run[:level] ? 'Level' : !run[:variables].empty? ? 'Subcategory' : '-'
 
     # Distinguish by status
     if run[:verified]
+      date  = run[:date_submitted] ? ' on ' + run[:date_submitted].strftime('%Y/%m/%d') : ''
       color = SPEEDRUN_COLOR_VER
-      title = "✅ New #{game_name} speedrun verified!"
-      desc  = "Run verified by #{examiner}."
+      title = "New #{fields[:game]} speedrun verified!"
+      desc  = "Run verified by #{examiner}#{date}."
     elsif run[:rejected]
       color = SPEEDRUN_COLOR_REJ
-      title = "❌ New #{game_name} speedrun rejected!"
+      title = "New #{fields[:game]} speedrun rejected!"
       desc  = "Run rejected by #{examiner} due to:\n" + format_block(run[:reject_reason])
     else
       color = SPEEDRUN_COLOR_NEW
-      title = "New #{game_name} speedrun submitted!"
+      title = "New #{fields[:game]} speedrun submitted!"
       desc  = 'Run pending verification.'
     end
+    title.prepend(fields[:emoji] + ' ') if emoji
 
     # Build embed object
     embed = Discordrb::Webhooks::Embed.new(
@@ -3643,18 +3776,18 @@ module Speedrun extend self
       url:         run[:uri],
       color:       color,
       timestamp:   run[:date_submitted],
-      author:      Discordrb::Webhooks::EmbedAuthor.new(name: player_name, url: player_url),
-      footer:      Discordrb::Webhooks::EmbedFooter.new(text: 'Submitted to Speedrun.com'),
-      thumbnail:   Discordrb::Webhooks::EmbedThumbnail.new(url: run[:game][:cover])
+      author:      Discordrb::Webhooks::EmbedAuthor.new(name: fields[:players], url: player_url),
+      footer:      Discordrb::Webhooks::EmbedFooter.new(text: 'Submitted to Speedrun.com', icon_url: 'https://www.speedrun.com/images/1st.png'),
+      thumbnail:   Discordrb::Webhooks::EmbedThumbnail.new(url: game[:cover])
     )
 
     # Add inline fields
-    embed.add_field(name: 'Game', value: game_name, inline: true)
-    embed.add_field(name: 'Category', value: run[:category][:name], inline: true)
-    embed.add_field(name: type_name, value: type_value, inline: true) unless type_value == '-'
-    embed.add_field(name: 'System', value: run[:platform], inline: true)
-    embed.add_field(name: 'RTA', value: format_timespan(run[:rta], ms: true, iso: true), inline: true)
-    embed.add_field(name: 'IGT', value: format_timespan(run[:igt], ms: true, iso: true), inline: true)
+    embed.add_field(inline: true, name: 'Game',     value: fields[:game])
+    embed.add_field(inline: true, name: 'Category', value: fields[:category])
+    embed.add_field(inline: true, name: type     ,  value: fields[:type]) unless type == '-'
+    embed.add_field(inline: true, name: 'System',   value: fields[:platform])
+    embed.add_field(inline: true, name: 'RTA',      value: fields[:rta])
+    embed.add_field(inline: true, name: 'IGT',      value: fields[:igt])
     embed
   end
 

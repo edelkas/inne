@@ -482,7 +482,7 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 # <------                    SPEEDRUN API VARIABLES                      ------>
 # <---------------------------------------------------------------------------->
 
-SPEEDRUN_DEBUG_LOGS = false # Log useful stuff to the terminal (request URI's, etc)
+SPEEDRUN_DEBUG_LOGS = true # Log useful stuff to the terminal (request URI's, etc)
 
 SPEEDRUN_NEW_COUNT = 10 # How many speedruns to show in the most recent list
 
