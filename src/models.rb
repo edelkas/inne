@@ -3377,14 +3377,16 @@ module Speedrun extend self
   # Basic API info
   API_ROOT    = 'https://www.speedrun.com/api'
   API_VERSION = 1
+  RETRIES     = 5
 
   # API routes we use (max count = 200)
-  ROUTE_CATEGORIES   = 'categories'
-  ROUTE_GAMES        = 'games'
-  ROUTE_LEADERBOARDS = 'leaderboards'
-  ROUTE_RUNS         = 'runs'
-  ROUTE_SERIES       = 'series'
-  ROUTE_SERIES_GAMES = 'series/%s/games'
+  ROUTE_CATEGORIES         = 'categories'
+  ROUTE_GAMES              = 'games'
+  ROUTE_LEADERBOARDS       = 'leaderboards/%s/category/%s' # game ID, category ID
+  ROUTE_LEADERBOARDS_LEVEL = 'leaderboards/%s/level/%s/%s' # game ID, level ID, category ID
+  ROUTE_RUNS               = 'runs'
+  ROUTE_SERIES             = 'series'
+  ROUTE_SERIES_GAMES       = 'series/%s/games'             # series ID
 
   # Map common platform IDs to names. We still fetch the platform resource, but
   # this allows to use custom abbreviated names which are not in the API.
@@ -3536,8 +3538,9 @@ module Speedrun extend self
     }
   end
 
+  # TODO: Find a way to add the flag (Unicode emoji for countries using the code)
   def parse_user(data)
-    return { id: nil, name: data['name'] } if data['rel'] == 'guest'
+    return { id: data['name'], name: data['name'] } if data['rel'] == 'guest'
     limbo = !data['location']
     {
       id:           data['id'],
@@ -3563,7 +3566,7 @@ module Speedrun extend self
     {
       id:          data['id'],
       name:        data['name'],
-      default:     data['values']['default'],  # Default value for this variable
+      default:     data['values']['default'],  # Default value for this variable (nil = none)
       category:    data['category'],           # nil = applies to all categories
       subcategory: data['is-subcategory'],     # Leaderboards shown as drop-menus instead of filters
       mandatory:   data['mandatory'],          # Must be specified on submission
@@ -3607,12 +3610,20 @@ module Speedrun extend self
     }
   end
 
-  def parse_run(data)
+  # Parse a raw run. The player list may be optionally provided, since in some
+  # cases (such as leaderboards) it's impossible to embed them directly in the runs.
+  def parse_run(data, players = nil)
     # Parse embedded player resource, if present
     if data['players'].is_a?(Hash) && data['players']['data']
       players = data['players']['data'].map{ |p| parse_user(p) }
+    elsif players
+      players = data['players'].map{ |p|
+        field = p['rel'] == 'user' ? :id : :name
+        pp = players.find{ |pp| pp[field] == p[field.to_s] }
+        pp || { id: p['id'], name: p['name'] || '-' }
+      }
     else
-      players = data['players'].map{ |p| { id: p['id'], name: '-' } }
+      players = data['players'].map{ |p| { id: p['id'], name: p['name'] || '-' } }
     end
 
     # Parse video resource, if present
@@ -3658,6 +3669,16 @@ module Speedrun extend self
     }
   end
 
+  # See parse_run
+  def parse_leaderboard(data, players = nil)
+    {
+      game:     data['game'],
+      category: data['category'],
+      uri:      data['weblink'],
+      runs:     data['runs'].map{ |run| parse_run(run['run'], players).merge(place: run['place']) }
+    }
+  end
+
   # Retrieve game, category and variable information for all N games
   def get_basic_info
     embed = 'categories.variables,moderators,platforms,genres,developers,levels'
@@ -3666,12 +3687,20 @@ module Speedrun extend self
     @@games = res['data'].map{ |game| [game['id'], parse_game(game)] }.to_h
   end
 
+  # Ensure the basic information (games, categories, variables, platforms) is available
+  def ensure_basic_info(game)
+    return false if !@@games.key?(game)
+    attempts = 0
+    get_basic_info while (attempts += 1) <= RETRIES && @@games[game].empty?
+    !@@games[game].empty?
+  end
+
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
   # TODO: Pagination doesn't work like this, due to mixing multiple lists
   def get_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
     GAMES.map{ |id, name|
-      get_basic_info if @@games[id].empty?
+      next [] if !ensure_basic_info(id)
       params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: 'players' }
       res = get(ROUTE_RUNS, params, cache: cache)
       next [] if !res
@@ -3679,8 +3708,16 @@ module Speedrun extend self
     }.flatten.sort_by{ |run| run[:date_submitted] }.reverse.take(count)
   end
 
-  def get_boards(game, category, variables: {}, platform: nil, page: 0)
-
+  # Get the leaderboards for a given category, optionally filtering by platform and any variable
+  def get_boards(game, category, count: SPEEDRUN_BOARD_COUNT, page: 0, variables: {}, platform: nil)
+    return { game: game, category: category, uri: nil, runs: [] } if !ensure_basic_info(game)
+    params = { top: count, embed: 'players' }
+    params[:platform] = platform if platform
+    variables.each{ |var, val| params["var-#{var}"] = val }
+    res = get(ROUTE_LEADERBOARDS % [game, category], params)
+    return { game: game, category: category, uri: nil, runs: [] } if !res
+    players = res['data']['players']['data'].map{ |p| parse_user(p) } if res['data']['players']
+    parse_leaderboard(res['data'], players)
   end
 
   # Format a run into usable textual fields
@@ -3740,6 +3777,31 @@ module Speedrun extend self
     runs[0].map!{ |field| ANSI.bold + field + ANSI.none }
     runs.insert(1, :sep)
     make_table(runs)
+  end
+
+  # Format the leaderboards
+  # TODO: Try with an embed, fill vars
+  def format_boards(boards)
+    game = @@games[boards[:game]]
+    cat = game[:categories][boards[:category]]
+    header = "📜 __#{game[:name]} [Leaderboards](<#{boards[:uri]}>) — [#{cat[:name]}](<#{cat[:uri]}>)__ (vars)"
+    list = boards = boards[:runs].map{ |run|
+      fields = format_run(run).merge(place: run[:place])
+      place = app_emoji(run[:place].ordinalize) || EMOJI_NUMBERS[run[:place]] || "**#{run[:place]}**"
+      players = run[:players].map{ |p|
+        name = '**' + p[:name] + '**'
+        p[:uri] ? mdurl(name, p[:uri], false) : name
+      }.join(', ')
+      time = fields[:rta] + (fields[:igt] != '-' ? " (#{fields[:igt]} IGT)" : '')
+      time = mdurl(time, run[:uri], false)
+      plat_emoji = nil
+      ['PC', 'PS', 'Xbox', 'Switch'].each{ |plat|
+        plat_emoji = app_emoji("plat_#{plat}") if fields[:platform][/#{plat}/i]
+      }
+      platform = plat_emoji || "(#{fields[:platform]})"
+      "%s %s — %s — %s %s" % [place, players, time, fields[:date], platform]
+    }.join("\n")
+    "# " + header + "\n" + list
   end
 
   # Formats a single run as an embed

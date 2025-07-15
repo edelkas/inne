@@ -44,9 +44,7 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event, page: nil)
-  run = Speedrun.get_runs(count: 1).first
-  embed = Speedrun.format_embed(run)
-  send_message(event, embed: embed)
+  #send_message(event, embed: embed)
 end
 
 def send_dday_stats

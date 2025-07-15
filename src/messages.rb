@@ -2117,7 +2117,7 @@ rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)
 end
 
-def send_speedruns(event, page: nil)
+def send_speedruns(event, page: nil, game: nil, category: nil)
   msg = parse_message(event)
   newest = !!msg[/\bnewest\b/] || !!msg[/\blatest\b/]
   view = Discordrb::Webhooks::View.new
@@ -2125,12 +2125,16 @@ def send_speedruns(event, page: nil)
     runs = Speedrun.format_table(Speedrun.get_runs)
     output = "Latest submitted speedruns:\n" + format_block(runs)
   else
-    page = parse_page(msg, page, false, event.message.components)
-    count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
-    pag = compute_pages(count, page)
-    interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_speedruns', total: false)
+    game = 'm1mjnk12'
+    category = 'zd307pnd'
+    boards = Speedrun.get_boards(game, category)
+    output = Speedrun.format_boards(boards)
+    #page = parse_page(msg, page, false, event.message.components)
+    #count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
+    #pag = compute_pages(count, page)
+    #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_speedruns', total: false)
   end
-  send_message($speedrun_channel, content: output, components: view)
+  send_message(event, content: output, components: view)
 end
 
 def mishnub(event)

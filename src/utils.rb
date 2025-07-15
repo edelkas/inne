@@ -946,20 +946,23 @@ module ANSI extend self
 end
 
 # Format Markdown text
-def mdtext(str, header: 0, url: nil)
+def mdtext(str, header: 0, url: nil, embed: true)
   # Header stuff
   str.prepend(' ') unless header == 0
   str.prepend('#' * header.abs)
   str.prepend('-') if header < 0
 
   # URL stuff
-  str = "[#{str}](#{url})" if url
+  if url
+    url = '<' + url + '>' unless embed
+    str = "[#{str}](#{url})"
+  end
 
   str
 end
 
 # MarkDown shotcuts
-def mdurl(text, url) "[#{text}](#{url})" end
+def mdurl(text, url, embed = true) mdtext(text, url: url, embed: embed) end
 def mdhdr1(text) '# ' + text end
 def mdhdr2(text) '## ' + text end
 def mdhdr3(text) '### ' + text end
@@ -1342,6 +1345,14 @@ def find_emoji(key, server = nil)
   end
 rescue
   nil
+end
+
+# Find an app emoji (Discordrb still doesn't support it, so we rawdog it)
+def app_emoji(name)
+  return if !APP_EMOJIS.key?(name)
+  id = APP_EMOJIS[name][TEST ? :test : :prod]
+  return if !id
+  "<:#{name}:#{id}>"
 end
 
 # Find user by name and tag in a given server

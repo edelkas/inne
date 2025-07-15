@@ -121,16 +121,25 @@ SERVER_WHITELIST = [
 SUPPORTED_COMMANDS = []
 DISABLED_COMMANDS = [:screenshot]
 
+# Emoji stuff
+EMOJIS_TO_DELETE = ['❌', '✖️', '🇽', '⛔', '🚫', '❎']
+EMOJIS_FOR_PLAY = ['Ninja', 'ninjajump', 'ninjavictory', 'nAight']
+EMOJI_NUMBERS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+APP_EMOJIS = {
+  '1st'         => { test: 1393773038163460259, prod: 1393770276659138630 },
+  '2nd'         => { test: 1393773051748945960, prod: 1393770299454918676 },
+  '3rd'         => { test: 1393773065330233354, prod: 1393770312121716736 },
+  '4th'         => { test: 1393773080433786920, prod: 1393770327468802048 },
+  'plat_PC'     => { test: 1394801514148659280, prod: 1394807830397059203 },
+  'plat_PS'     => { test: 1394801418430320750, prod: 1394807791952330792 },
+  'plat_Xbox'   => { test: 1394801570327040032, prod: 1394807873707446433 },
+  'plat_Switch' => { test: 1394801691630501978, prod: 1394807906897105017 },
+  'plat_Kong'   => { test: 1394802850055458937, prod: 1394807753209282601 }
+}
+
 # Others
 BOT_STATUS   = 'online'             # Discord status for the bot
 BOT_ACTIVITY = "inne's evil cousin" # Discord activity for the bot
-EMOJIS_TO_DELETE = [                # Emojis to delete msgs via reactions
-  '❌', '✖️', '🇽', '⛔', '🚫', '❎'
-]
-EMOJIS_FOR_PLAY = [
-  'Ninja', 'ninjajump', 'ninjavictory', 'nAight'
-]
-EMOJI_NUMBERS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
 DAYS_PER_EPISODE = 1 # Number of days to auto-spoiler screenshots in a mappack
 
 # <---------------------------------------------------------------------------->
@@ -484,7 +493,8 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 
 SPEEDRUN_DEBUG_LOGS = true # Log useful stuff to the terminal (request URI's, etc)
 
-SPEEDRUN_NEW_COUNT = 10 # How many speedruns to show in the most recent list
+SPEEDRUN_NEW_COUNT   = 10 # How many speedruns to show in the most recent list
+SPEEDRUN_BOARD_COUNT = 5  # How many speedruns per page in leaderboards
 
 SPEEDRUN_COLOR_NEW  = 0xf6c42f # Embed bar color for new submitted speedruns
 SPEEDRUN_COLOR_REJ  = 0xf24e43 # Embed bar color for new rejected speedruns
