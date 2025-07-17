@@ -1231,11 +1231,27 @@ def format_author(author)
   "on maps by #{verbatim(author.name)}"
 end
 
-# Format a timespan in seconds as a string of the form: Xd Xh Xm Xs.
-# Only the relevant figures will appear. The precision can be limited.
-def format_timespan(time, prec = -1, pad: false, ms: false, iso: false)
+# Format a timespan in seconds as a string of two possible forms:
+#   - Default: Xd Xh Xm Xs Xms.
+#   - ISO:     XX:XX:XX.XXX
+# Parameters:
+#   - time: Number of seconds (Integer/Float)
+#   - prec: How many terms to print
+#   - pad:  Pad each term with zeroes to 2 or 3 digits
+#   - ms:   Add a ms term at the end (only if time is Float)
+#   - iso:  Toggles the ISO format, otherwise Default is used.
+#   - zero: Show 0 terms instead of skipping them.
+# Notes:
+#   - ISO mode turns on padding and zeroes automatically.
+def format_timespan(time, prec = -1, pad: false, ms: false, iso: false, zero: false)
   return '' unless time.is_a?(Numeric)
-  pad = true if iso
+
+  # Normalize params
+  ms   &&= time.is_a?(Float)
+  zero ||= iso
+  pad  ||= iso
+
+  # Initialize vars
   levels = [
     ['d', 86400],
     ['h',  3600],
@@ -1245,17 +1261,22 @@ def format_timespan(time, prec = -1, pad: false, ms: false, iso: false)
   levels << (['ms', 0.001]) if ms
   prec = levels.size if prec < 0
   terms = []
+
+  # Craft term list
   levels.each{ |name, seconds|
     break if prec <= 0
-    next if time < seconds
-    padding = pad && !terms.empty? ? (name == 'ms' ? 3 : 2) : 0
+    init = !terms.empty?
+    next if time < seconds && (!zero || !init)
+    padding = pad && init ? (name == 'ms' ? 3 : 2) : 0
     terms << "%0*d%s" % [padding, (time / seconds).to_i, !iso ? name : '']
     time %= seconds
     prec -= 1
   }
   terms << '-' if terms.empty?
+
+  # Concatenate and build final string
   str = terms.join(iso ? ':' : ' ')
-  str.sub!(/.*\K:/, '.') if iso && ms && time.is_a?(Float)
+  str.sub!(/.*\K:/, '.') if iso && ms
   str
 end
 
