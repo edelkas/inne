@@ -134,7 +134,11 @@ APP_EMOJIS = {
   'plat_PS'     => { test: 1394801418430320750, prod: 1394807791952330792 },
   'plat_Xbox'   => { test: 1394801570327040032, prod: 1394807873707446433 },
   'plat_Switch' => { test: 1394801691630501978, prod: 1394807906897105017 },
-  'plat_Kong'   => { test: 1394802850055458937, prod: 1394807753209282601 }
+  'plat_Kong'   => { test: 1394802850055458937, prod: 1394807753209282601 },
+  'plat_DS'     => { test: 1395099420776730794, prod: 1395099616847990866 },
+  'plat_2DS'    => { test: 1395101713257468044, prod: 1395108150339829760 },
+  'plat_3DS'    => { test: 1395105604770467900, prod: 1395108220414201946 },
+  'plat_PSP'    => { test: 1395104831177494568, prod: 1395108189095202897 }
 }
 
 # Others
@@ -494,7 +498,7 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 SPEEDRUN_DEBUG_LOGS = true # Log useful stuff to the terminal (request URI's, etc)
 
 SPEEDRUN_NEW_COUNT   = 10 # How many speedruns to show in the most recent list
-SPEEDRUN_BOARD_COUNT = 5  # How many speedruns per page in leaderboards
+SPEEDRUN_BOARD_COUNT =  5 # How many speedruns per page in leaderboards
 
 SPEEDRUN_COLOR_NEW  = 0xf6c42f # Embed bar color for new submitted speedruns
 SPEEDRUN_COLOR_REJ  = 0xf24e43 # Embed bar color for new rejected speedruns

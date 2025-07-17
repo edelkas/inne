@@ -2117,23 +2117,53 @@ rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)
 end
 
+# Send information about the latest submitted speedruns or fetch some leaderboard
 def send_speedruns(event, page: nil, game: nil, category: nil)
+  # Ensure we have access to at least the basic information from the API
+  perror("Failed to fetch info from Speedrun.com") if !Speedrun::ensure_basic_info
+
+  # Parse the message
   msg = parse_message(event)
   newest = !!msg[/\bnewest\b/] || !!msg[/\blatest\b/]
   view = Discordrb::Webhooks::View.new
+
+  # Return the latest submitted speedruns formatted in a table
   if newest
-    runs = Speedrun.format_table(Speedrun.get_runs)
+    runs = Speedrun.format_table(Speedrun.fetch_runs)
     output = "Latest submitted speedruns:\n" + format_block(runs)
-  else
-    game = 'm1mjnk12'
-    category = 'zd307pnd'
-    boards = Speedrun.get_boards(game, category)
-    output = Speedrun.format_boards(boards)
-    #page = parse_page(msg, page, false, event.message.components)
-    #count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
-    #pag = compute_pages(count, page)
-    #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_speedruns', total: false)
+    return send_message(event, content: output, components: view)
   end
+
+  # Default values when they haven't been provided
+  game = Speedrun.sanitize_game(game || get_menu_value(event, 'speedrun:game'))
+  category = Speedrun.sanitize_category(game, category || get_menu_value(event, 'speedrun:category'))
+  categories = Speedrun.get_game(game)[:categories]
+
+  # Fetch leaderboards and format them
+  boards = Speedrun.fetch_boards(game, category)
+  output = Speedrun.format_boards(boards)
+
+  # Components
+  view.row{ |r|
+    r.select_menu(custom_id: "speedrun:game:#{game}", placeholder: 'Game', max_values: 1){ |m|
+      Speedrun::GAMES.each{ |id, name|
+        m.option(label: name, value: id, default: id == game)
+      }
+    }
+  }
+  view.row{ |r|
+    r.select_menu(custom_id: "speedrun:category:#{category}", placeholder: 'Category', max_values: 1){ |m|
+      categories.each{ |id, cat|
+        m.option(label: cat[:name], value: id, default: id == category)
+      }
+    }
+  }
+
+
+  #page = parse_page(msg, page, false, event.message.components)
+  #count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
+  #pag = compute_pages(count, page)
+  #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_speedruns', total: false)
   send_message(event, content: output, components: view)
 end
 

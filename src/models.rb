@@ -3412,6 +3412,7 @@ module Speedrun extend self
     'y654p8de' => 'N v1.4',
     'm1mokp62' => 'N v2.0'
   }
+  DEFAULT_GAME = 'm1mjnk12'
 
   # Prefetch some information that hardly changes (games, categories and variables)
   @@games = GAMES.map{ |k, v| [k, {}] }.to_h
@@ -3420,6 +3421,22 @@ module Speedrun extend self
   # navigating paginated lists (e.g. leaderboards). The API limit is 100 requets
   # per minute, so it's hard to reach, but this way we save time anyway.
   @@cache = Cache.new
+
+  def get_game(game)
+    @@games[game]
+  end
+
+  def get_category(game, cat)
+    @@games[game][:categories][cat]
+  end
+
+  def get_variable(game, cat, var)
+    @@games[game][:categories][cat][:variables][var]
+  end
+
+  def get_value(game, cat, var, val)
+    @@games[game][:categories][cat][:variables][var][:values][val]
+  end
 
   def key(route, params)
     "#{route}:#{params.to_json}"
@@ -3671,16 +3688,19 @@ module Speedrun extend self
 
   # See parse_run
   def parse_leaderboard(data, players = nil)
+    # Runs with a place of 0 typically don't belong to this leaderboard
+    runs = data['runs'].map{ |run| parse_run(run['run'], players).merge(place: run['place']) }
+                       .reject{ |run| run[:place] == 0 }
     {
       game:     data['game'],
       category: data['category'],
       uri:      data['weblink'],
-      runs:     data['runs'].map{ |run| parse_run(run['run'], players).merge(place: run['place']) }
+      runs:     runs
     }
   end
 
   # Retrieve game, category and variable information for all N games
-  def get_basic_info
+  def fetch_basic_info
     embed = 'categories.variables,moderators,platforms,genres,developers,levels'
     res = get(ROUTE_SERIES_GAMES % SERIES_ID, { embed: embed })
     return if !res
@@ -3688,17 +3708,17 @@ module Speedrun extend self
   end
 
   # Ensure the basic information (games, categories, variables, platforms) is available
-  def ensure_basic_info(game)
+  def ensure_basic_info(game = default_game)
     return false if !@@games.key?(game)
     attempts = 0
-    get_basic_info while (attempts += 1) <= RETRIES && @@games[game].empty?
+    fetch_basic_info while (attempts += 1) <= RETRIES && @@games[game].empty?
     !@@games[game].empty?
   end
 
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
   # TODO: Pagination doesn't work like this, due to mixing multiple lists
-  def get_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
+  def fetch_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
     GAMES.map{ |id, name|
       next [] if !ensure_basic_info(id)
       params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: 'players' }
@@ -3709,7 +3729,7 @@ module Speedrun extend self
   end
 
   # Get the leaderboards for a given category, optionally filtering by platform and any variable
-  def get_boards(game, category, count: SPEEDRUN_BOARD_COUNT, page: 0, variables: {}, platform: nil)
+  def fetch_boards(game, category, count: SPEEDRUN_BOARD_COUNT, page: 0, variables: {}, platform: nil)
     return { game: game, category: category, uri: nil, runs: [] } if !ensure_basic_info(game)
     params = { top: count, embed: 'players' }
     params[:platform] = platform if platform
@@ -3718,6 +3738,72 @@ module Speedrun extend self
     return { game: game, category: category, uri: nil, runs: [] } if !res
     players = res['data']['players']['data'].map{ |p| parse_user(p) } if res['data']['players']
     parse_leaderboard(res['data'], players)
+  end
+
+  # Return the ID of the default game
+  def default_game
+    GAMES.invert['N++']
+  end
+
+  # Return the ID of the default category of a game
+  def default_category(game)
+    return if !ensure_basic_info(game)
+    get_game(game)[:categories].first[1][:id]
+  end
+
+  # Return the ID of the default value of a given variable
+  def default_value(game, cat, var)
+    return if !ensure_basic_info(game)
+    get_variable(game, cat, var)[:default]
+  end
+
+  # Checks if the game ID is valid
+  def validate_game(game)
+    @@games.key?(game)
+  end
+
+  # Checks if the category ID is valid and corresponds to the given game
+  # Assumes the game is valid
+  def validate_category(game, cat)
+    return if !ensure_basic_info(game)
+    get_game(game)[:categories].any?{ |id, _| id == cat }
+  end
+
+  # Checks if the variable ID is valid and corresponds to the given game and category
+  # Assumes the game and category are valid
+  def validate_variable(game, cat, var)
+    return if !ensure_basic_info(game)
+    get_category(game, cat)[:variables].any?{ |id, _| id == var }
+  end
+
+  # Checks if the value ID is valid and corresponds to the given variable
+  # Assumes the game, category and variable are valid
+  def validate_value(game, cat, var, val)
+    return if !ensure_basic_info(game)
+    get_variable(game, cat, var)[:values].any?{ |id, _| id == val }
+  end
+
+  # Ensure the game ID is valid, default if not
+  def sanitize_game(game)
+    validate_game(game) ? game : default_game
+  end
+
+  # Ensure the category ID is valid, default if not
+  def sanitize_category(game, cat)
+    return if !ensure_basic_info(game)
+    validate_category(game, cat) ? cat : default_category(game)
+  end
+
+  # Ensure the variable ID is valid, default _TO NIL_ if not
+  def sanitize_variable(game, cat, var)
+    return if !ensure_basic_info(game)
+    validate_variable(game, cat, var) ? var : nil
+  end
+
+  # Ensure the value ID is valid, default if not
+  def sanitize_value(game, cat, var, val)
+    return if !ensure_basic_info(game)
+    validate_value(game, cat, var, val) ? val : default_value(game, cat, var)
   end
 
   # Format a run into usable textual fields
@@ -3784,7 +3870,7 @@ module Speedrun extend self
   def format_boards(boards)
     game = @@games[boards[:game]]
     cat = game[:categories][boards[:category]]
-    header = "📜 __#{game[:name]} [Leaderboards](<#{boards[:uri]}>) — [#{cat[:name]}](<#{cat[:uri]}>)__ (vars)"
+    header = "📜 __#{GAMES[game[:id]]} [Leaderboards](<#{boards[:uri]}>) — [#{cat[:name]}](<#{cat[:uri]}>)__ (vars)"
     list = boards = boards[:runs].map{ |run|
       fields = format_run(run).merge(place: run[:place])
       place = app_emoji(run[:place].ordinalize) || EMOJI_NUMBERS[run[:place]] || "**#{run[:place]}**"
@@ -3795,9 +3881,10 @@ module Speedrun extend self
       time = fields[:rta] + (fields[:igt] != '-' ? " (#{fields[:igt]} IGT)" : '')
       time = mdurl(time, run[:uri], false)
       plat_emoji = nil
-      ['PC', 'PS', 'Xbox', 'Switch'].each{ |plat|
-        plat_emoji = app_emoji("plat_#{plat}") if fields[:platform][/#{plat}/i]
+      ['PC', 'PSP', 'PS', 'Xbox', 'Switch', '2DS', 'DS'].each{ |plat|
+        break plat_emoji = app_emoji("plat_#{plat}") if fields[:platform][/#{plat}/i]
       }
+      plat_emoji = '🖥️' if ['N v1.4', 'N v2.0'].include?(GAMES[game[:id]])
       platform = plat_emoji || "(#{fields[:platform]})"
       "%s %s — %s — %s %s" % [place, players, time, fields[:date], platform]
     }.join("\n")

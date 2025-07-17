@@ -395,6 +395,18 @@ rescue
   Discordrb::Webhooks::View.new
 end
 
+# Given a message event, presumably with select menus, this will fetch the
+# current value of a menu given the id.
+# It assumes the last part of the custom ID of the select menu is the current value
+def get_menu_value(event, id)
+  event.message.components.each{ |row|
+    row.components.each{ |c|
+      return $2 if c.custom_id =~ /^(.+):(.+)$/ && $1 == id
+    }
+  }
+  nil
+end
+
 # Modal shown to identify a player (i.e., assign a player to a Discord user),
 # if the player is found, otherwise respond with an error
 def modal_identify(event, name: '')
@@ -570,6 +582,8 @@ def respond_interaction_menu(event)
     when 'tab'    # Change highscoreable tab (all, si, s, su, sl, ss, ss2)
       send_rankings(event, tab: val)
     end
+  when 'speedrun' # Select Menus for the Speedrun API function
+    send_speedruns(event, keys[1].to_sym => val)
   end
 end
 
