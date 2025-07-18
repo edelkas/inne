@@ -126,10 +126,10 @@ EMOJIS_TO_DELETE = ['❌', '✖️', '🇽', '⛔', '🚫', '❎']
 EMOJIS_FOR_PLAY = ['Ninja', 'ninjajump', 'ninjavictory', 'nAight']
 EMOJI_NUMBERS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
 APP_EMOJIS = {
-  '1st'         => { test: 1393773038163460259, prod: 1393770276659138630 },
-  '2nd'         => { test: 1393773051748945960, prod: 1393770299454918676 },
-  '3rd'         => { test: 1393773065330233354, prod: 1393770312121716736 },
-  '4th'         => { test: 1393773080433786920, prod: 1393770327468802048 },
+  'plus_1st'    => { test: 1393773038163460259, prod: 1393770276659138630 },
+  'plus_2nd'    => { test: 1393773051748945960, prod: 1393770299454918676 },
+  'plus_3rd'    => { test: 1393773065330233354, prod: 1393770312121716736 },
+  'plus_4th'    => { test: 1393773080433786920, prod: 1393770327468802048 },
   'plat_PC'     => { test: 1394801514148659280, prod: 1394807830397059203 },
   'plat_PS'     => { test: 1394801418430320750, prod: 1394807791952330792 },
   'plat_Xbox'   => { test: 1394801570327040032, prod: 1394807873707446433 },
@@ -138,7 +138,13 @@ APP_EMOJIS = {
   'plat_DS'     => { test: 1395099420776730794, prod: 1395099616847990866 },
   'plat_2DS'    => { test: 1395101713257468044, prod: 1395108150339829760 },
   'plat_3DS'    => { test: 1395105604770467900, prod: 1395108220414201946 },
-  'plat_PSP'    => { test: 1395104831177494568, prod: 1395108189095202897 }
+  'plat_PSP'    => { test: 1395104831177494568, prod: 1395108189095202897 },
+  'trophy_1st'  => { test: 1395536394335551498, prod: 1395536824574677084 },
+  'trophy_2nd'  => { test: 1395536416347259020, prod: 1395536836440625212 },
+  'trophy_3rd'  => { test: 1395536430260027613, prod: 1395536847219724399 },
+  'gold_1st'    => { test: 1395536441802756258, prod: 1395536858037092373 },
+  'gold_2nd'    => { test: 1395536452770726049, prod: 1395536866891010209 },
+  'gold_3rd'    => { test: 1395536467664703611, prod: 1395536876923916471 }
 }
 
 # Others
@@ -498,7 +504,7 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 SPEEDRUN_DEBUG_LOGS = true # Log useful stuff to the terminal (request URI's, etc)
 
 SPEEDRUN_NEW_COUNT   = 10 # How many speedruns to show in the most recent list
-SPEEDRUN_BOARD_COUNT =  5 # How many speedruns per page in leaderboards
+SPEEDRUN_BOARD_COUNT = 10 # How many speedruns per page in leaderboards
 
 SPEEDRUN_COLOR_NEW  = 0xf6c42f # Embed bar color for new submitted speedruns
 SPEEDRUN_COLOR_REJ  = 0xf24e43 # Embed bar color for new rejected speedruns
