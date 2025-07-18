@@ -184,7 +184,7 @@ end
 
 
 # ActionRow builder with Buttons for standard page navigation
-def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000, func: nil, force: false)
+def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 1000000000, func: nil, force: false, source: 'button')
   view = Discordrb::Webhooks::View.new if !view
   return view if pages == 1 && !force
   interaction_add_navigation(
@@ -192,11 +192,11 @@ def interaction_add_button_navigation(view, page = 1, pages = 1, offset = 100000
     labels:   ["❙❮", "❮", "#{page} / #{pages}", "❯", "❯❙"],
     disabled: [page == 1, page == 1, true, page == pages, page == pages],
     ids:      [
-      "button:nav:#{-offset}#{func ? ':' + func : ''}",
-      "button:nav:-1#{func ? ':' + func : ''}",
-      "button:nav:page",
-      "button:nav:1#{func ? ':' + func : ''}",
-      "button:nav:#{offset}#{func ? ':' + func : ''}"
+      "#{source}:nav:#{-offset}#{func ? ':' + func : ''}",
+      "#{source}:nav:-1#{func ? ':' + func : ''}",
+      "#{source}:nav:page",
+      "#{source}:nav:1#{func ? ':' + func : ''}",
+      "#{source}:nav:#{offset}#{func ? ':' + func : ''}"
     ]
   )
 end
@@ -206,7 +206,7 @@ end
 #   - wrap:  Whether buttons will wrap once you get to the end of the list, or be disabled instead
 #   - force: Force buttons to show even if there's a single page
 #   - total: Show the total amount of pages, useful for when it's not known
-def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil, wrap: false, force: false, total: true)
+def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = nil, wrap: false, force: false, total: true, source: 'button')
   view = Discordrb::Webhooks::View.new if !view
   return view if pages == 1 && !force
   offset_left = wrap && page == 1 ? 1000000000 : -1
@@ -217,9 +217,9 @@ def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = ni
     labels:   ["❮", page.to_s + (total ? " / #{pages}" : ''), "❯"],
     disabled: [wrap ? false : page == 1, true, wrap ? false : page == pages],
     ids:      [
-      "button:nav:#{offset_left}#{suf}",
-      "button:nav:page",
-      "button:nav:#{offset_right}#{suf}"
+      "#{source}:nav:#{offset_left}#{suf}",
+      "#{source}:nav:page",
+      "#{source}:nav:#{offset_right}#{suf}"
     ]
   )
 end
@@ -481,22 +481,23 @@ end
 # Important notes for parsing interaction components:
 #
 # 1) We determine the origin of the interaction (the bot's source message) based
-#    on the first word of the message. Therefore, we have to format this first
-#    word (and, often, the first sentence) properly for the bot to parse it.
+#    on the first component of the button ID, or the first word of the message.
+#    Therefore, we have to format this first word (and, often, the first sentence)
+#    properly for the bot to parse it.
 #
 # 2) We use the custom_id of the component (button, select menu, modal) and of the
 #    component option (select menu option) to classify them and determine what
 #    they do. Therefore, they must ALL follow a specific pattern:
 #
 #    IDs will be strings composed by a series of keywords separated by colons:
-#      The first keyword specifies the type of component (button, menu).
+#      The first keyword specifies the source of the interaction (in essence, what function).
 #      The second keyword specifies the category of the component (up to you).
 #      The third keyword specifies the specific component.
+#      Optionally, the fourth keyword specifies the method name.
 
 def respond_interaction_button(event)
-  keys = event.custom_id.to_s.split(':')       # Component parameters
-  type = parse_message(event)[/\w+/i].downcase # Source message type
-  return if keys[0] != 'button'                # Only listen to buttons
+  keys = event.custom_id.to_s.split(':') # Component parameters
+  keys[0] = parse_message(event)[/\w+/i].to_s.downcase if keys[0] == 'button'
 
   # If it's a refresh button or a pager, we simply resend the exact same command,
   # editing the old one
@@ -504,7 +505,7 @@ def respond_interaction_button(event)
   return send(keys[3], event, page: keys[2]) if keys[1] == 'nav'     && !!keys[3]
 
   # Otherwise, distinguish depending on the source message
-  case type
+  case keys[0]
   when 'aliases'
     case keys[1]
     when 'nav'
@@ -583,7 +584,11 @@ def respond_interaction_menu(event)
       send_rankings(event, tab: val)
     end
   when 'speedrun' # Select Menus for the Speedrun API function
-    send_speedruns(event, keys[1].to_sym => val)
+    if keys[1] =~ /^var-(.+)$/
+      send_speedruns(event, variable: $1, value: val)
+    else
+      send_speedruns(event, keys[1].to_sym => val)
+    end
   end
 end
 

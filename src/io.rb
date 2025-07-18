@@ -35,7 +35,7 @@ def parse_page(msg, offset = 0, reset = false, components = nil, default: 1)
   page = nil
   components.to_a.each{ |row|
     row.each{ |component|
-      page = component.label.to_s[/\d+/i].to_i if component.custom_id.to_s == 'button:nav:page'
+      page = component.label.to_s[/\d+/i].to_i if component.custom_id.to_s =~ /nav:page/
     }
   }
   (page || msg[/page:?[\s\*]*(\d+)/i, 1] || default).to_i + offset.to_i
@@ -1408,7 +1408,7 @@ def send_message(
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
     log_message(content, files, components, edit: true) if log
-    return dest.update_message(content: content, components: components)
+    return dest.update_message(content: content, components: components, embeds: [embed])
   end
 
   # Manually spoiler attachments if necessary
