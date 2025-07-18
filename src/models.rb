@@ -3408,9 +3408,9 @@ module Speedrun extend self
   GAMES = {
     'm1mjnk12' => 'N++',
     '268wr76p' => 'N+',
-    'v1ponv46' => 'N CE',
     'y654p8de' => 'N v1.4',
-    'm1mokp62' => 'N v2.0'
+    'm1mokp62' => 'N v2.0',
+    'v1ponv46' => 'Cat Ext'
   }
   DEFAULT_GAME = 'm1mjnk12'
 
@@ -3458,6 +3458,8 @@ module Speedrun extend self
     }
     dbg("Speedrun API request: #{uri}") if SPEEDRUN_DEBUG_LOGS
     res.is_a?(Net::HTTPSuccess) ? res.body.to_s : nil
+  rescue Timeout::Error
+    nil
   end
 
   def get(route, params, cache: true)
@@ -3687,14 +3689,17 @@ module Speedrun extend self
   end
 
   # See parse_run
-  def parse_leaderboard(data, players = nil)
+  def parse_leaderboard(data, players = nil, range: nil)
     # Runs with a place of 0 typically don't belong to this leaderboard
-    runs = data['runs'].map{ |run| parse_run(run['run'], players).merge(place: run['place']) }
-                       .reject{ |run| run[:place] == 0 }
+    count = data['runs'].count
+    runs = data['runs'].select{ |run| range ? range.cover?(run['place']) : run['place'] > 0 }
+                       .map{ |run| parse_run(run['run'], players).merge(place: run['place']) }
     {
       game:     data['game'],
       category: data['category'],
       uri:      data['weblink'],
+      values:   data['values'],
+      count:    count,
       runs:     runs
     }
   end
@@ -3729,13 +3734,13 @@ module Speedrun extend self
   end
 
   # Get the leaderboards for a given category, optionally filtering by platform and any variable
-  def fetch_boards(game, category, count: SPEEDRUN_BOARD_COUNT, page: 0, variables: {}, platform: nil)
+  def fetch_boards(game, category, variables: {}, platform: nil)
     return { game: game, category: category, uri: nil, runs: [] } if !ensure_basic_info(game)
-    params = { top: count, embed: 'players' }
+    params = { embed: 'players' }
     params[:platform] = platform if platform
     variables.each{ |var, val| params["var-#{var}"] = val }
     res = get(ROUTE_LEADERBOARDS % [game, category], params)
-    return { game: game, category: category, uri: nil, runs: [] } if !res
+    return { game: game, category: category, uri: nil, values: {}, runs: [] } if !res
     players = res['data']['players']['data'].map{ |p| parse_user(p) } if res['data']['players']
     parse_leaderboard(res['data'], players)
   end
@@ -3848,7 +3853,7 @@ module Speedrun extend self
     # Compute padding (not necessary anymore since we're using make_table)
     header = ["Game", "System", "Mode", "Category", "Type", "Players", "RTA", "IGT", "Date", "Status"]
     align = ['-', '-', '-', '-', '-', '-', '', '', '-', '']
-    max_padding = [6, 8, 4, 32, 32, 32, 12, 12, 10, 12]
+    max_padding = [7, 8, 4, 32, 32, 32, 12, 12, 10, 12]
     padding = header.map(&:length)
     padding = runs.transpose.lazy.zip(padding, max_padding).map{ |col, min, max|
       col.max_by(&:length).length.clamp(min, max)
@@ -3866,29 +3871,43 @@ module Speedrun extend self
   end
 
   # Format the leaderboards
-  # TODO: Try with an embed, fill vars
+  # TODO: Try with an embed
   def format_boards(boards)
-    game = @@games[boards[:game]]
-    cat = game[:categories][boards[:category]]
-    header = "📜 __#{GAMES[game[:id]]} [Leaderboards](<#{boards[:uri]}>) — [#{cat[:name]}](<#{cat[:uri]}>)__ (vars)"
-    list = boards = boards[:runs].map{ |run|
+    game = get_game(boards[:game])
+    cat = get_category(boards[:game], boards[:category])
+    header = "📜 #{GAMES[game[:id]]} Speedruns — #{cat[:name]}"
+    vars = boards[:values].map{ |var, val| get_value(boards[:game], boards[:category], var, val)[:name] }.join(', ')
+    header += " (#{vars})" unless vars.empty?
+    list = boards[:runs].map{ |run|
       fields = format_run(run).merge(place: run[:place])
-      place = app_emoji(run[:place].ordinalize) || EMOJI_NUMBERS[run[:place]] || "**#{run[:place]}**"
-      players = run[:players].map{ |p|
-        name = '**' + p[:name] + '**'
-        p[:uri] ? mdurl(name, p[:uri], false) : name
-      }.join(', ')
+      case game[:abbrev]
+      when 'N++'
+        place_emoji = 'plus_' + run[:place].ordinalize
+      when 'N v1.4', 'N v2.0'
+        place_emoji = 'gold_' + run[:place].ordinalize
+      else
+        place_emoji = 'trophy_' + run[:place].ordinalize
+      end
+      place = app_emoji(place_emoji) || EMOJI_NUMBERS[run[:place]] || "**#{run[:place]}**"
+      players = mdurl('**' + run[:players].map{ |p| p[:name] }.join(', ') + '**', run[:uri])
       time = fields[:rta] + (fields[:igt] != '-' ? " (#{fields[:igt]} IGT)" : '')
-      time = mdurl(time, run[:uri], false)
+      time = verbatim(time)
       plat_emoji = nil
-      ['PC', 'PSP', 'PS', 'Xbox', 'Switch', '2DS', 'DS'].each{ |plat|
+      ['PC', 'PSP', 'PS', 'Xbox', 'Switch', '2DS', '3DS', 'DS'].each{ |plat|
         break plat_emoji = app_emoji("plat_#{plat}") if fields[:platform][/#{plat}/i]
       }
-      plat_emoji = '🖥️' if ['N v1.4', 'N v2.0'].include?(GAMES[game[:id]])
+      plat_emoji = '💻' if ['N v1.4', 'N v2.0'].include?(GAMES[game[:id]])
       platform = plat_emoji || "(#{fields[:platform]})"
-      "%s %s — %s — %s %s" % [place, players, time, fields[:date], platform]
+      "%s %s: %s — %s %s" % [place, players, time, fields[:date], platform]
     }.join("\n")
-    "# " + header + "\n" + list
+    embed = Discordrb::Webhooks::Embed.new(
+      title:       header,
+      description: list,
+      url:         game[:uri],
+      color:       SPEEDRUN_COLOR_INFO,
+      thumbnail:   Discordrb::Webhooks::EmbedThumbnail.new(url: game[:cover])
+    )
+    embed
   end
 
   # Formats a single run as an embed

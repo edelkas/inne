@@ -2118,7 +2118,7 @@ rescue => e
 end
 
 # Send information about the latest submitted speedruns or fetch some leaderboard
-def send_speedruns(event, page: nil, game: nil, category: nil)
+def send_speedruns(event, page: nil, game: nil, category: nil, variable: nil, value: nil)
   # Ensure we have access to at least the basic information from the API
   perror("Failed to fetch info from Speedrun.com") if !Speedrun::ensure_basic_info
 
@@ -2134,37 +2134,54 @@ def send_speedruns(event, page: nil, game: nil, category: nil)
     return send_message(event, content: output, components: view)
   end
 
-  # Default values when they haven't been provided
+  # Validate input, use default values if invalid
   game = Speedrun.sanitize_game(game || get_menu_value(event, 'speedrun:game'))
   category = Speedrun.sanitize_category(game, category || get_menu_value(event, 'speedrun:category'))
   categories = Speedrun.get_game(game)[:categories]
+  variables = Speedrun.get_category(game, category)[:variables].select{ |id, var| var[:subcategory] }
+  values = variables.map{ |id, var|
+    val = variable == id ? value : get_menu_value(event, "speedrun:var-#{id}")
+    val = Speedrun.sanitize_value(game, category, id, val)
+    [id, val]
+  }.to_h
 
   # Fetch leaderboards and format them
-  boards = Speedrun.fetch_boards(game, category)
-  output = Speedrun.format_boards(boards)
+  boards = Speedrun.fetch_boards(game, category, variables: values)
+  reset_page = !parse_initial(event) && !page
+  page = parse_page(msg, page, reset_page, event.message.components)
+  pag = compute_pages(boards[:count], page, SPEEDRUN_BOARD_COUNT)
+  offset = SPEEDRUN_BOARD_COUNT * (pag[:page] - 1) + 1
+  range = (offset...offset + SPEEDRUN_BOARD_COUNT)
+  boards[:runs].select!{ |run| range.cover?(run[:place]) }
+  embed = Speedrun.format_boards(boards)
 
   # Components
+  interaction_add_button_navigation(view, pag[:page], pag[:pages], func: 'send_speedruns', source: 'speedrun')
   view.row{ |r|
     r.select_menu(custom_id: "speedrun:game:#{game}", placeholder: 'Game', max_values: 1){ |m|
       Speedrun::GAMES.each{ |id, name|
-        m.option(label: name, value: id, default: id == game)
+        m.option(label: 'Game: ' + name, value: id, default: id == game)
       }
     }
   }
   view.row{ |r|
     r.select_menu(custom_id: "speedrun:category:#{category}", placeholder: 'Category', max_values: 1){ |m|
       categories.each{ |id, cat|
-        m.option(label: cat[:name], value: id, default: id == category)
+        m.option(label: 'Category: ' + cat[:name], value: id, default: id == category)
+      }
+    }
+  }
+  variables.each{ |var_id, var|
+    view.row{ |r|
+      r.select_menu(custom_id: "speedrun:var-#{var_id}:#{values[var_id]}", placeholder: var[:name], max_values: 1){ |m|
+        var[:values].each{ |val_id, val|
+          m.option(label: "%s: %s" % [var[:name], val[:name]], value: val_id, default: val_id == values[var_id])
+        }
       }
     }
   }
 
-
-  #page = parse_page(msg, page, false, event.message.components)
-  #count = runs.count < SPEEDRUN_NEW_COUNT ? (page - 1) * SPEEDRUN_NEW_COUNT + runs.count : page * SPEEDRUN_NEW_COUNT + 1
-  #pag = compute_pages(count, page)
-  #interaction_add_button_navigation_short(view, pag[:page], pag[:pages], 'send_speedruns', total: false)
-  send_message(event, content: output, components: view)
+  send_message(event, embed: embed, components: view)
 end
 
 def mishnub(event)
