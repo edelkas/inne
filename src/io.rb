@@ -1408,7 +1408,7 @@ def send_message(
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
     log_message(content, files, components, edit: true) if log
-    return dest.update_message(content: content, components: components, embeds: [embed])
+    return dest.update_message(content: content, components: components, embeds: [embed].compact)
   end
 
   # Manually spoiler attachments if necessary

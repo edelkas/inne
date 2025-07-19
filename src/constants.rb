@@ -447,6 +447,7 @@ FOOD           = [                  # Emojis for the potato joke
 # Individual flags for each thread / task
 UPDATE_STATUS     = false # Thread to regularly update the bot's status
 UPDATE_TWITCH     = false # Thread to regularly look up N related Twitch streams
+UPDATE_SPEEDRUN   = false # Thread to regularly look up new N related speedruns
 UPDATE_SCORES     = false # Thread to regularly download Metanet's scores
 UPDATE_DEMOS      = false # Thread to regularly download missing Metanet demos
 POST_LOTD         = false # Thread to regularly publish level of the day
@@ -467,6 +468,7 @@ REPORT_USERLEVELS = false # Thread to regularly post userlevels' highscoring rep
 # Update frequencies for each task, in seconds
 STATUS_UPDATE_FREQUENCY     =             5 * 60
 TWITCH_UPDATE_FREQUENCY     =                 60
+SPEEDRUN_UPDATE_FREQUENCY   =                 60
 HIGHSCORE_UPDATE_FREQUENCY  =       24 * 60 * 60
 DEMO_UPDATE_FREQUENCY       =       24 * 60 * 60
 LEVEL_UPDATE_FREQUENCY      =       24 * 60 * 60
@@ -501,7 +503,7 @@ TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames he
 # <------                    SPEEDRUN API VARIABLES                      ------>
 # <---------------------------------------------------------------------------->
 
-SPEEDRUN_DEBUG_LOGS = true # Log useful stuff to the terminal (request URI's, etc)
+SPEEDRUN_DEBUG_LOGS = false # Log useful stuff to the terminal (request URI's, etc)
 
 SPEEDRUN_NEW_COUNT   = 10 # How many speedruns to show in the most recent list
 SPEEDRUN_BOARD_COUNT = 10 # How many speedruns per page in leaderboards

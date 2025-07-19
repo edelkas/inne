@@ -44,7 +44,11 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event, page: nil)
-  #send_message(event, embed: embed)
+  ['new', 'verified', 'rejected'].each{ |status|
+    run = Speedrun.fetch_runs(Speedrun::GAMES.keys.first, count: 1, status: status).first
+    next unless run
+    send_message(event, embed: Speedrun.format_embed(run))
+  }
 end
 
 def send_dday_stats

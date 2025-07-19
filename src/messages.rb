@@ -2129,7 +2129,10 @@ def send_speedruns(event, page: nil, game: nil, category: nil, variable: nil, va
 
   # Return the latest submitted speedruns formatted in a table
   if newest
-    runs = Speedrun.format_table(Speedrun.fetch_runs)
+    runs = Speedrun::GAMES.map{ |id, name|
+      Speedrun.fetch_runs(id)
+    }.flatten.sort_by{ |run| run[:date_submitted] }.reverse.take(SPEEDRUN_NEW_COUNT)
+    runs = Speedrun.format_table(runs)
     output = "Latest submitted speedruns:\n" + format_block(runs)
     return send_message(event, content: output, components: view)
   end

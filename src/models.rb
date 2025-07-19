@@ -3375,6 +3375,7 @@ end
 module Speedrun extend self
 
   # Basic API info
+  WEB_ROOT    = 'https://www.speedrun.com'
   API_ROOT    = 'https://www.speedrun.com/api'
   API_VERSION = 1
   RETRIES     = 5
@@ -3413,6 +3414,8 @@ module Speedrun extend self
     'v1ponv46' => 'Cat Ext'
   }
   DEFAULT_GAME = 'm1mjnk12'
+
+  MAX_REPORT_AGE = 7 * 24 * 60 * 60 # Oldest runs to consider new (i.e. notifiable)
 
   # Prefetch some information that hardly changes (games, categories and variables)
   @@games = GAMES.map{ |k, v| [k, {}] }.to_h
@@ -3453,17 +3456,23 @@ module Speedrun extend self
     req = Net::HTTP::Get.new(uri)
     versions = [RUBY_VERSION, ActiveRecord.version, Discordrb::VERSION]
     req['User-Agent'] = "inne++ Discord Bot (#{GITHUB_LINK}) Ruby/%s Rails/%s discordrb/%s" % versions
+    req['Cache-Control'] = 'no-cache'
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 1){ |http|
       http.request(req)
     }
-    dbg("Speedrun API request: #{uri}") if SPEEDRUN_DEBUG_LOGS
+    dbg("Speedrun API request: #{uri}\nCache: #{res['x-cache']}") if SPEEDRUN_DEBUG_LOGS
     res.is_a?(Net::HTTPSuccess) ? res.body.to_s : nil
   rescue Timeout::Error
     nil
   end
 
+  # Wrapper to look up in our local cache before actually making the request.
+  # The Speedrun.com CDN doesn't actually honor the 'no-cache' header, so
+  # we have to include a cache-busting parameter.
   def get(route, params, cache: true)
+    params.reject!{ |key, value| value.nil? }
     key = key(route, params)
+    params[:cache] = "%08x" % rand(2 ** 32) unless cache # Cache busting not included in key
     body = cache && @@cache.get(key) || request(route, params)
     return if !body
     @@cache.add(key, body)
@@ -3519,18 +3528,19 @@ module Speedrun extend self
     end
 
     {
-      id:         data['id'],
-      name:       data['names']['international'],
-      abbrev:     GAMES[data['id']], # Only for the N series ones
-      uri:        data['weblink'],
-      date:       Time.parse(data['release-date']),
-      cover:      data['assets']['cover-large']['uri'],
-      categories: categories,
-      moderators: moderators,
-      platforms:  platforms,
-      genres:     genres,
-      developers: developers,
-      levels:     levels
+      id:           data['id'],
+      name:         data['names']['international'],
+      abbreviation: data['abbreviation'],
+      alias:        GAMES[data['id']], # Only for the N series ones
+      uri:          data['weblink'],
+      date:         Time.parse(data['release-date']),
+      cover:        data['assets']['cover-large']['uri'],
+      categories:   categories,
+      moderators:   moderators,
+      platforms:    platforms,
+      genres:       genres,
+      developers:   developers,
+      levels:       levels
     }
   end
 
@@ -3552,7 +3562,7 @@ module Speedrun extend self
     {
       id:     data['id'],
       name:   data['name'],
-      abbrev: PLATFORMS[data['id']], # Only for a few we've set
+      alias:  PLATFORMS[data['id']], # Only for a few we've set
       date:   data['released']
     }
   end
@@ -3697,8 +3707,8 @@ module Speedrun extend self
     {
       game:     data['game'],
       category: data['category'],
-      uri:      data['weblink'],
       values:   data['values'],
+      uri:      format_url(data['game'], data['category'], data['values']), # data['weblink'] is broken
       count:    count,
       runs:     runs
     }
@@ -3723,14 +3733,13 @@ module Speedrun extend self
   # Fetch latest runs and check for new ones
   # TODO: Truncate full list first, parse afterwards, to avoid parsing all runs
   # TODO: Pagination doesn't work like this, due to mixing multiple lists
-  def fetch_runs(count: SPEEDRUN_NEW_COUNT, page: 0, cache: true)
-    GAMES.map{ |id, name|
-      next [] if !ensure_basic_info(id)
-      params = { game: id, max: count, offset: count * page, orderby: 'submitted', direction: 'desc', embed: 'players' }
-      res = get(ROUTE_RUNS, params, cache: cache)
-      next [] if !res
-      res['data'].map{ |run| parse_run(run) }
-    }.flatten.sort_by{ |run| run[:date_submitted] }.reverse.take(count)
+  def fetch_runs(game, count: SPEEDRUN_NEW_COUNT, page: 0, cache: true, status: nil, order: nil, parse: true)
+    return [] if game && !ensure_basic_info(game)
+    order ||= status == 'verified' ? 'verify-date' : 'submitted'
+    params = { game: game, status: status, max: count, offset: count * page, orderby: order, direction: 'desc', embed: 'players' }
+    res = get(ROUTE_RUNS, params, cache: cache)
+    return [] if !res
+    parse ? res['data'].map{ |run| parse_run(run) } : res['data']
   end
 
   # Get the leaderboards for a given category, optionally filtering by platform and any variable
@@ -3743,6 +3752,47 @@ module Speedrun extend self
     return { game: game, category: category, uri: nil, values: {}, runs: [] } if !res
     players = res['data']['players']['data'].map{ |p| parse_user(p) } if res['data']['players']
     parse_leaderboard(res['data'], players)
+  end
+
+  # Check for new N runs that need to be notified
+  def fetch_new_runs
+    GAMES.map{ |id, name|
+      ['new', 'verified', 'rejected'].map{ |status|
+        sleep(0.5)
+        property = GlobalProperty.find_by(key: "last_#{status}_#{id}_speedrun")
+        threshold = Time.parse(property.value)
+        new_threshold = threshold
+        runs = fetch_runs(id, cache: false, status: status).select{ |run|
+          time = run[status == 'verified' ? :date_verified : :date_submitted]
+          next false if !time
+          new_threshold = time if time > new_threshold
+          time > threshold && (status != 'rejected' ? time > Time.now - MAX_REPORT_AGE : true)
+        }
+        property.update(value: new_threshold)
+        runs
+      }
+    }.flatten
+  end
+
+  # Fetch any new runs (in all games), good for testing
+  def fetch_new_runs_test
+    $threshold = {
+      'new'      => Time.now,
+      'verified' => Time.now,
+      'rejected' => Time.now
+    } unless $threshold
+    ['new', 'verified', 'rejected'].map{ |status|
+      new_threshold = $threshold[status]
+      runs = fetch_runs(nil, cache: false, status: status, parse: false).select{ |run|
+        field = status == 'verified' ? run['status']['verify-date'] : run['submitted']
+        next false if !field
+        time = Time.parse(field)
+        new_threshold = time if time > new_threshold
+        time > $threshold[status] && (status != 'rejected' ? time > Time.now - MAX_REPORT_AGE : true)
+      }
+      $threshold[status] = new_threshold
+      runs
+    }.flatten
   end
 
   # Return the ID of the default game
@@ -3811,6 +3861,16 @@ module Speedrun extend self
     validate_value(game, cat, var, val) ? val : default_value(game, cat, var)
   end
 
+  # Build the Speedrun web URL for the corresponding leaderboards
+  def format_url(game, category = nil, values = {})
+    url = "#{WEB_ROOT}/#{@@games[game][:abbreviation]}"
+    return url if !category
+    url << '?x=' << category
+    return url if values.empty?
+    url << '-' << values.map{ |var, val| "#{var}.#{val}" }.join('-')
+    url
+  end
+
   # Format a run into usable textual fields
   def format_run(run)
     # Fetch main components of the run
@@ -3824,8 +3884,8 @@ module Speedrun extend self
 
     # Format fields
     {
-      game:     game[:abbrev] || game[:name],
-      platform: platform[:abbrev] || platform[:name],
+      game:     game[:alias] || game[:name],
+      platform: platform[:alias] || platform[:name],
       mode:     category[:il] ? 'IL' : category[:il].nil? ? '?' : 'RTA',
       category: category[:name],
       type:     !!level ? level[:name] : !run[:variables].empty? ? variables : '-',
@@ -3871,7 +3931,6 @@ module Speedrun extend self
   end
 
   # Format the leaderboards
-  # TODO: Try with an embed
   def format_boards(boards)
     game = get_game(boards[:game])
     cat = get_category(boards[:game], boards[:category])
@@ -3880,7 +3939,7 @@ module Speedrun extend self
     header += " (#{vars})" unless vars.empty?
     list = boards[:runs].map{ |run|
       fields = format_run(run).merge(place: run[:place])
-      case game[:abbrev]
+      case game[:alias]
       when 'N++'
         place_emoji = 'plus_' + run[:place].ordinalize
       when 'N v1.4', 'N v2.0'
@@ -3903,7 +3962,7 @@ module Speedrun extend self
     embed = Discordrb::Webhooks::Embed.new(
       title:       header,
       description: list,
-      url:         game[:uri],
+      url:         boards[:uri],
       color:       SPEEDRUN_COLOR_INFO,
       thumbnail:   Discordrb::Webhooks::EmbedThumbnail.new(url: game[:cover])
     )
@@ -3922,7 +3981,7 @@ module Speedrun extend self
 
     # Distinguish by status
     if run[:verified]
-      date  = run[:date_submitted] ? ' on ' + run[:date_submitted].strftime('%Y/%m/%d') : ''
+      date  = run[:date_verified] ? ' on ' + run[:date_verified].strftime('%Y/%m/%d') : ''
       color = SPEEDRUN_COLOR_VER
       title = "New #{fields[:game]} speedrun verified!"
       desc  = "Run verified by #{examiner}#{date}."

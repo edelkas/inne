@@ -385,6 +385,16 @@ def update_twitch
   }
 end
 
+# Check for newly submitted / verified / rejected speedruns submitted to Speedrun.com
+# and send notices
+def update_speedrun
+  Speedrun::fetch_new_runs.each{ |run|
+    alert("New speedrun event", discord: true)
+    embed = Speedrun::format_embed(run)
+    send_message($speedrun_channel, embed: embed)
+  }
+end
+
 # Update missing demos (e.g., if they failed to download originally)
 def download_demos
   archives = Archive.where(lost: false)
@@ -834,7 +844,10 @@ def start_discord_tasks
   Scheduler.add("Update status", freq: STATUS_UPDATE_FREQUENCY, log: false) { update_status } if DO_EVERYTHING  || UPDATE_STATUS
 
   # Check for new N++-related streams of Twitch every minute
-  Scheduler.add("Update Twitch", freq: TWITCH_UPDATE_FREQUENCY, log: false, db: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
+  Scheduler.add("Update Twitch", freq: TWITCH_UPDATE_FREQUENCY, log: false, db: false, force: false) { update_twitch } if DO_EVERYTHING  || UPDATE_TWITCH
+
+  # Check for new N++-related speedruns every minute
+  Scheduler.add("Update Speedrun", freq: SPEEDRUN_UPDATE_FREQUENCY, log: false) { update_speedrun } if DO_EVERYTHING  || UPDATE_SPEEDRUN
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY

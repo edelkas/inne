@@ -1,4 +1,4 @@
-- Speedrun.com support in #speedrunning via their API
+- Add embed info to the sent message log in the terminal (count, chars, etc)
 - Get more player info by querying "Around Mine" (and possible "Friends") leaderboards with other Steam IDs, and whenever we find new player IDs, record them in the db. Even better, we can use outte's score in SI-A-00 (and perhaps a few others): Progressively improve the score, fetch the "Around Mine" boards, rinse and repeat. Eventually when we get to the top we have a full map of the leaderboard and, most importantly, of most Metanet players.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
   * Recover most scores using NSim.
@@ -110,6 +110,10 @@ Monitor SQL connections. Add warnings when the connection count gets close to th
 Save number of concurrent connections each time we monitor, so that we have a registry and can e.g. plot them later, to see the average num of connections, peaks, etc.
 
 Perhaps we should look into using acquire_connection (and release_connection) in _thread, and make sure we use that wrapper everywhere.
+
+\\ ------------------------ speedrun api ------------------------
+
+
 
 \\ ------------------------ mappacks -----------------------
 
