@@ -602,7 +602,7 @@ module Downloadable
     nil
   end
 
-  def submit_score(score, replays, player = nil, log: false)
+  def submit_score(score, replays, player = nil, log: false, silent: false)
     fname = verbatim(self.name.remove('`'))
 
     # Fetch player
@@ -656,7 +656,7 @@ module Downloadable
       return
     end
     args = [score.to_i / 1000.0, frames, player.name, player.metanet_id, self.class.to_s.downcase, self.name, self.id]
-    dbg("Submitted score %.3f (%df) by %s (%d) to %s %s (%d)" % args)
+    dbg("Submitted score %.3f (%df) by %s (%d) to %s %s (%d)" % args) unless silent
     JSON.parse(res)
   rescue => e
     lex(e, "Failed to submit score by #{pname} to #{fname}.", discord: log)
@@ -669,6 +669,81 @@ module Downloadable
     replays = [[]] * replay_count
     player = Player.find_by(metanet_id: OUTTE_ID)
     submit_score(score, replays, player, log: log)
+  end
+
+  # Starting with a score of 0, submit progressively higher scores until we
+  # cover the entire leaderboard, so we can map it out. Ensure the last score
+  # we submit is just outside the top20.
+  # TODO: Update the completions field of the highscoreable
+  def scan_boards(metanet_id: OUTTE2_ID)
+    data = {}
+    cur_score = 0
+    max_score = (1000 * scores.minimum(:score)).round
+    cur_rank = -1
+    max_rank = 0
+    cur_id = -1
+    i = 0
+
+    loop do
+      # Submit improved score
+      cur_score = [cur_score, max_score].min
+      score = round_score(cur_score / 1000.0)
+      replay_count = TYPES[self.class.to_s][:size] rescue 1
+      replays = [[]] * replay_count
+      player = Player.find_by(metanet_id: metanet_id)
+      status = submit_score(score, replays, player, log: false, silent: true)
+      if !status
+        sleep
+        next
+      end
+      reached_top = status['better'] == 0 && cur_score == max_score
+      i += 1
+
+      # Fetch scores around me
+      res = Net::HTTP.get_response(scores_uri(OUTTE2_STEAM_ID, qt: reached_top ? 0 : 1))
+      if !res || !(200..299).include?(res.code.to_i)
+        err("Failed to fetch scores (bad post-form).")
+        sleep
+        next
+      elsif res.body == METANET_INVALID_RES
+        err("Failed to fetch scores (inactive Steam ID).")
+        sleep
+        next
+      end
+
+      # Fill data
+      hash = JSON.parse(res.body)
+      board = hash['scores']
+      return err("No scores found.") if board.empty?
+      board.each{ |s| data[s['replay_id']] = s }
+      (cur_id = hash['userInfo']['my_replay_id']) rescue -1
+      data.reject!{ |id, s| s['user_id'] == metanet_id && id != cur_id }
+
+      # Log progress
+      (cur_rank = board.find{ |s| s['user_id'] == metanet_id }['rank']) rescue -1
+      top_rank = board.max_by{ |s| s['rank'] }['rank']
+      max_rank = top_rank if top_rank > max_rank
+      params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, i]
+
+      dbg("%s: %.3f - Scanned %d / %d scores after %d submissions" % params, progress: true)
+
+      # Prepare next iteration
+      break if reached_top
+      top_score = board.max_by{ |s| s['score'] }['score']
+      top_score_m1 = (1000 * ((60 * top_score / 1000.0).round - 1) / 60.0).round # one less frame
+      top_score_p1 = (1000 * ((60 * top_score / 1000.0).round + 1) / 60.0).round # one more frame
+      warn("Hole found at %.3f" % [top_score / 1000.0]) if cur_score == top_score
+      cur_score = cur_score < top_score_m1 ? top_score_m1 : cur_score < top_score ? top_score : top_score_p1
+    end
+  ensure
+    # Ensure we export the data even if an exception is raised, we only get one chance at this!
+    puts
+    Log.clear
+    data.reject!{ |id, s| s['user_id'] == metanet_id && id != cur_id }
+    params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, i]
+    succ("%s: %.3f - Scanned %d / %d scores after %d submissions" % params)
+    fn = (is_userlevel? ? id : name) + '.json'
+    File.write(fn, correct_ties(data.values).to_json)
   end
 
   def correct_ties(score_hash)

@@ -1,5 +1,4 @@
 - Add embed info to the sent message log in the terminal (count, chars, etc)
-- Get more player info by querying "Around Mine" (and possible "Friends") leaderboards with other Steam IDs, and whenever we find new player IDs, record them in the db. Even better, we can use outte's score in SI-A-00 (and perhaps a few others): Progressively improve the score, fetch the "Around Mine" boards, rinse and repeat. Eventually when we get to the top we have a full map of the leaderboard and, most importantly, of most Metanet players.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
   * Recover most scores using NSim.
   * Recover level scores from episode replays, again using NSim.
@@ -253,15 +252,10 @@ Others:
 
 \\ ------------------------ General ------------------------
 
-- Maybe change "total score" to default to TLS instead of TLS + TES, which doesn't make much sense.
 - SAVEFILE PARSER, ability to send inne your savefile and use it to elaborate completion leaderboards and whatnot (ask CCS if he ever finished it).
 - 0th/Top20 changes (new ones, and per player).
-- Comparison between players.
 - Charts with colors.
-
 - Possibility to return lists in order of level and not rank.
-- For "splits", also download episode 0th replay and parse it to get the actual 0th splits, so that we can compare the 0th splits with the ideal splits we are currently producing by adding up the level 0ths. This isn't actually possible unless we assume G++, which we can check by adding up.
-- Implement "missing" in the "list" function, so that we could get "bottom 5 list for jirka that I don't already have".
 - Add relaxed episode ownages (without episode), and ownages with ties.
 
 \\ ------------------------ NPC ------------------------
