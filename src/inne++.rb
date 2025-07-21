@@ -167,6 +167,7 @@ def initialize_vars
   $mutex           = { trace: Mutex.new, nsim: Mutex.new, tmp_msg: Mutex.new }
   $log             = { socket: SOCKET_LOG }
   $threads         = []
+  $threads_tmp     = {}
   $main_queue      = Queue.new
   $sql_vars        = {}
   $sql_status      = {}

@@ -638,6 +638,11 @@ rescue => e
   nil
 end
 
+# Togglable threads are keyed by name so that we can dynamically work with them
+# from other threads, even from Discord commands.
+def toggle_thread_get(name) $threads_tmp[name] end
+def toggle_thread_set(name, &block) $threads_tmp[name] = Thread.new(&block) end
+
 # Execute a shell command
 #   stream - Redirect STDOUT/STDERR to Ruby's terminal so we can see
 #   output - Return the output (STDOUT/STDERR/status) as an array of strings

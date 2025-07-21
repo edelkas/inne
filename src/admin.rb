@@ -44,10 +44,8 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event, page: nil)
-  ['new', 'verified', 'rejected'].each{ |status|
-    run = Speedrun.fetch_runs(Speedrun::GAMES.keys.first, count: 1, status: status).first
-    next unless run
-    send_message(event, embed: Speedrun.format_embed(run))
+  toggle_thread_set('scan_boards') {
+    Level.find_by(name: '!-X-01').scan_boards
   }
 end
 
@@ -1165,6 +1163,17 @@ def seed_fractional_scores(event, log = true)
   succ("Finished seeding fractional scores") if log
 end
 
+def thread_continue(event)
+  flags = parse_flags(event)
+  name = flags[:name]
+  perror("You need to provide the togglable thread name via the `name` parameter.") if !name
+  th = toggle_thread_get(name)
+  perror("Togglable thread with name `#{name}` does not exist") unless th
+  perror("Togglable thread with name `#{name}` isn't sleeping") unless th.status == 'sleep'
+  th.run
+  event << "Togglable thread with name `#{name}` awakened"
+end
+
 
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
@@ -1186,6 +1195,7 @@ def respond_special(event)
   cmd.downcase!
   action_inc('special_commands')
 
+  return thread_continue(event)          if cmd == 'thread_continue'
   return send_dday_stats(event)          if cmd == 'dday_stats'
   return send_debug(event)               if cmd == 'debug'
   return send_delete_score(event)        if cmd == 'delete_score'
