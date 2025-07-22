@@ -173,6 +173,7 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 - Add Metanet levels to the db.
 
 Less priority:
+- When parsing the userlevel author, prioritize exact matches over partial ones, so that if there's a single exact match and multiple partial ones, we use the exact one instead of showing the full list of partial ones.
 - Short/compact search mode (apt for mobile; show only ID, name and author; shorter truncations)
 - Missing
 - NUMA-esque features: We could have a command (e.g. "post") that prints the userlevel info (name, author, screenshot, etc) and adds buttons to cast a vote (we keep track of the users so that a single vote can be casted per Discord user), as well as a text input to put a comment (or perhaps, save a conversation regarding a userlevel as the "comment section" of that map, somehow), ec

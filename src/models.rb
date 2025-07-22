@@ -737,13 +737,21 @@ module Downloadable
     end
   ensure
     # Ensure we export the data even if an exception is raised, we only get one chance at this!
-    puts
     Log.clear
     data.reject!{ |id, s| s['user_id'] == metanet_id && id != cur_id }
     params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, i]
     succ("%s: %.3f - Scanned %d / %d scores after %d submissions" % params)
-    fn = (is_userlevel? ? id : name) + '.json'
-    File.write(fn, correct_ties(data.values).to_json)
+
+    # Pack data
+    list = correct_ties(data.values)
+    list.each_with_index{ |s, i| s['rank'] = i }
+    json = list.to_json
+    export = [list.size].pack('L<').b + list.map{ |s|
+      [s['replay_id'], (60 * s['score'] / 1000.0).round, s['user_id'], s['user_name'].delete(0.chr)].pack('L<3Z*')
+    }.join.b
+    fn = (is_userlevel? ? id : name)
+    File.binwrite(fn + '.json', json)
+    File.binwrite(fn, export)
   end
 
   def correct_ties(score_hash)

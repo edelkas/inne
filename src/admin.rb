@@ -44,8 +44,9 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event, page: nil)
+  h = parse_highscoreable(event)
   toggle_thread_set('scan_boards') {
-    Level.find_by(name: '!-X-01').scan_boards
+    h.scan_boards
   }
 end
 
