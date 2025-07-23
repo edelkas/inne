@@ -44,9 +44,21 @@ def sanitize_userlevels(event)
 end
 
 def send_test(event, page: nil)
-  h = parse_highscoreable(event)
   toggle_thread_set('scan_boards') {
-    h.scan_boards
+    Level.where(tab: :SS).find_each(batch_size: 100){ |h|
+      case h.get_pb(OUTTE2_STEAM_ID, silent: true)
+      when :inactive
+        alert('Inactive Steam ID, reopen game')
+        sleep
+        redo
+      when :none
+        h.scan_boards
+      when :error, :empty
+        err("Error fetching scores for #{h.name}, skipping")
+      else
+        alert("#{h.name} already has a score, skipping")
+      end
+    }
   }
 end
 
