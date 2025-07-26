@@ -859,6 +859,11 @@ module ANSI extend self
   ITALIC = 3 # No Discord support
   UNDER  = 4
 
+  # Resetters (no Discord support)
+  NOWEIGHT = 22
+  NOITALIC = 23
+  NOUNDER  = 24
+
   # Text colors
   BLACK   = 30
   RED     = 31
@@ -878,6 +883,13 @@ module ANSI extend self
   MAGENTA_BG = 45
   CYAN_BG    = 46
   WHITE_BG   = 47
+
+  # Other formats (no Discord support)
+  FRAMED    = 51
+  ENCIRCLED = 52
+  OVER      = 53
+  NOFRAMED  = 54
+  NOOVER    = 55
 
   # Bright text colors (no Discord support)
   BRIGHT_BLACK   = 90
@@ -926,9 +938,12 @@ module ANSI extend self
   end
 
   # Format code shortcuts
-  def none()    esc()        end
+  def none()    esc()          end
   def bold()    esc([BOLD])    end
+  def faint()   esc([FAINT])   end
+  def italic()  esc([ITALIC])  end
   def under()   esc([UNDER])   end
+  def normal()  esc([NORMAL])  end
   alias_method :clear, :none
   alias_method :reset, :none
 

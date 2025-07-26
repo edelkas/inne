@@ -1357,15 +1357,57 @@ def send_file(event, data, name = 'result.txt', binary = false, spoiler = false)
   event.attach_file(tmp_file(data, sanitize_filename(name), binary: binary))
 end
 
-def log_message(content, files = [], components = nil, edit: false)
-  verb = edit ? 'Edited' : 'Sent'
-  component_count = !components ? 0 : components.to_a.map{ |row| row[:components].size }.sum
-  size = files.map{ |f| File.size(f.path) rescue 0 }.sum / 1024.0
-  properties = "%d chars, %d attachments, %.3f KiB, %d components" % [content.length, files.length, size, component_count]
-  summary = content.squish[0, 80]
-  summary += '...' if content.length > 80
-  lout("%s message: %s" % [verb, properties])
-  lout(summary)
+# Log the main aspects of a message to the terminal right after sending it to Discord
+def log_message(content, files = [], components = nil, embeds = [], edit: false)
+  # Function to format numbers
+  fmt = -> (n) {
+    f = n.is_a?(Float) ? '.3f' : 'd'
+    "%s%#{f}%s" % [ANSI.esc([ANSI::BOLD, ANSI::BRIGHT_CYAN]), n, ANSI.esc([ANSI::NOWEIGHT, ANSI::CYAN])]
+  }
+
+  # Log message content length
+  properties = []
+  properties << "%s chars" % [fmt.(content.length)] unless content.empty?
+
+  # Log message attachments and size
+  if !files.empty?
+    size = files.map{ |f| File.size(f.path) rescue 0 }.sum / 1024.0
+    properties << "%s attachments (%s KiB)" % [fmt.(files.length), fmt.(size)]
+  end
+
+  # Log message components and type
+  if components
+    comp_list = components.to_a.map{ |row| row[:components] }.flatten
+    comp_count = comp_list.length
+    row_count = components.rows.size
+    types = Discordrb::Webhooks::View::COMPONENT_TYPES.invert
+    button_count = comp_list.count{ |c| types[c[:type]] == :button }
+    menu_count = comp_list.count{ |c| types[c[:type]].to_s =~ /_select/ }
+    args = [comp_count, row_count, button_count, menu_count].map{ |a| fmt.(a) }
+    properties << "%s components (%s rows, %s buttons, %s menus)" % args unless comp_count == 0
+  end
+
+  # Log message embeds properties
+  if !embeds.empty?
+    embed_length = embeds.map{ |e| e.description.to_s.length }.sum
+    embed_size = embeds.map{ |e| e.fields.to_a.size }.sum
+    args = [embeds.count, embed_length, embed_size].map{ |a| fmt.(a) }
+    properties << "%s embeds (%s chars, %s fields)" % args
+  end
+
+  # Log message characteristics
+  args = [ANSI.esc([ANSI::UNDER]), edit ? 'Edited' : 'Sent', ANSI.esc([ANSI::NOUNDER]), properties.join(', ')]
+  lout("%s%s message%s: %s" % args)
+
+  # Log the start of the message
+  summary = !content.empty? ? content : !embeds.empty? ? embeds.first.title : nil
+  if summary
+    summary = ANSI.unesc(summary)
+    args = [ANSI.esc([ANSI::FAINT]), summary.squish[0, 80], summary.length > 80 ? '...' : '', ANSI.esc([ANSI::NOWEIGHT])]
+    lout("%s\"%s%s\"%s" % args)
+  end
+rescue => e
+  lex(e, 'Failed to log Discord message to the terminal')
 end
 
 # Send a message to a destination (typically a respondable event or a Discord channel)
@@ -1408,7 +1450,7 @@ def send_message(
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
-    log_message(content, files, components, edit: true) if log
+    log_message(content, files, components, [embed].compact, edit: true) if log
     return dest.update_message(content: content, components: components, embeds: [embed].compact, ephemeral: ephemeral)
   end
 
@@ -1436,7 +1478,7 @@ def send_message(
   user_id = dest.user.id if dest.respond_to?(:user)
   Message.create(id: msg.id, user_id: user_id, date: Time.now) if user_id && db
   action_inc('messages')
-  log_message(content, files, components) if log
+  log_message(content, files, components, [embed].compact) if log
   msg
 rescue => e
   lex(e, 'Failed to send message to Discord')
