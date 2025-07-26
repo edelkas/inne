@@ -380,7 +380,7 @@ end
 #      even though it also fits the dashless level SU-A-1-5, because no such
 #      level exists).
 # 3) Then parse columns (no ambiguity as they don't have row letter).
-def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false)
+def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false, silent: false)
   ret = ['', []]
 
   # Mappack variants, if allowed
@@ -395,7 +395,7 @@ def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false)
     # If there were ID matches, but they didn't exist, raise
     if ret[1].empty? && matches.size > 0
       ids = matches.uniq.map{ |m| verbatim(m) }.to_sentence(two_words_connector: ' or ', last_word_connector: ', or ')
-      perror("There is no mappack level/episode/story by the #{'ID'.pluralize(matches.size)}: #{ids}.")
+      perror("There is no mappack level/episode/story by the #{'ID'.pluralize(matches.size)}: #{ids}.") unless silent
     end
   end
 
@@ -410,7 +410,7 @@ def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false)
   # If there were ID matches, but they didn't exist, raise
   if ret[1].empty? && matches.size > 0
     ids = matches.uniq.map{ |m| verbatim(m) }.to_sentence(two_words_connector: ' or ', last_word_connector: ', or ')
-    perror("There is no level/episode/story by the #{'ID'.pluralize(matches.size)}: #{ids}.")
+    perror("There is no level/episode/story by the #{'ID'.pluralize(matches.size)}: #{ids}.") unless silent
   end
 
   ret
@@ -1381,7 +1381,8 @@ def send_message(
     db:         true,  # Whether we should register this msg in the db
     edit:       true,  # Whether a component event should edit or send a new msg
     append:     false, # Whether to append content to preexisting message
-    log:        true   # Whether to log the sent message in the terminal
+    log:        true,  # Whether to log the sent message in the terminal
+    ephemeral:  false  # Only the user can see the message, available for interaction responses
   )
   # Save stuff already appended to message, and remove it to prevent autosend
   if dest.is_a?(Discordrb::Events::Respondable)  # Grab message
@@ -1408,7 +1409,7 @@ def send_message(
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
     log_message(content, files, components, edit: true) if log
-    return dest.update_message(content: content, components: components, embeds: [embed].compact)
+    return dest.update_message(content: content, components: components, embeds: [embed].compact, ephemeral: ephemeral)
   end
 
   # Manually spoiler attachments if necessary
@@ -1427,7 +1428,7 @@ def send_message(
   when Discordrb::Events::Respondable # Messages, reactions
     msg = dest.respond(content, false, embed, files, nil, nil, components)
   when Discordrb::Events::InteractionCreateEvent # Components, application commands
-    msg = dest.respond(content: content, embeds: [embed], components: components, wait: true)
+    msg = dest.respond(content: content, embeds: [embed], components: components, wait: true, ephemeral: ephemeral)
   end
   return if !msg
 

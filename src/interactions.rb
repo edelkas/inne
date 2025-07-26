@@ -549,6 +549,8 @@ def respond_interaction_button(event)
     when 'nav'
       send_query(event, page: keys[2])
     end
+  when 'thumbnail'
+    send_thumbnail(event, keys[1])
   end
 end
 

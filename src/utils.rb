@@ -313,15 +313,16 @@ end
 class OutteError < Exception
   attr_reader :log, :discord
 
-  def initialize(msg = 'Unknown outte error', log: false, discord: true)
-    @discord = discord
-    @log = log
+  def initialize(msg = 'Unknown outte error', log: false, discord: true, ephemeral: false)
+    @discord   = discord
+    @log       = log
+    @ephemeral = ephemeral
     super(msg)
   end
 end
 
-def perror(msg = '', log: false, discord: true)
-  raise OutteError.new(msg.to_s, log: log, discord: discord)
+def perror(msg = '', log: false, discord: true, ephemeral: false)
+  raise OutteError.new(msg.to_s, log: log, discord: discord, ephemeral: ephemeral)
 end
 
 # <---------------------------------------------------------------------------->

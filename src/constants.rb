@@ -102,10 +102,11 @@ DISCORD_FILE_LIMIT     = 25 * 1000 ** 2      # Attachment size limit
 DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
 CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 
-# Colors in certain functions
-RICH_RANKINGS = false
-RICH_DIFFS    = true
-SHOW_CHEATERS = true
+# Enabled optional features
+RICH_RANKINGS    = false
+RICH_DIFFS       = true
+SHOW_CHEATERS    = true
+SCORE_THUMBNAILS = false
 
 # Non-standard character widths in the monospaced font (for padding adjustments)
 WIDTH_EMOJI = 2
@@ -223,6 +224,7 @@ FILENAME_LIMIT = 128 # Never surpass 259 (Windows' limit, google MAX_PATH)
 SCREENSHOT_SCALE_LEVEL   = 11
 SCREENSHOT_SCALE_EPISODE = 3
 SCREENSHOT_SCALE_STORY   = 2
+THUMBNAIL_SCALE          = 3
 
 # Animation playback speed
 ANIMATION_STEP_NORMAL  = 1   # How many frames to trace per GIF frame

@@ -466,8 +466,9 @@ def send_scores(event, map = nil, ret = false)
   header = format_header("#{format_full(full)} #{format_frac(frac)} #{format_board(board).pluralize} for #{h.format_name}#{cheated ? ' [with cheaters]' : ''}")
   res << header
   scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated, frac: frac)
+  files = []
   if full && scores.count > 20
-    send_file(event, scores.join("\n"), "#{h.name}-scores.txt")
+    files << tmp_file(scores.join("\n"), "#{h.name}-scores.txt")
   else
     res << format_block(scores.join("\n"))
   end
@@ -484,12 +485,18 @@ def send_scores(event, map = nil, ret = false)
     end
   end
 
-  # Send response or return it
-  if ret
-    return res
-  else
-    event << res
+  # If enabled, show thumbnail button
+  view = nil
+  if SCORE_THUMBNAILS
+    view = Discordrb::Webhooks::View.new
+    view.row{ |r|
+      r.button(label: 'Thumbnail', style: :primary, custom_id: "thumbnail:#{h.name}", emoji: '📷')
+    }
   end
+
+  # Send response or return it
+  return res if ret
+  send_message(event, content: res, files: files, components: view)
 rescue => e
   lex(e, "Error sending scores.", event: event)
 end
@@ -555,6 +562,15 @@ def send_screenshot(event, map = nil, ret: false, id: nil, palette: nil)
   send_message(event, content: str, files: [screenshot], spoiler: spoiler)
 rescue => e
   lex(e, "Error sending screenshot.", event: event)
+end
+
+# Send a thumbnail (files cannot be ephemeral so this is broken)
+def send_thumbnail(event, id)
+  h = parse_highscoreable_by_id(id, mappack: true, silent: true)[1]
+  perror("Level not found", ephemeral: true) if h.empty?
+  screenshot = h[0].screenshot(file: true, scale: THUMBNAIL_SCALE)
+  perror("Failed to generate thumbnail", ephemeral: true) if !screenshot
+  send_message(event, files: [screenshot], ephemeral: true)
 end
 
 # One command to return a screenshot and then the scores,

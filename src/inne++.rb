@@ -271,7 +271,7 @@ rescue OutteError => e
   elsif is_auto
     event << msg
   else
-    send_message(event, content: msg, log: false)
+    send_message(event, content: msg, log: false, ephemeral: e.ephemeral)
   end
   log_message(msg)
 rescue => e

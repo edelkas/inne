@@ -2084,6 +2084,7 @@ module Map
   # the used memory.
   def self.screenshot(
       theme =     DEFAULT_PALETTE,        # Palette to generate screenshot in
+      scale:      nil,                    # Explicit scale, otherwise it's determined from context
       nsim:       [],                     # NSim objects (simulation results)
       file:       false,                  # Whether to export to a file or return the raw data
       inputs:     false,                  # Add input display to animation
@@ -2113,7 +2114,7 @@ module Map
       # Parse palette and scale
       themes = THEMES.map(&:downcase)
       palette_idx = themes.index(theme.downcase) || themes.index(DEFAULT_PALETTE.downcase)
-      ppc = find_scale(h, anim)
+      ppc = scale || find_scale(h, anim)
       nsim.each{ |ns| ns.ppc = ppc }
 
       # We will encapsulate all necessary info in a few context hashes, for easy management
@@ -2183,7 +2184,7 @@ module Map
     nil
   end
 
-  def screenshot(theme, **kwargs)
+  def screenshot(theme = DEFAULT_PALETTE, **kwargs)
     Map.screenshot(theme, h: self, **kwargs)
   end
 
