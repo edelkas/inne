@@ -83,7 +83,6 @@
 - For mappack ranking navigation, add button for HS/SR, and perhaps select menu for mappacks
 - Add other most/least gold functions apart from rankings: how many, missing, etc
 - Player comparison for mappacks (add speedrun, G++/G--, ...)
-- Instead of calling the compiled version of STB's SHA1, do it natively (gem with native extensions?)
 
 \\ ------------------------ SQL -----------------------
 

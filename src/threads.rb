@@ -801,10 +801,10 @@ def start_general_tasks
   Scheduler.add("Compute fractions", freq: FRACTION_FREQUENCY, force: false, log: false) { compute_new_fractions } if DO_EVERYTHING || COMPUTE_FRACTIONS
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
-  $threads << Thread.new { NPPServer::on } if SOCKET && !DO_NOTHING
+  $threads << Thread.new { NPPServer::on } if (DO_EVERYTHING || SOCKET) && !DO_NOTHING
 
   # Start API to provide external outte functionality
-  $threads << Thread.new { APIServer::on } if API_ON && !DO_NOTHING
+  $threads << Thread.new { APIServer::on } if (DO_EVERYTHING || API_ON) && !DO_NOTHING
 end
 
 # These tasks perform periodic operations querying Metanet's database (e.g. to

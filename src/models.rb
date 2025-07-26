@@ -723,7 +723,7 @@ module Downloadable
       player = Player.find_by(metanet_id: metanet_id)
       status = submit_score(score, replays, player, log: false, silent: true)
       if !status
-        sleep
+        binding.pry
         next
       end
       reached_top = status['better'] == 0 && cur_score == max_score
@@ -738,7 +738,7 @@ module Downloadable
           raise
         elsif res.body == METANET_INVALID_RES
           err("Failed to fetch scores (inactive Steam ID).")
-          sleep
+          binding.pry
           raise
         end
       rescue
@@ -758,7 +758,7 @@ module Downloadable
       top_rank = board.max_by{ |s| s['rank'] }['rank']
       max_rank = top_rank if top_rank > max_rank
       params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
-      dbg("%s: %7.3f - Scanned %3d / %3d scores in %s after %3d submissions (%d holes)" % params, progress: true)
+      dbg("%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params, progress: true)
 
       # Prepare next iteration
       break if reached_top
@@ -774,7 +774,7 @@ module Downloadable
     Log.clear
     data.reject!{ |id, s| s['user_id'] == metanet_id && id != cur_id }
     params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
-    log_line = "%s: %7.3f - Scanned %3d / %3d scores in %s after %3d submissions (%d holes)" % params
+    log_line = "%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params
     func = data.size == max_rank + 1 ? :succ : !global_gap ? :alert : :err
     send(func, log_line)
 

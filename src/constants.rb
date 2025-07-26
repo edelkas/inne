@@ -28,6 +28,7 @@ BENCH_IMAGES   = false # Benchmark image manipulation steps
 # Internal
 WAIT            = 1       # Seconds between iterations of infinite loops
 DATABASE        = 'outte' # Database environment
+DAEMON          = false   # Don't run Discord bot, disables active interaction
 
 # <---------------------------------------------------------------------------->
 # <------                     RESOURCE MONITORING                        ------>
@@ -532,7 +533,7 @@ SPEEDRUN_COLOR_INFO = 0x93a5a6 # Embed bar color for informational notices
 #    Provides certain outte functionality that can be called externally (e.g.
 #    from a browser) as opposed to from Discord or N++.
 
-SOCKET      = true  # Whether to open sockets or not
+SOCKET      = false # Whether to open sockets or not
 SOCKET_PORT = 8126  # Port for CLE's TCP server
 SOCKET_LOG  = TEST  # Log request and response details
 
@@ -551,7 +552,7 @@ DEV_PLAYER_NAME  = '-- DEV TIME --' # Player name to show dev scores
 REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to understand this
 
 # API-specific variables
-API_ON      = true
+API_ON      = false
 API_PORT    = 9119
 API_FAVICON = 'molebruh'
 

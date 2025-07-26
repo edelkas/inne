@@ -43,13 +43,13 @@ def sanitize_userlevels(event)
   event << "Done"
 end
 
-def send_test(event, page: nil)
+def send_test(event = nil, page: nil)
   toggle_thread_set('scan_boards') {
-    Level.where(tab: :SS).find_each(batch_size: 100){ |h|
+    Level.where(tab: :SL).order(:id).offset(150).limit(100).find_each(batch_size: 100){ |h|
       case h.get_pb(OUTTE2_STEAM_ID, silent: true)
       when :inactive
         alert('Inactive Steam ID, reopen game')
-        sleep
+        binding.pry
         redo
       when :none
         h.scan_boards

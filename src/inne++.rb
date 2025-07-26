@@ -464,7 +464,7 @@ _thread do
   run_bot
   set_channels
   start_discord_tasks
-end
+end unless DAEMON
 succ("Loaded outte (%.2fs)" % [Time.now - $boot_time])
 binding.pry if DEBUG
 
