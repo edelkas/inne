@@ -435,19 +435,24 @@ end
 #          function (e.g., screenscores), rather than sent
 def send_scores(event, map = nil, ret = false)
   # Parse message parameters
-  msg     = parse_message(event)
-  h       = map.nil? ? parse_highscoreable(event, mappack: true) : map
-  offline = parse_offline(msg)
-  nav     = parse_nav(msg)
-  mappack = h.is_mappack?
-  board   = parse_board(msg, 'hs', dual: true)
-  board   = 'hs' if !mappack && board == 'dual'
-  full    = parse_full(msg)
-  cheated = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
-  frac    = parse_frac(msg, mappack ? h&.mappack : nil, board) && h.is_level?
+  msg       = parse_message(event)
+  hash      = parse_palette(event)
+  msg       = hash[:msg]
+  palette   = hash[:palette]
+  h         = map.nil? ? parse_highscoreable(event, mappack: true) : map
+  offline   = parse_offline(msg)
+  nav       = parse_nav(msg)
+  mappack   = h.is_mappack?
+  board     = parse_board(msg, 'hs', dual: true)
+  board     = 'hs' if !mappack && board == 'dual'
+  full      = parse_full(msg)
+  cheated   = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
+  frac      = parse_frac(msg, mappack ? h&.mappack : nil, board) && h.is_level?
+  use_embed = SCORE_EMBEDS && !msg[/\bmobile\b/i]
 
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
-  res     = ""
+  res   = ""
+  files = []
 
   # Navigating scores goes into a different method (see below this one)
   if nav && !h.is_mappack?
@@ -462,21 +467,59 @@ def send_scores(event, map = nil, ret = false)
     res << "Connection to the server failed, sending local cached scores.\n"
   end
 
-  # Format scores
-  header = format_header("#{format_full(full)} #{format_frac(frac)} #{format_board(board).pluralize} for #{h.format_name}#{cheated ? ' [with cheaters]' : ''}")
-  res << header
+  # Format message
   scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated, frac: frac)
-  files = []
-  if full && scores.count > 20
-    files << tmp_file(scores.join("\n"), "#{h.name}-scores.txt")
+  export = full && scores.count > 20
+  use_embed = false if export
+  name = use_embed ? h.name : h.format_name
+  args = [format_full(full), format_frac(frac), format_board(board).pluralize, name, cheated ? ' [with cheaters]' : '']
+  header = format_header("%s %s %s for %s %s" % args)
+  files << tmp_file(scores.join("\n"), "#{h.name}-scores.txt") if export
+
+  # Format body
+  if use_embed
+    thumb = Map.screenshot(palette, h: h, file: true, scale: THUMBNAIL_SCALE, vertical: true)
+    fn = File.basename(thumb.path) if thumb
+    files << thumb if thumb
+    color = Map::PALETTE[2, Map::THEMES.index(palette)] >> 8
+    embed = Discordrb::Webhooks::Embed.new(
+      title:       header[..-2],
+      description: export ? nil : format_block(scores.join("\n")),
+      color:       color,
+      thumbnail:   thumb ? Discordrb::Webhooks::EmbedThumbnail.new(url: "attachment://#{fn}") : nil
+    )
   else
-    res << format_block(scores.join("\n"))
+    res << header
+    res << format_block(scores.join("\n")) if !export
+  end
+
+  # Add completion count, if available
+  if h.completions && h.completions > 0
+    if use_embed
+      embed.add_field(name: 'Scores', value: h.completions.to_s, inline: true)
+    else
+      res << "\n" if export
+      res << "Scores: **#{h.completions}**. "
+    end
   end
 
   # Add cleanliness if it's an episode or a story
-  res << "\n" if full && scores.count > 20
-  res << "Scores: **#{h.completions}**. " if h.completions && h.completions > 0
-  res << send_clean_one(event, true) if (h.is_episode? || h.is_story?) && board != 'gm'
+  show_cleanliness = (h.is_episode? || h.is_story?) && board != 'gm'
+  if show_cleanliness
+    clean = send_clean_one(event, true)
+    if use_embed
+      embed.add_field(name: 'Cleanliness', value: clean, inline: true)
+    else
+      res << " Cleanliness: **#{clean}**."
+    end
+  end
+
+  # Additional fields
+  if use_embed
+    embed.add_field(name: 'Palette', value: palette, inline: true)
+    embed.add_field(name: 'Date', value: Time.now.strftime('%Y/%b/%d %H:%M'), inline: true) unless show_cleanliness
+    embed.add_field(name: 'Full name', value: h.format_name) if h.is_level?
+  end
 
   # If it's an episode, update all 5 level scores in the background
   if h.is_a?(Episode) && !offline && !OFFLINE_STRICT
@@ -485,7 +528,7 @@ def send_scores(event, map = nil, ret = false)
     end
   end
 
-  # If enabled, show thumbnail button
+  # If enabled, show thumbnail button (broken)
   view = nil
   if SCORE_THUMBNAILS
     view = Discordrb::Webhooks::View.new
@@ -496,7 +539,7 @@ def send_scores(event, map = nil, ret = false)
 
   # Send response or return it
   return res if ret
-  send_message(event, content: res, files: files, components: view)
+  send_message(event, content: res, files: files, components: view, embed: embed)
 rescue => e
   lex(e, "Error sending scores.", event: event)
 end
@@ -814,7 +857,7 @@ def send_clean_one(event, ret = false)
   clean_round = round_score(clean)
   fmt = clean.is_a?(Integer) ? '%df' : '%.3f (%df)'
   args = clean.is_a?(Integer) ? [clean_round] : [clean_round, (60 * clean_round).round]
-  return "Cleanliness: **#{fmt % args}**." if ret
+  return fmt % args if ret
 
   # Compute extra info for the dedicated function
   event << "The cleanliness of #{h.name}'s #{format_board(board)} #{rank.ordinalize} is #{fmt % args}."

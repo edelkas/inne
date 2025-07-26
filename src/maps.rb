@@ -1259,10 +1259,8 @@ module Map
   end
 
   # Create an initial PNG image with the right dimensions and color to hold a screenshot
-  def self.init_png(palette_idx, ppc, h)
+  def self.init_png(palette_idx, ppc, h, cols: 1, rows: 1)
     list = h.is_a?(Array)
-    cols = list ? [IMAGESEARCH_COLS, h.size].min : h.is_level? ? 1 : 5
-    rows = list ? (h.size.to_f / IMAGESEARCH_COLS).ceil : h.is_story? ? 5 : 1
     frame = list || !h.is_level?
     dim = 4 * ppc
     width  = dim * (COLUMNS + 2)
@@ -1388,7 +1386,7 @@ module Map
   # Render a list of objects onto a base image, optionally only updating a
   # given bounding box (for redraws in animations). Implemented for both PNGs
   # and GIFs.
-  def self.render_objects(objects, image, ppc: PPC, atlas: {}, bbox: nil, frame: true)
+  def self.render_objects(objects, image, ppc: PPC, atlas: {}, bbox: nil, frame: true, cols: 5)
     # Prepare scale params
     dim = 4 * ppc
     width = dim * (COLUMNS + 2)
@@ -1421,7 +1419,7 @@ module Map
 
       # Adjust offsets
       off_x += width + dim
-      if i % 5 == 4
+      if i % cols == cols - 1
         off_x = frame ? dim : 0
         off_y += height + dim
       end
@@ -1431,7 +1429,7 @@ module Map
   # Render a list of tiles onto a base image, optionally only updating a
   # given bounding box (for redraws in animations). Implemented for both PNGs
   # and GIFs.
-  def self.render_tiles(tiles, image, ppc: PPC, atlas: {}, bbox: nil, frame: true, palette: nil, palette_idx: 0)
+  def self.render_tiles(tiles, image, ppc: PPC, atlas: {}, bbox: nil, frame: true, palette: nil, palette_idx: 0, cols: 5)
     # Prepare scale params
     dim = 4 * ppc
     width = dim * (COLUMNS + 2)
@@ -1478,7 +1476,7 @@ module Map
 
       # Adjust offsets
       off_x += width + dim
-      if i % 5 == 4
+      if i % cols == cols - 1
         off_x = frame ? dim : 0
         off_y += height + dim
       end
@@ -1488,7 +1486,7 @@ module Map
   # Render a list of tile borders onto a base image, optionally only updating a
   # given bounding box (for redraws in animations). Implemented for both PNGs
   # and GIFs.
-  def self.render_borders(tiles, image, palette: nil, palette_idx: 0, ppc: PPC, frame: true, bbox: nil)
+  def self.render_borders(tiles, image, palette: nil, palette_idx: 0, ppc: PPC, frame: true, bbox: nil, cols: 5)
     # Prepare scale and color params
     dim = 4 * ppc
     width = dim * (COLUMNS + 2)
@@ -1556,7 +1554,7 @@ module Map
 
       # Adjust offsets
       off_x += width + dim
-      if i % 5 == 4
+      if i % cols == cols - 1
         off_x = frame ? dim : 0
         off_y += height + dim
       end
@@ -1865,16 +1863,19 @@ module Map
     objects = i ? [info[:object_grid][i]] : info[:object_grid]
 
     # Initialize image and sprites
-    image = init_png(palette_idx, ppc, h)
+    vert_ep = !list && h.is_episode? && info[:vertical]
+    cols = list ? [IMAGESEARCH_COLS, h.size].min : h.is_level? || vert_ep ? 1 : 5
+    rows = list ? (h.size.to_f / IMAGESEARCH_COLS).ceil : h.is_story? || vert_ep ? 5 : 1
+    image = init_png(palette_idx, ppc, h, cols: cols, rows: rows)
     tile_atlas = init_tiles(tiles, palette_idx, ppc)
     object_atlas = init_objects(objects, palette_idx, ppc)
 
     # Compose image
     unless info[:blank]
       frame = list || !h.is_level?
-      render_objects(objects, image, ppc: ppc, frame: frame, atlas: object_atlas)
-      render_tiles(  tiles  , image, ppc: ppc, frame: frame, palette_idx: palette_idx, atlas: tile_atlas)
-      render_borders(tiles  , image, ppc: ppc, frame: frame, palette_idx: palette_idx)
+      render_objects(objects, image, ppc: ppc, frame: frame, cols: cols, atlas: object_atlas)
+      render_tiles(  tiles  , image, ppc: ppc, frame: frame, cols: cols, palette_idx: palette_idx, atlas: tile_atlas)
+      render_borders(tiles  , image, ppc: ppc, frame: frame, cols: cols, palette_idx: palette_idx)
     end
 
     # Return the whole context
@@ -1883,7 +1884,9 @@ module Map
       tile_atlas:   tile_atlas,
       object_atlas: object_atlas,
       palette_idx:  palette_idx,
-      ppc:          ppc
+      ppc:          ppc,
+      cols:         cols,
+      rows:         rows
     }
   end
 
@@ -2085,6 +2088,7 @@ module Map
   def self.screenshot(
       theme =     DEFAULT_PALETTE,        # Palette to generate screenshot in
       scale:      nil,                    # Explicit scale, otherwise it's determined from context
+      vertical:   false,                  # Render episode screenshots vertically
       nsim:       [],                     # NSim objects (simulation results)
       file:       false,                  # Whether to export to a file or return the raw data
       inputs:     false,                  # Add input display to animation
@@ -2120,7 +2124,8 @@ module Map
       # We will encapsulate all necessary info in a few context hashes, for easy management
       context_png  = nil
       context_gif  = nil
-      context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v, anim: anim, trace: trace).merge(inputs: inputs, blank: blank)
+      context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v, anim: anim, trace: trace)
+                    .merge(inputs: inputs, blank: blank, vertical: vertical)
       res = nil
       bench(:step, 'Parsing', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 
