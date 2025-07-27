@@ -635,7 +635,7 @@ module Downloadable
     # Fetch player
     player = Player.find_by(metanet_id: OUTTE_ID) if !player
     if !player
-      err("No player to submit score to #{fname}.", discord: log)
+      err("No player to submit score to #{fname}.", discord: log) unless silent
       return
     end
     pname = verbatim(player.name.remove('`'))
@@ -654,7 +654,7 @@ module Downloadable
     version = [2842, 3009, 3096].include?(self.id) ? 1 : 2
     hash = self.map._hash(c: true, v: version)
     if !hash
-      err("Couldn't compute #{fname} hash, not submitting #{pname} score.", discord: log)
+      err("Couldn't compute #{fname} hash, not submitting #{pname} score.", discord: log) unless silent
       return
     end
     hash = sha1(hash + score, c: true)
@@ -671,22 +671,23 @@ module Downloadable
 
     # Perform HTTP POST request
     res = post_form(
-      path: METANET_PATH + '/' + METANET_POST_SCORE,
-      args: { user_id: player.metanet_id, steam_id: player.steam_id },
-      parts: parts
+      path:   METANET_PATH + '/' + METANET_POST_SCORE,
+      args:   { user_id: player.metanet_id, steam_id: player.steam_id },
+      parts:  parts,
+      silent: silent
     )
     if !res
-      err("Failed to submit score by #{pname} to #{fname} (bad post-form).", discord: log)
+      err("Failed to submit score by #{pname} to #{fname} (bad post-form).", discord: log) unless silent
       return
     elsif res == METANET_INVALID_RES
-      err("Failed to submit score by #{pname} to #{fname} (inactive Steam ID).", discord: log)
-      return
+      err("Failed to submit score by #{pname} to #{fname} (inactive Steam ID).", discord: log) unless silent
+      return false
     end
     args = [score.to_i / 1000.0, frames, player.name, player.metanet_id, self.class.to_s.downcase, self.name, self.id]
     dbg("Submitted score %.3f (%df) by %s (%d) to %s %s (%d)" % args) unless silent
     JSON.parse(res)
   rescue => e
-    lex(e, "Failed to submit score by #{pname} to #{fname}.", discord: log)
+    lex(e, "Failed to submit score by #{pname} to #{fname}.", discord: log) unless silent
     nil
   end
 
@@ -698,12 +699,15 @@ module Downloadable
     submit_score(score, replays, player, log: log)
   end
 
-  # Starting with a score of 0, submit progressively higher scores until we
+  #   Starting with a score of 0, submit progressively higher scores until we
   # cover the entire leaderboard, so we can map it out. Ensure the last score
   # we submit is just outside the top20.
+  #   We do things slightly differently if we know we're multithreading, such as
+  # not setting breakpoints and not logging debug info to the terminal.
   # TODO: Save directly on the db
   # TODO: Update the completions field of the highscoreable
-  def scan_boards(metanet_id: OUTTE2_ID)
+  # worker - When multithreading, the ThreadPool::Thread that is running this method
+  def scan_boards(metanet_id: OUTTE2_ID, worker: nil)
     data = {}
     global_gap = true
     holes = 0
@@ -715,6 +719,12 @@ module Downloadable
     i = 0
 
     loop do
+      # Add some randomized wait when multithreading to avoid hammering the server simultaneously
+      if worker
+        sleep(rand / 20)
+        worker.status = name
+      end
+
       # Submit improved score
       cur_score = [cur_score, max_score].min
       score = round_score(cur_score / 1000.0)
@@ -723,7 +733,15 @@ module Downloadable
       player = Player.find_by(metanet_id: metanet_id)
       status = submit_score(score, replays, player, log: false, silent: true)
       if !status
-        binding.pry
+        # Submission error (commonly timeout due to bad network), or multithreading
+        if status.nil? || worker
+          sleep(10)
+          next
+        end
+
+        # Inactive user in single-thread mode
+        err("Failed to fetch scores (inactive Steam ID).")
+        quiet_breakpoint
         next
       end
       reached_top = status['better'] == 0 && cur_score == max_score
@@ -732,13 +750,14 @@ module Downloadable
       # Fetch scores around me
       res = nil
       begin
-        res = Net::HTTP.get_response(scores_uri(OUTTE2_STEAM_ID, qt: reached_top ? 0 : 1))
+        res = Net::HTTP.get_response(scores_uri(OUTTE2_STEAM_ID, qt: reached_top ? 0 : 1)) rescue nil
         if !res.is_a?(Net::HTTPSuccess)
           sleep(10)
           raise
         elsif res.body == METANET_INVALID_RES
-          err("Failed to fetch scores (inactive Steam ID).")
-          binding.pry
+          sleep(10) if worker
+          err("Failed to fetch scores (inactive Steam ID).") if !worker
+          quiet_breakpoint if !worker
           raise
         end
       rescue
@@ -756,9 +775,15 @@ module Downloadable
       # Log progress
       (cur_rank = board.find{ |s| s['user_id'] == metanet_id }['rank']) rescue -1
       top_rank = board.max_by{ |s| s['rank'] }['rank']
+      bot_rank = board.min_by{ |s| s['rank'] }['rank']
       max_rank = top_rank if top_rank > max_rank
-      params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
-      dbg("%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params, progress: true)
+      if worker
+        worker.progress = 100.0 * (1.0 - bot_rank.to_f / (max_rank + 1))
+        worker.status = name
+      else
+        params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
+        dbg("%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params, progress: true)
+      end
 
       # Prepare next iteration
       break if reached_top
@@ -771,14 +796,7 @@ module Downloadable
     end
   ensure
     # Ensure we export the data even if an exception is raised, we only get one chance at this!
-    Log.clear
     data.reject!{ |id, s| s['user_id'] == metanet_id && id != cur_id }
-    params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
-    log_line = "%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params
-    func = data.size == max_rank + 1 ? :succ : !global_gap ? :alert : :err
-    send(func, log_line)
-
-    # Pack data
     list = correct_ties(data.values)
     list.each_with_index{ |s, i| s['rank'] = i }
     json = list.to_json
@@ -788,6 +806,19 @@ module Downloadable
     fn = is_userlevel? ? id : name.sub(/.+?-/, tab + '-')
     File.binwrite("boards/json/#{tab}/#{fn}.json", json)
     File.binwrite("boards/raw/#{tab}/#{fn}", export)
+
+    # Log progress
+    Log.clear
+    params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
+    log_line = "%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params
+    func = data.size == max_rank + 1 ? :succ : !global_gap ? :alert : :err
+    if !worker
+      send(func, log_line)
+    else
+      mode = func == :succ ? :good : func == :alert ? :warn : :error
+      worker.result = Log.format(log_line, mode)[:fancy]
+      worker.pool.log
+    end
   end
 
   def correct_ties(score_hash)

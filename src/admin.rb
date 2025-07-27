@@ -43,23 +43,56 @@ def sanitize_userlevels(event)
   event << "Done"
 end
 
-def send_test(event = nil, page: nil)
-  toggle_thread_set('scan_boards') {
-    Level.where(tab: :SL).order(:id).offset(150).limit(100).find_each(batch_size: 100){ |h|
-      case h.get_pb(OUTTE2_STEAM_ID, silent: true)
-      when :inactive
-        alert('Inactive Steam ID, reopen game')
-        binding.pry
-        redo
-      when :none
-        h.scan_boards
-      when :error, :empty
-        err("Error fetching scores for #{h.name}, skipping")
-      else
-        alert("#{h.name} already has a score, skipping")
-      end
-    }
+def send_pool_test
+  workers = ThreadPool.new(10)
+  tasks = 50.times.map{ |i|
+    Proc.new do |thread:|
+      length = 5 * rand
+      times = 3.times.map{ length * rand }.sort
+      waits = times.map.with_index{ |t, i| (times[i + 1] || length) - t }.prepend(times[0])
+      waits.inject(0){ |sum, w|
+        sleep(w)
+        thread.progress = 100.0 * (sum + w) / length
+        sum + w
+      }
+      thread.result = Log.format("Finished task", :succ)[:fancy]
+    end
   }
+  tasks.each{ |task| workers.schedule(task) }
+  workers.close
+  while workers.alive
+    sleep(0.2)
+    workers.log
+  end
+end
+
+def send_test(event = nil, page: nil)
+  workers = ThreadPool.new(5)
+  levels = Level.where(tab: :SU).order(:id).offset(25).limit(25).all
+  tasks = levels.map{ |h|
+    Proc.new do |thread:|
+      sleep(rand)
+      case h.get_pb(OUTTE2_STEAM_ID, silent: true)
+      when :inactive, :error, :empty
+        sleep(10)
+        raise
+      when :none
+        h.scan_boards(worker: thread)
+      else
+        thread.result = Log.format("#{h.name} already has a score, skipping", :warn)[:fancy]
+        thread.pool.log
+      end
+    rescue
+      retry
+    end
+  }
+  tasks.each{ |task| workers.schedule(task) }
+  workers.close
+  while workers.alive
+    sleep(0.5)
+    workers.log
+  end
+  succ("Finished scanning #{levels.size} boards (#{levels.first.name} to #{levels.last.name})")
 end
 
 def send_dday_stats

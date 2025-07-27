@@ -163,6 +163,43 @@ module Log extend self
     @modes
   end
 
+  def format(text, mode, app = 'BOT', newline: true, pad: false, progress: false, fancy: true)
+    # Normalize parameters
+    mode = :info if !MODES.key?(mode)
+    pad, newline = true, false if progress
+    m = MODES[mode] || MODES[:info]
+
+    # Message prefixes (timestamp, symbol, source app)
+    date = Time.now.strftime(DATE_FORMAT_LOG)
+    type = {
+      fancy: bold(fmt(m[:short], mode)),
+      plain: "[#{m[:long]}]".ljust(7, ' ')
+    }
+    app = " (#{app.ljust(3, ' ')[0...3]})"
+    app = {
+      fancy: LOG_APPS ? bold(app) : '',
+      plain: LOG_APPS ? app : ''
+    }
+
+    # Format text
+    header = {
+      fancy: "[#{date}] #{type[:fancy]}#{app[:fancy]} ",
+      plain: "[#{date}] #{type[:plain]}#{app[:plain]} ",
+    }
+    lines = {
+      fancy: text.split("\n").map{ |l| (header[:fancy] + fmt(l, mode)).strip },
+      plain: text.split("\n").map{ |l| (header[:plain] + l).strip }
+    }
+    lines = {
+      fancy: lines[:fancy].map{ |l| l.ljust(LOG_PAD, ' ') },
+      plain: lines[:plain].map{ |l| l.ljust(LOG_PAD, ' ') }
+    } if pad
+    msg = {
+      fancy: "\r" + lines[:fancy].join("\n"),
+      plain: "\r" + lines[:plain].join("\n")
+    }
+  end
+
   # Main function to log text
   def write(
     text,            # The text to log
@@ -183,8 +220,9 @@ module Log extend self
     log_to_file    = LOG_TO_FILE    && file    && @modes_file.include?(mode)
     log_to_discord = LOG_TO_DISCORD && discord
     return text if !log_to_console && !log_to_file && !log_to_discord && !event
+    text = text.to_s
 
-    # Determine parameters
+    # Normalize parameters
     fancy = @fancy if ![true, false].include?(fancy)
     fancy = false if !LOG_FANCY
     stream = STDOUT
@@ -192,36 +230,8 @@ module Log extend self
     pad, newline = true, false if progress
     m = MODES[mode] || MODES[:info]
 
-    # Message prefixes (timestamp, symbol, source app)
-    date = Time.now.strftime(DATE_FORMAT_LOG)
-    type = {
-      fancy: bold(fmt(m[:short], mode)),
-      plain: "[#{m[:long]}]".ljust(7, ' ')
-    }
-    app = " (#{app.ljust(3, ' ')[0...3]})"
-    app = {
-      fancy: LOG_APPS ? bold(app) : '',
-      plain: LOG_APPS ? app : ''
-    }
-
     # Format text
-    text = text.to_s
-    header = {
-      fancy: "[#{date}] #{type[:fancy]}#{app[:fancy]} ",
-      plain: "[#{date}] #{type[:plain]}#{app[:plain]} ",
-    }
-    lines = {
-      fancy: text.split("\n").map{ |l| (header[:fancy] + fmt(l, mode)).strip },
-      plain: text.split("\n").map{ |l| (header[:plain] + l).strip }
-    }
-    lines = {
-      fancy: lines[:fancy].map{ |l| l.ljust(LOG_PAD, ' ') },
-      plain: lines[:plain].map{ |l| l.ljust(LOG_PAD, ' ') }
-    } if pad
-    msg = {
-      fancy: "\r" + lines[:fancy].join("\n"),
-      plain: "\r" + lines[:plain].join("\n")
-    }
+    msg = format(text, mode, app, newline: newline, pad: pad, progress: progress, fancy: fancy)
 
     # Log to the terminal, if specified
     if log_to_console
@@ -437,7 +447,7 @@ end
 # Send a multipart post-form to N++'s servers.
 #   args:  Hash with additional URL-encoded query arguments.
 #   parts: Array of body parts, each being a hash with 3 keys: name, value, binary.
-def post_form(host: 'dojo.nplusplus.ninja', path: '', args: {}, parts: [])
+def post_form(host: 'dojo.nplusplus.ninja', path: '', args: {}, parts: [], silent: false)
   # Create request
   def_args = {
     app_id:     APP_ID,
@@ -481,7 +491,7 @@ def post_form(host: 'dojo.nplusplus.ninja', path: '', args: {}, parts: [])
   }
   res.code.to_i < 200 || res.code.to_i > 299 ? nil : res.body.to_s
 rescue => e
-  lex(e, 'Failed to send multipart post-form to Metanet')
+  lex(e, 'Failed to send multipart post-form to Metanet') unless silent
   nil
 end
 
@@ -644,6 +654,126 @@ end
 def toggle_thread_get(name) $threads_tmp[name] end
 def toggle_thread_set(name, &block) $threads_tmp[name] = Thread.new(&block) end
 
+# Simple class to parallelize tasks with a pool of threads
+class ThreadPool
+  SENTINEL = :stop
+
+  attr_reader   :queue
+  attr_accessor :count_done
+
+  # Wrapper for each thread that stores state
+  class Thread
+    attr_reader   :pool
+    attr_writer   :status, :progress
+    attr_accessor :thread, :result
+
+    def initialize(pool)
+      @thread   = thread
+      @progress = 0  # 0-100
+      @status   = '' # Brief description of current activity
+      @result   = ''
+      @pool     = pool
+      @thread   = ::Thread.new do
+        while task = @pool.queue.pop
+          break if task == SENTINEL
+          task.call(thread: self)
+          @pool.count_done += 1
+        end
+      end
+    end
+
+    def status
+      case @thread.status
+      when 'run'
+        @status
+      when 'sleep'
+        'Idle'
+      else
+        'Done'
+      end
+    end
+
+    def color
+      case @thread.status
+      when 'run'
+        ANSI.none
+      when 'sleep', 'aborting'
+        ANSI.yellow
+      when false
+        ANSI.green
+      else
+        ANSI.red
+      end
+    end
+
+    def log(size = 20)
+      bar = progress_bar(@progress, 100, size: size, style: :filled, single: false)
+      "%s%s %s%s" % [color, bar, status, ANSI.none]
+    end
+  end
+
+  def initialize(size)
+    @logged  = false
+    @closed  = false
+    @size    = size
+    @queue   = Queue.new
+    @mutex   = Mutex.new
+    @threads = Array.new(size) do
+      Thread.new(self)
+    end
+    @count_total = 0
+    @count_done  = 0
+    @time        = Time.now
+  end
+
+  def schedule(block)
+    return if @closed
+    @queue << block
+    @count_total += 1
+  end
+
+  def close
+    @size.times{ @queue << SENTINEL } unless @closed
+    @closed = true
+  end
+
+  def block
+    @threads.each{ |th| th.thread.join }
+  end
+
+  def alive
+    @threads.any?{ |th| th.thread.alive? }
+  end
+
+  # Log current pool progress. Assumes nothing else is printing to the terminal
+  # at the moment, since it manages multiple terminal lines.
+  def log
+    @mutex.synchronize do
+      # Back lines
+      print ANSI.up * (@size + 1) + "\r" if @logged
+      @logged = true
+
+      # Log queued results
+      @threads.each{ |th|
+        next if th.result.empty?
+        puts th.result
+        th.result = ''
+      }
+
+      # Log pool and workers status
+      running = @threads.count{ |th| !th.thread.stop? }
+      time = format_timespan(Time.now - @time)
+      fmt = ANSI.bold + ANSI.blue
+      args = [fmt, running, @threads.size, @count_done, @count_total, time, ANSI.none]
+      puts "%s┃ Threads: %d / %d - Tasks: %d / %d - Time: %s%s" % args
+      @threads.each_with_index{ |th, i|
+        char = i == 0 ? '┗┳━' : i < @size - 1 ? ' ┣━' : ' ┗━'
+        puts "%s%s%s Thread %d: %-56s" % [ANSI.blue, char, ANSI.none, i, th.log]
+      }
+    end
+  end
+end
+
 # Execute a shell command
 #   stream - Redirect STDOUT/STDERR to Ruby's terminal so we can see
 #   output - Return the output (STDOUT/STDERR/status) as an array of strings
@@ -704,6 +834,15 @@ def meminfo
       .map{ |name, value| [name, value.to_i / 1024.0] }.to_h
 rescue
   {}
+end
+
+# Execute a breakpoint silently
+def quiet_breakpoint
+  old_hooks = Pry.config.hooks.dup
+  Pry.config.hooks = Pry::Hooks.new
+  binding.pry
+ensure
+  Pry.config.hooks = old_hooks
 end
 
 # <---------------------------------------------------------------------------->
@@ -852,6 +991,9 @@ def remove_command(msg)
 end
 
 module ANSI extend self
+  # Sequence introducers
+  CSI = "\x1B["
+
   # Format
   NONE   = 0
   BOLD   = 1
@@ -911,17 +1053,28 @@ module ANSI extend self
   BRIGHT_CYAN_BG    = 106
   BRIGHT_WHITE_BG   = 107
 
-  def esc(nums = [0])
-    "\x1B[#{nums.join(';')}m"
-  end
+  # Terminal manipulation
+  def up(n = 1)          "%s%dA" % [CSI, n] end # Moves cursor up n lines
+  def down(n = 1)        "%s%dB" % [CSI, n] end # Moves cursor down n lines
+  def forw(n = 1)        "%s%dC" % [CSI, n] end # Moves cursor forwards n cells
+  def back(n = 1)        "%s%dB" % [CSI, n] end # Moves cursor backwards n cells
+  def erase_dis(n = 2)   "%s%dJ" % [CSI, n] end # Erase display (0 = end, 1 = start, 2 = all)
+  def erase_lin(n = 2)   "%s%dK" % [CSI, n] end # Erase line (0 = end, 1 = start, 2 = all)
+  def scroll_up(n = 1)   "%s%dS" % [CSI, n] end # Scroll screen up n lines
+  def scroll_down(n = 1) "%s%dT" % [CSI, n] end # Scroll screen down n lines
 
-  def unesc(str)
-    str.gsub(/\x1B\[[\d;]*m/, '')
-  end
+  # Erasing shortcuts
+  def erase_display_end()   erase_dis(0) end
+  def erase_display_start() erase_dis(1) end
+  def erase_display()       erase_dis(2) end
+  def erase_line_end()      erase_lin(0) end
+  def erase_line_start()    erase_lin(1) end
+  def erase_line()          erase_lin(2) end
 
-  def get_esc(str)
-    str[/\x1B\[[\d;]*m/]
-  end
+  # SGR (Select Graphic Rendition)
+  def esc(nums = [0]) "%s%sm" % [CSI, nums.join(';')] end
+  def unesc(str)      str.gsub(/\x1B\[[\d;]*m/, '')   end
+  def get_esc(str)    str[/\x1B\[[\d;]*m/]            end
 
   def format(str, bold: false, faint: false, italic: false, underlined: false, fg: nil, bg: nil, close: true)
     str = str.to_s
