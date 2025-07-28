@@ -663,16 +663,14 @@ class ThreadPool
 
   # Wrapper for each thread that stores state
   class Thread
-    attr_reader   :pool
+    attr_reader   :pool, :thread
     attr_writer   :status, :progress
-    attr_accessor :thread, :result
 
     def initialize(pool)
-      @thread   = thread
       @progress = 0  # 0-100
       @status   = '' # Brief description of current activity
-      @result   = ''
       @pool     = pool
+      @idle     = false
       @thread   = ::Thread.new do
         while task = @pool.queue.pop
           break if task == SENTINEL
@@ -682,22 +680,26 @@ class ThreadPool
       end
     end
 
+    # Idling is deliberate sleeping, as opposed to waiting on I/O, mutexes, etc,
+    # which also sets the thread to sleep.
+    def idle(t)
+      @idle = true
+      sleep(t)
+      @idle = false
+    end
+
     def status
-      case @thread.status
-      when 'run'
-        @status
-      when 'sleep'
-        'Idle'
-      else
-        'Done'
-      end
+      return 'Idle' if @idle
+      return 'Done' if !@thread.alive?
+      @status
     end
 
     def color
+      return ANSI.yellow if @idle
       case @thread.status
-      when 'run'
+      when 'run', 'sleep'
         ANSI.none
-      when 'sleep', 'aborting'
+      when 'aborting'
         ANSI.yellow
       when false
         ANSI.green
@@ -706,30 +708,33 @@ class ThreadPool
       end
     end
 
-    def log(size = 20)
+    def log(size = 30)
       bar = progress_bar(@progress, 100, size: size, style: :filled, single: false)
       "%s%s %s%s" % [color, bar, status, ANSI.none]
     end
   end
 
   def initialize(size)
-    @logged  = false
-    @closed  = false
-    @size    = size
-    @queue   = Queue.new
-    @mutex   = Mutex.new
-    @threads = Array.new(size) do
-      Thread.new(self)
-    end
+    @logged      = false
+    @closed      = false
+    @size        = size
+    @queue       = Queue.new
+    @mutex       = Mutex.new
+    @threads     = Array.new(size){ Thread.new(self) }
     @count_total = 0
     @count_done  = 0
     @time        = Time.now
+    @msgs        = []
   end
 
   def schedule(block)
     return if @closed
     @queue << block
     @count_total += 1
+  end
+
+  def report(msg)
+    @msgs << msg
   end
 
   def close
@@ -748,29 +753,35 @@ class ThreadPool
   # Log current pool progress. Assumes nothing else is printing to the terminal
   # at the moment, since it manages multiple terminal lines.
   def log
-    @mutex.synchronize do
-      # Back lines
-      print ANSI.up * (@size + 1) + "\r" if @logged
-      @logged = true
+    # Back lines
+    str = ''
+    str << (ANSI.up + ANSI.erase_line) * (@size + 4) + "\r" if @logged
+    @logged = true
 
-      # Log queued results
-      @threads.each{ |th|
-        next if th.result.empty?
-        puts th.result
-        th.result = ''
-      }
+    # Log queued results
+    @msgs.each{ |msg|
+      str << msg << "\n"
+      @msgs.delete(msg)
+    }
 
-      # Log pool and workers status
-      running = @threads.count{ |th| !th.thread.stop? }
-      time = format_timespan(Time.now - @time)
-      fmt = ANSI.bold + ANSI.blue
-      args = [fmt, running, @threads.size, @count_done, @count_total, time, ANSI.none]
-      puts "%s┃ Threads: %d / %d - Tasks: %d / %d - Time: %s%s" % args
-      @threads.each_with_index{ |th, i|
-        char = i == 0 ? '┗┳━' : i < @size - 1 ? ' ┣━' : ' ┗━'
-        puts "%s%s%s Thread %d: %-56s" % [ANSI.blue, char, ANSI.none, i, th.log]
-      }
-    end
+    # Log header with pool status
+    running = @threads.count{ |th| !th.thread.stop? }
+    time = format_timespan(Time.now - @time, iso: true)
+    args = [running, @threads.size, @count_done, @count_total, time]
+    header = "│ Threads: %d / %d - Tasks: %d / %d - Time: %s │" % args
+    len = ANSI.unesc(header).length - 2
+    str << ANSI.blue << '┌' << '─' * len << '┐' << "\n"
+    str << header << "\n"
+    str << '└┬' << '─' * (len - 1) << '┘' + ANSI.none << "\n"
+
+    # Log status of each worker
+    @threads.each_with_index{ |th, i|
+      #char = i == 0 ? '└┬─' : i < @size - 1 ? ' ├─' : '┌┴─'
+      str << "%s ├─%s %-56s\n" % [ANSI.blue, ANSI.none, th.log]
+    }
+    str << ANSI.blue << ' └' << '─' * (len - 1) << '╴' << ANSI.none
+
+    puts str
   end
 end
 

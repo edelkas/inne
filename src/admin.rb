@@ -55,7 +55,7 @@ def send_pool_test
         thread.progress = 100.0 * (sum + w) / length
         sum + w
       }
-      thread.result = Log.format("Finished task", :succ)[:fancy]
+      thread.pool.report(Log.format("Finished task #{i}", :succ)[:fancy])
     end
   }
   tasks.each{ |task| workers.schedule(task) }
@@ -71,6 +71,7 @@ def send_test(event = nil, page: nil)
   levels = Level.where(tab: :SU).order(:id).offset(25).limit(25).all
   tasks = levels.map{ |h|
     Proc.new do |thread:|
+      thread.status = h.name
       sleep(rand)
       case h.get_pb(OUTTE2_STEAM_ID, silent: true)
       when :inactive, :error, :empty
@@ -79,8 +80,7 @@ def send_test(event = nil, page: nil)
       when :none
         h.scan_boards(worker: thread)
       else
-        thread.result = Log.format("#{h.name} already has a score, skipping", :warn)[:fancy]
-        thread.pool.log
+        thread.pool.report(Log.format("#{h.name} already has a score, skipping", :warn)[:fancy])
       end
     rescue
       retry
@@ -89,7 +89,7 @@ def send_test(event = nil, page: nil)
   tasks.each{ |task| workers.schedule(task) }
   workers.close
   while workers.alive
-    sleep(0.5)
+    sleep(0.1)
     workers.log
   end
   succ("Finished scanning #{levels.size} boards (#{levels.first.name} to #{levels.last.name})")

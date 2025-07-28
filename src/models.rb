@@ -716,14 +716,12 @@ module Downloadable
     cur_rank = -1
     max_rank = 0
     cur_id = -1
+    wait = 10
     i = 0
 
     loop do
       # Add some randomized wait when multithreading to avoid hammering the server simultaneously
-      if worker
-        sleep(rand / 20)
-        worker.status = name
-      end
+      sleep(rand / 20) if worker
 
       # Submit improved score
       cur_score = [cur_score, max_score].min
@@ -735,7 +733,7 @@ module Downloadable
       if !status
         # Submission error (commonly timeout due to bad network), or multithreading
         if status.nil? || worker
-          sleep(10)
+          worker ? worker.idle(wait) : sleep(wait)
           next
         end
 
@@ -752,10 +750,10 @@ module Downloadable
       begin
         res = Net::HTTP.get_response(scores_uri(OUTTE2_STEAM_ID, qt: reached_top ? 0 : 1)) rescue nil
         if !res.is_a?(Net::HTTPSuccess)
-          sleep(10)
+          worker ? worker.idle(wait) : sleep(wait)
           raise
         elsif res.body == METANET_INVALID_RES
-          sleep(10) if worker
+          worker.idle(wait) if worker
           err("Failed to fetch scores (inactive Steam ID).") if !worker
           quiet_breakpoint if !worker
           raise
@@ -779,7 +777,6 @@ module Downloadable
       max_rank = top_rank if top_rank > max_rank
       if worker
         worker.progress = 100.0 * (1.0 - bot_rank.to_f / (max_rank + 1))
-        worker.status = name
       else
         params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
         dbg("%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params, progress: true)
@@ -816,8 +813,7 @@ module Downloadable
       send(func, log_line)
     else
       mode = func == :succ ? :good : func == :alert ? :warn : :error
-      worker.result = Log.format(log_line, mode)[:fancy]
-      worker.pool.log
+      worker.pool.report(Log.format(log_line, mode)[:fancy])
     end
   end
 

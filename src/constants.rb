@@ -107,7 +107,7 @@ RICH_RANKINGS    = false
 RICH_DIFFS       = true
 SHOW_CHEATERS    = true
 SCORE_THUMBNAILS = false
-SCORE_EMBEDS     = true
+SCORE_EMBEDS     = false
 
 # Non-standard character widths in the monospaced font (for padding adjustments)
 WIDTH_EMOJI = 2
