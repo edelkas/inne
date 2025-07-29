@@ -2149,28 +2149,32 @@ end
 # in random palettes, zip them, and upload them.
 def send_dmmc(event)
   assert_permissions(event, ['dmmc'])
-  msg        = parse_message(event).remove('dmmcize').strip
-  limit      = 30
-  levels     = Userlevel.where_like('title', msg).limit(limit).to_a
+  count      = parse_message(event)[/\d+/].to_i
+  limit      = 100
+  levels     = Userlevel.where_like('title', "MM#{count}").order(:id).limit(limit)
   count      = levels.count
   palettes   = Userlevel::THEMES.dup
   response   = nil
+  str        = ''
   zip_buffer = Zip::OutputStream.write_buffer{ |zip|
     levels.each_with_index{ |u, i|
+      # TODO: We can do this with TmpMsg now
       if i == 0
-        response = send_message(event, content: "Creating screenshot 1 of #{count}...", db: false)
-      elsif i % 3 == 0
-        response.edit("Creating screenshot #{i + 1} of #{count}...")
+        response = send_message(event, content: "Generating screenshot 1 of #{count}...", db: false)
+      elsif i % 5 == 0
+        response.edit("Generating screenshot #{i + 1} of #{count}...")
       end
       palette = palettes.sample
       zip.put_next_entry(sanitize_filename(u.author.name) + ' - ' + sanitize_filename(u.title) + '.png')
       zip.write(u.screenshot(palette))
       palettes.delete(palette)
+      str << verbatim(u.title) << ' by ' << u.author.name << "\n"
     }
   }
   zip = zip_buffer.string
   response.delete if response
-  event << "Generated and zipped #{levels.size} screenshots."
+  event << "MM#{count} has #{levels.size} maps:\n#{str}"
+
   send_file(event, zip, 'dmmc.zip', true)
 rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)
@@ -2426,7 +2430,7 @@ def respond(event)
   return send_twitch(event)          if msg =~ /\btwitch\b/i
   return add_role(event)             if msg =~ /\badd\s*role\b/i
   return send_aliases(event)         if msg =~ /\baliases\b/i
-  return send_dmmc(event)            if msg =~ /\bdmmcize\b/i
+  return send_dmmc(event)            if msg =~ /\bdmmc\b/i
   return update_ntrace(event)        if msg =~ /\bupdate\s*ntrace\b/i
   return fix_episode(event)          if msg =~ /fix episode/i
   return faceswap(event)             if msg =~ /faceswap/i
