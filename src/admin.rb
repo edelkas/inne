@@ -66,9 +66,9 @@ def send_pool_test
   end
 end
 
-def send_test(event = nil, page: nil)
-  workers = ThreadPool.new(5)
-  levels = Level.where(tab: :SU).order(:id).offset(25).limit(25).all
+def scan_boards(event = nil, page: nil)
+  workers = ThreadPool.new(20)
+  levels = Level.where(tab: :S).order(:id).offset(400).limit(100).all
   tasks = levels.map{ |h|
     Proc.new do |thread:|
       thread.status = h.name
@@ -93,6 +93,12 @@ def send_test(event = nil, page: nil)
     workers.log
   end
   succ("Finished scanning #{levels.size} boards (#{levels.first.name} to #{levels.last.name})")
+end
+
+def send_test(event)
+  lvl = Level.find_by(name: 'S-A-00-00')
+  count = lvl.parse_raw_scores("boards/json/S/#{lvl.name}.json")
+  succ("Parsed #{count} raw scores")
 end
 
 def send_dday_stats
@@ -1273,6 +1279,7 @@ def respond_special(event)
   return sanitize_hashes(event)          if cmd == 'sanitize_hashes'
   return sanitize_userlevels(event)      if cmd == 'sanitize_userlevels'
   return sanitize_users(event)           if cmd == 'sanitize_users'
+  return scan_boards(event)              if cmd == 'scan_boards'
   return seed_fractional_scores(event)   if cmd == 'seed_fractions'
   return seed_hashes(event)              if cmd == 'seed_hashes'
   return set_user_id(event)              if cmd == 'set_user_id'

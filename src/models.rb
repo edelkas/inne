@@ -721,7 +721,7 @@ module Downloadable
 
     loop do
       # Add some randomized wait when multithreading to avoid hammering the server simultaneously
-      sleep(rand / 20) if worker
+      sleep(rand / 10) if worker
 
       # Submit improved score
       cur_score = [cur_score, max_score].min
@@ -777,6 +777,7 @@ module Downloadable
       max_rank = top_rank if top_rank > max_rank
       if worker
         worker.progress = 100.0 * (1.0 - bot_rank.to_f / (max_rank + 1))
+        worker.status = "%s: %4d / %4d" % [name, data.size, max_rank + 1]
       else
         params = [cur_rank.ordinalize, round_score(cur_score / 1000.0), data.size, max_rank + 1, name, i, holes]
         dbg("%s: %7.3f - Scanned %4d / %4d scores in %s after %3d submissions (%d holes)" % params, progress: true)
@@ -815,6 +816,64 @@ module Downloadable
       mode = func == :succ ? :good : func == :alert ? :warn : :error
       worker.pool.report(Log.format(log_line, mode)[:fancy])
     end
+  end
+
+  # Parse exported scores from scan_boards and create corresponding RawScores
+  def parse_raw_scores(file, format: :json)
+    if !File.file?(file)
+      err("File #{file} not found")
+      return 0
+    end
+
+    # Fetch list
+    if format == :json
+      list = JSON.parse(File.read(file))
+      count = list.size
+    else
+      f = File.binread(file)
+      count = f.unpack1('L<')
+      list = f.unpack('L<3Z*' * count, offset: 4).each_slice(4)
+
+      if list.size < count
+        alert("Missing #{name} raw scores (#{list.size} / #{count}) in #{file}")
+        count = list.size
+      end
+    end
+
+    # Init state
+    tied_rank = 0
+    tied_score = nil
+
+    # Iterate list
+    list.each_with_index do |s, i|
+      # Get fields
+      replay_id = format != :json ? s[0] : s['replay_id']
+      score     = format != :json ? s[1] : (60 * s['score'] / 1000.0).round
+      player_id = format != :json ? s[2] : s['user_id']
+      name      = format != :json ? s[3] : s['user_name']
+
+      # Compute tied rank
+      if !tied_score || tied_score > score
+        tied_rank = i
+        tied_score = score
+      end
+
+      # Create records
+      RawPlayer.where(id: player_id).first_or_create(name: name)
+      score = RawScore.where(highscoreable_type: type_id, replay_id: replay_id)
+                      .first_or_create(
+                        highscoreable_id: id,
+                        player_id:        player_id,
+                        rank:             i,
+                        tied_rank:        tied_rank,
+                        score:            score
+                      )
+
+      # Log
+      dbg("Parsed #{i + 1} / #{count} raw scores for #{self.name}", progress: true)
+    end
+
+    count
   end
 
   def correct_ties(score_hash)
@@ -1000,6 +1059,17 @@ module Highscoreable
 
   def is_story?
     self.is_a?(Storyish)
+  end
+
+  def type_id
+    case self
+    when Levelish
+      TYPE_LEVEL
+    when Episodish
+      TYPE_EPISODE
+    when Storyish
+      TYPE_STORY
+    end
   end
 
   # Protected levels have secret replays
@@ -1396,6 +1466,8 @@ end
 
 # Implemented by Level, MappackLevel and Userlevel
 module Levelish
+  TYPE = TYPE_LEVEL
+
   # Return the Map object (containing map data), if it exists
   def map
     self.is_a?(Level) ? MappackLevel.find_by(id: id) : self
@@ -1484,6 +1556,7 @@ end
 
 # Implemented by Episode and MappackEpisode
 module Episodish
+  TYPE = TYPE_EPISODE
 
   # Return the Map object (containing map data), if it exists
   def map
@@ -1611,6 +1684,8 @@ end
 
 # Implemented by Story and MappackStory
 module Storyish
+  TYPE = TYPE_STORY
+
   # Return the Map object (containing map data), if it exists
   def map
     self.is_a?(Story) ? MappackStory.find_by(id: id) : self
@@ -3324,6 +3399,22 @@ class Demo < ActiveRecord::Base
     lex(e, "Error updating demo with id #{archive.replay_id}: #{e}")
     nil
   end
+end
+
+# The "raw" classes map to different tables whose purpose is to mirror Metanet's
+# db in full as closely as possible. They are kept separate so the highscoring
+# functionality is still performed on the much smaller tables.
+# Their main purpose is archival and browsing, not really performing stats,
+# but their structure has been kept similar to the highscoring ones in case we
+# still want some basic stats.
+
+class RawPlayer < ActiveRecord::Base
+end
+
+class RawScore < ActiveRecord::Base
+end
+
+class RawScore < ActiveRecord::Base
 end
 
 module Twitch extend self
