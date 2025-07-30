@@ -1239,19 +1239,24 @@ module Highscoreable
     ret
   end
 
-  def difference(old, board = 'hs')
+  def difference(date, board = 'hs')
     rfield = is_mappack? ? "rank_#{board}" : 'rank'
     sfield = is_mappack? ? "score_#{board}" : 'score'
-    scale  = is_mappack? && board == 'hs' ? 60.0 : 1
-    leaderboard(board, pluck: false).map do |score|
-      oldscore = old.find{ |o|
-        o['player_id'] == score.player_id && (is_mappack? ? !o[rfield].nil? : true)
-      }
+    old_scale = !is_mappack? || board == 'hs' ? 60.0 : 1
+    cur_scale =  is_mappack? && board == 'hs' ? 60.0 : 1
+
+    # Fetch old and current leaderboards
+    old_boards = Archive.scores(self, date.to_i)
+    cur_boards = leaderboard(board, pluck: false)
+
+    # Compute differences
+    cur_boards.map do |cur_score|
+      old_score = old_boards.each_with_index.find{ |o, i| o[2] == cur_score.player_id }
       change = {
-        rank:  oldscore[rfield] - score[rfield],
-        score: (score[sfield] - oldscore[sfield]) / scale
-      } if oldscore
-      { score: score, change: change }
+        rank:  old_score[1] - cur_score[rfield],
+        score: cur_score[sfield] / cur_scale - old_score[0][1] / old_scale
+      } if old_score
+      { score: cur_score, change: change }
     end
   end
 
@@ -1305,28 +1310,28 @@ module Highscoreable
     color
   end
 
-  # Format Top20 changes between the current boards and 'old' for a single board (e.g. hs / sr)
+  # Format Top20 changes between the current boards and 'date' for a single board (e.g. hs / sr)
   #   diff_score : Show score changes
   #   empty      : Return an empty array if there are no differences
-  def format_difference_board(old, board = 'hs', diff_score: true, empty: true)
-    difffs = difference(old, board)
+  # TODO: We should remove all that extra whitespace (padding) at the end of each line
+  # if the boards aren't dual, as it's not necessary in that case.
+  def format_difference_board(date, board = 'hs', diff_score: true, empty: true)
+    difffs = difference(date, board)
     return [] if empty && difffs.all?{ |d| !d[:change].nil? && d[:change][:score].abs < 0.01 && d[:change][:rank] == 0 }
 
-    boards = leaderboard(board, pluck: false)
     sfield = is_mappack? ? "score_#{board}" : 'score'
     scale  = is_mappack? && board == 'hs' ? 60.0 : 1
     offset = is_mappack? && board == 'sr' ? 0 : 4
 
-    pad_name   = boards.map{ |s| s.player.print_name.length }.max
-    pad_score  = boards.map{ |s| (s[sfield] / scale).abs.to_i }.max.to_s.length + offset
+    pad_name   = difffs.map{ |o| o[:score].player.print_name.length }.max
+    pad_score  = difffs.map{ |o| (o[:score][sfield] / scale).abs.to_i }.max.to_s.length + offset
     pad_rank   = [difffs.map{ |d| d[:change] }.compact.map{ |c| c[:rank].abs.to_i  }.max.to_s.length, 2].max
     pad_change = difffs.map{ |d| d[:change] }.compact.map{ |c| c[:score].abs.to_i }.max.to_s.length + offset
 
     difffs.each_with_index.map{ |o, i|
-      c = o[:change]
       diff = ''
       score = o[:score].format(pad_name, pad_score, false, board, i)
-      color = Highscoreable.format_diff_change(c, diff, diff_score, pad_rank, pad_change, board != 'sr')
+      color = Highscoreable.format_diff_change(o[:change], diff, diff_score, pad_rank, pad_change, board != 'sr')
       score.gsub!(/(\S+)$/, color + '\1' + ANSI.reset) if RICH_DIFFS && !diff_score && color != ANSI.none
       "#{score} #{diff}"
     }
@@ -1335,13 +1340,13 @@ module Highscoreable
     nil
   end
 
-  # Format Top20 changes between the current boards and 'old'
-  def format_difference(old, board = 'hs')
+  # Format Top20 changes between the current boards and the boards on 'date'
+  def format_difference(date, board = 'hs')
     if !is_mappack? || board != 'dual'
-      return format_difference_board(old, board).join("\n")
+      return format_difference_board(date, board).join("\n")
     end
-    diffs_hs = format_difference_board(old, 'hs', diff_score: false, empty: false)
-    diffs_sr = format_difference_board(old, 'sr', diff_score: false, empty: false)
+    diffs_hs = format_difference_board(date, 'hs', diff_score: false, empty: false)
+    diffs_sr = format_difference_board(date, 'sr', diff_score: false, empty: false)
     empty_hs = diffs_hs.count{ |d| d.strip[-1] == '━' && d.scan(/\x1B\[\d+m/).size == 0 } == diffs_hs.size
     empty_sr = diffs_sr.count{ |d| d.strip[-1] == '━' && d.scan(/\x1B\[\d+m/).size == 0 } == diffs_sr.size
     return '' if diffs_hs.empty? && diffs_sr.empty? || empty_hs && empty_sr
@@ -2922,21 +2927,13 @@ class GlobalProperty < ActiveRecord::Base
   # Get the old saved scores for lotd/eotw/cotm (to compare against current scores)
   def self.get_saved_scores(type, ctp = false)
     key = "saved_#{ctp ? 'ctp_' : ''}#{type.to_s.downcase}_scores"
-    JSON.parse(self.find_by(key: key).value)
+    Time.parse(self.find_by(key: key).value) rescue Time.now
   end
 
-  # Save the current lotd/eotw/cotm scores (to see changes later)
-  def self.set_saved_scores(type, curr, ctp = false)
+  # Save the date of the current lotd/eotw/cotm scores (to compute changes later)
+  def self.set_saved_scores(type, ctp = false)
     key = "saved_#{ctp ? 'ctp_' : ''}#{type.to_s.downcase}_scores"
-    scores = curr.scores
-    scores = scores.where("`rank_hs` IS NOT NULL OR `rank_sr` IS NOT NULL") if ctp
-    fields = [:player_id]
-    if ctp
-      fields << [:rank_hs, :score_hs, :rank_sr, :score_sr]
-    else
-      fields << [:rank, :score]
-    end
-    self.find_or_create_by(key: key).update(value: scores.to_json(only: fields.flatten))
+    self.find_or_create_by(key: key).update(value: Time.now.to_s)
   end
 
   # Get the currently active Steam ID to latch onto
@@ -3066,18 +3063,14 @@ class Archive < ActiveRecord::Base
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # Returns the leaderboards at a particular point in time
-  def self.scores(highscoreable, date = nil, cheated: false, pluck: true, full: false)
-    ret = self.select(:metanet_id, 'MAX(`score`)')
-              .where(highscoreable: highscoreable)
-              .where(!cheated ? '`cheated` = 0' : '')
-              .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date}" : '')
-              .group(:metanet_id)
-              .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
-    ret = ret.limit(20) if !full
-    return ret unless pluck
-    ret.map{ |s|
-      [s.metanet_id.to_i, s['MAX(`score`)'].to_i]
-    }
+  def self.scores(highscoreable, date = nil, cheated: false, full: false)
+    self.where(highscoreable: highscoreable)
+        .where(!cheated ? '`cheated` = 0' : '')
+        .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date}" : '')
+        .group(:metanet_id)
+        .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
+        .limit(full ? nil : 20)
+        .pluck(:metanet_id, 'MAX(`score`)', 'MAX(`player_id`)')
   end
 
   # Return a list of all dates where a highscoreable changed
@@ -3234,7 +3227,7 @@ class Archive < ActiveRecord::Base
   def find_rank(time)
     old_score = Archive.scores(self.highscoreable, time)
                        .each_with_index
-                       .map{ |s, i| [i, s[0], s[1]] }
+                       .map{ |s, i| [i, s[0]] }
                        .select{ |s| s[1] == self.metanet_id }
     old_score.empty? ? 20 : old_score.first[0]
   end

@@ -506,8 +506,10 @@ def send_summary
   changes.map{ |h| h[1] }
          .uniq
          .each{ |h|
-                total[h.class.to_s][0] += Archive.scores(h, now).first[1] - Archive.scores(h, time).first[1]
-                total[h.class.to_s][1] += Archive.scores(h, now).last[1] - Archive.scores(h, time).last[1]
+                cur_scores = Archive.scores(h, now)
+                old_scores = Archive.scores(h, time)
+                total[h.class.to_s][0] += cur_scores.first[1] - old_scores.first[1]
+                total[h.class.to_s][1] += cur_scores.last[1] - old_scores.last[1]
               }
 
   total = total.map{ |klass, n|
@@ -684,12 +686,13 @@ def send_channel_next(type, ctp = false)
     diff = last.format_difference(old_scores, 'dual')
     channel.send(last.format_difference_header(diff, past: true))
   end
-  GlobalProperty.set_saved_scores(type, current, ctp)
+  GlobalProperty.set_saved_scores(type, ctp)
 
   return true
 end
 
 # General driver for the function above
+# TODO: Do all this in a single post, 2 for CTP.
 def start_level_of_the_day(ctp = false)
   # Ensure channel is available
   while (ctp ? $ctp_channel : $channel).nil?
