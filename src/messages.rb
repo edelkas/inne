@@ -1259,7 +1259,7 @@ end
 # (e.g. scores, screenshot, challenges, level id, ...)
 # 'page' parameters controls button page navigation when there are many results
 def send_query(event, page: nil)
-  parse_highscoreable(event, list: true, mappack: true, page: page)
+  parse_highscoreable(event, list: true, mappack: true, page: page, type: Level)
 rescue => e
   lex(e, "Error performing query.", event: event)
 end
@@ -2149,21 +2149,14 @@ end
 # in random palettes, zip them, and upload them.
 def send_dmmc(event)
   assert_permissions(event, ['dmmc'])
-  count      = parse_message(event)[/\d+/].to_i
-  limit      = 100
-  levels     = Userlevel.where_like('title', "MM#{count}").order(:id).limit(limit)
+  edition    = parse_message(event)[/\d+/].to_i
+  levels     = Userlevel.where_like('title', "MM#{edition}").order(:id).limit(100)
   count      = levels.count
   palettes   = Userlevel::THEMES.dup
-  response   = nil
   str        = ''
   zip_buffer = Zip::OutputStream.write_buffer{ |zip|
     levels.each_with_index{ |u, i|
-      # TODO: We can do this with TmpMsg now
-      if i == 0
-        response = send_message(event, content: "Generating screenshot 1 of #{count}...", db: false)
-      elsif i % 5 == 0
-        response.edit("Generating screenshot #{i + 1} of #{count}...")
-      end
+      TmpMsg.update(event, "-# Generating screenshot #{i + 1} of #{count}...") if i % 5 == 4
       palette = palettes.sample
       zip.put_next_entry(sanitize_filename(u.author.name) + ' - ' + sanitize_filename(u.title) + '.png')
       zip.write(u.screenshot(palette))
@@ -2172,9 +2165,7 @@ def send_dmmc(event)
     }
   }
   zip = zip_buffer.string
-  response.delete if response
-  event << "MM#{count} has #{levels.size} maps:\n#{str}"
-
+  event << "MM#{edition} has #{count} maps:\n#{str}"
   send_file(event, zip, 'dmmc.zip', true)
 rescue => e
   lex(e, "Error fetching dMMc maps.", event: event)

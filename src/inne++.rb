@@ -273,7 +273,6 @@ rescue OutteError => e
   else
     send_message(event, content: msg, log: false, ephemeral: e.ephemeral)
   end
-  log_message(msg)
 rescue => e
   # These exceptions are internal errors, so send warning to the channel and
   # log full trace to the terminal/log file

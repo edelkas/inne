@@ -380,17 +380,17 @@ end
 #      even though it also fits the dashless level SU-A-1-5, because no such
 #      level exists).
 # 3) Then parse columns (no ambiguity as they don't have row letter).
-def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false, silent: false)
+def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false, type: nil, silent: false)
   ret = ['', []]
 
   # Mappack variants, if allowed
   matches = []
   if mappack
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: true, vanilla: false, dashed: true)  if ret[1].empty?
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: true, vanilla: false, dashed: true)  if ret[1].empty?
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: true, vanilla: false, dashed: false) if ret[1].empty?
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: true, vanilla: false, dashed: false) if ret[1].empty?
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Story,   mappack: true, vanilla: false, dashed: true)  if ret[1].empty?
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: true, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Level)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: true, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Episode)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: true, vanilla: false, dashed: false) if ret[1].empty? && (!type || type == Level)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: true, vanilla: false, dashed: false) if ret[1].empty? && (!type || type == Episode)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Story,   mappack: true, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Story)
 
     # If there were ID matches, but they didn't exist, raise
     if ret[1].empty? && matches.size > 0
@@ -401,11 +401,11 @@ def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false, si
 
   # Vanilla variants
   matches = []
-  ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: mappack, vanilla: true, dashed: true)  if ret[1].empty?
-  ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: mappack, vanilla: true, dashed: true)  if ret[1].empty?
-  ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: mappack, vanilla: true, dashed: false) if ret[1].empty?
-  ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: mappack, vanilla: true, dashed: false) if ret[1].empty?
-  ret = parse_h_by_id_once(msg, user, channel, matches, type: Story,   mappack: mappack, vanilla: true, dashed: true)  if ret[1].empty?
+  ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: mappack, vanilla: true, dashed: true)  if ret[1].empty? && (!type || type == Level)
+  ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: mappack, vanilla: true, dashed: true)  if ret[1].empty? && (!type || type == Episode)
+  ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: mappack, vanilla: true, dashed: false) if ret[1].empty? && (!type || type == Level)
+  ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: mappack, vanilla: true, dashed: false) if ret[1].empty? && (!type || type == Episode)
+  ret = parse_h_by_id_once(msg, user, channel, matches, type: Story,   mappack: mappack, vanilla: true, dashed: true)  if ret[1].empty? && (!type || type == Story)
 
   # If there were ID matches, but they didn't exist, raise
   if ret[1].empty? && matches.size > 0
@@ -499,7 +499,8 @@ def parse_highscoreable(
     mappack: false, # Search mappack highscoreables as well
     page:    0,     # Page offset when navigating list of matches
     vanilla: true,  # Don't return Metanet highscoreables as MappackHighscoreable
-    map:     false  # Force Metanet highscoreables to MappackHighscoreable
+    map:     false, # Force Metanet highscoreables to MappackHighscoreable
+    type:    nil    # Force a specific type
   )
   msg.prepend('for ') if msg
   msg ||= parse_message(event)
@@ -510,7 +511,7 @@ def parse_highscoreable(
   ret = ['', []]
 
   # Search for highscoreable according to different criteria
-  ret = parse_highscoreable_by_id(msg, user, channel, mappack: mappack)
+  ret = parse_highscoreable_by_id(msg, user, channel, mappack: mappack, type: type)
   ret = parse_highscoreable_by_code(msg, user, channel, mappack: mappack) if ret[1].empty?
   ret = parse_highscoreable_by_name(msg, user, channel, mappack: mappack) if ret[1].empty?
 
@@ -529,7 +530,7 @@ def parse_highscoreable(
   ret[1].map!{ |m| m.map } if map
 
   # Return single highscoreable or print list of results
-  if !list && ret[1].size == 1
+  if (!list && ret[1].size == 1) || ret[1].any?{ |h| !h.is_level? }
     return ret[1].first
   else
     format_level_matches(event, msg, page, ret, 'results')
