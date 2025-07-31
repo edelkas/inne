@@ -1162,13 +1162,9 @@ end
 def test_report(event)
   flags = parse_flags(event)
   if !flags.key?(:userlevel)
-    send_report
-    sleep(0.25)
-    send_summary
+    send_message(event, content: generate_report + "\n" + generate_summary)
   else
-    send_message(event.channel, content: UserlevelHistory.report(1))
-    sleep(0.25)
-    send_message(event.channel, content: UserlevelHistory.report(-1))
+    send_userlevel_report(event.channel, histories: false)
   end
 end
 

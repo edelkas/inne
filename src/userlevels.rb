@@ -317,12 +317,14 @@ class UserlevelHistory < ActiveRecord::Base
   end
 
   # Generate the highscoring report for a specific ranking type
-  def self.report(type = 1)
-    word = type > 0 ? format_rank(type).capitalize : 'Point'
-    word += ' (w/ ties)' if type == 1
-    header = mdtext("#{word} report (newest #{USERLEVEL_REPORT_SIZE} maps)", header: 2)
+  def self.report(type = 1, footer: true)
+    word = type > 0 ? format_rank(type).pluralize : 'points'
+    word += ' w/ ties' if type == 1
+    emoji = type == 1 ? '🥇' : type > 1 ? '🏆' : '📊'
+    header = mdtext("#{emoji} Userlevel #{word} report", header: 2)
     diff = format_block(compare(type, Time.now - 12 * 60 * 60))
-    header + "\n" + diff
+    footer = footer ? "\n-# Only includes the newest #{USERLEVEL_REPORT_SIZE} _scored_ userlevels." : ''
+    header + "\n" + diff + footer
   end
 end
 

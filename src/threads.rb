@@ -411,7 +411,7 @@ def download_demos
 end
 
 # Compute and send the weekly highscoring report
-def send_report
+def generate_report
   base  = Archive::EPOCH.to_i # when archiving begun
   now   = Time.now.to_i
   time  = [now - REPORT_UPDATE_SIZE,  base].max
@@ -468,8 +468,6 @@ def send_report
   header = ANSI.under + ANSI.bold + header + ANSI.clear
   sep = "-" * (pad.sum + pad.size + 5)
 
-  send_message($channel, content: "**Weekly highscoring report**:#{format_block([header, changes].join("\n"))}")
-
   if LOG_REPORT
     log_text = log.sort_by{ |name, scores| name }.map{ |name, scores|
       scores.map{ |s|
@@ -478,6 +476,11 @@ def send_report
     }.join("\n")
     File.write(PATH_LOG_REPORT, log_text)
   end
+
+  "## 📋 Weekly highscoring report\n#{format_block([header, changes].join("\n"))}"
+rescue => e
+  lex(e, 'Error generating highscoring report')
+  'Failed to generate daily highscoring report :('
 end
 
 # Compute and send the daily highscoring summary:
@@ -486,7 +489,7 @@ end
 # 3) Total number of changes.
 # 4) Total number of involved players.
 # 5) Total number of involved highscoreables.
-def send_summary
+def generate_summary
   base  = Time.new(2020, 9, 3, 0, 0, 0, "+00:00").to_i # when archiving begun
   now   = Time.now.to_i
   time  = [now - SUMMARY_UPDATE_SIZE, base].max
@@ -518,21 +521,32 @@ def send_summary
     "making the boards **#{"%.3f" % [n[1].to_f / 60.0]}** seconds harder " +
     "and increasing the total 0th score by **#{"%.3f" % [n[0].to_f / 60.0]}** seconds."
   }.join("\n")
-  send_message($channel, content: "**Daily highscoring summary**:\n" + total)
+  "## 📈 Daily highscoring summary:\n" + total
+rescue => e
+  lex(e, 'Error generating highscoring summary')
+  'Failed to generate daily highscoring summary :('
 end
 
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
-def send_userlevel_report
-  while $mapping_channel.nil?
+def send_userlevel_report(channel = nil, histories: true)
+  channel = $mapping_channel if !channel
+  while !channel
     err("Not connected to a channel, not sending userlevel report")
     sleep(5)
+    channel = $mapping_channel
   end
 
-  send_message($mapping_channel, content: UserlevelHistory.report(1))
-  sleep(0.25)
-  send_message($mapping_channel, content: UserlevelHistory.report(-1))
-  update_userlevel_histories
+  report1 = UserlevelHistory.report(1, footer: false)
+  report2 = UserlevelHistory.report(-1)
+  if report1.length + report2.length + 1 <= DISCORD_CHAR_LIMIT
+    send_message(channel, content: report1 + "\n" + report2)
+  else
+    send_message(channel, content: report2)
+    sleep(0.25)
+    send_message(channel, content: report2)
+  end
+  update_userlevel_histories if histories
 end
 
 # Update database scores for Metanet Solo levels, episodes and stories
@@ -625,20 +639,20 @@ end
 ############ LOTD FUNCTIONS ############
 
 # Daily reminders for eotw and cotm
-def send_eotw_reminder(ctp = false)
+def eotw_reminder(ctp = false)
   channel = ctp ? $ctp_channel : $channel
   eotw = GlobalProperty.get_current(Episode, ctp)
-  return if eotw.nil?
-  send_message(channel, content: "Also, remember that the current #{ctp ? 'CTP ' : ''}episode of the week is #{eotw.format_name}.")
+  return '' if eotw.nil?
+  "Also, remember that the current #{ctp ? 'CTP ' : ''}episode of the week is #{eotw.format_name}."
 rescue => e
   lex(e, 'Failed to send eotw reminder')
 end
 
-def send_cotm_reminder(ctp = false)
+def cotm_reminder(ctp = false)
   channel = ctp ? $ctp_channel : $channel
   cotm = GlobalProperty.get_current(Story, ctp)
-  return if cotm.nil?
-  send_message(channel, content: "Also, remember that the current #{ctp ? 'CTP ' : ''}column of the month is #{cotm.format_name}.")
+  return '' if cotm.nil?
+  "Also, remember that the current #{ctp ? 'CTP ' : ''}column of the month is #{cotm.format_name}."
 rescue => e
   lex(e, 'Failed to send cotm reminder')
 end
@@ -673,18 +687,19 @@ def send_channel_next(type, ctp = false)
   channel = ctp ? $ctp_channel : $channel
   screenshot = Map.screenshot(file: true, h: current.map) rescue nil
   caption += "\nThere was a problem generating the screenshot!" if screenshot.nil?
-  channel.send(caption, false, nil, screenshot.nil? ? [] : [screenshot])
+  send_message(channel, content: caption, files: screenshot.nil? ? [] : [screenshot])
   sleep(0.25)
-  channel.send("Current #{OFFLINE_STRICT ? "(cached) " : ""}high scores:\n#{format_block(current.format_scores(mode: 'dual'))}")
+  scores = format_block(current.format_scores(mode: 'dual'))
+  send_message(channel, content: "Current #{OFFLINE_STRICT ? "(cached) " : ""}high scores:\n#{scores}")
   sleep(0.25)
 
   # Send differences, if available
   old_scores = GlobalProperty.get_saved_scores(type, ctp)
   if last.nil? || old_scores.nil?
-    channel.send("There was no previous #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}.")
+    send_message(channel, content: "There was no previous #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}.")
   elsif !OFFLINE_STRICT || ctp
     diff = last.format_difference(old_scores, 'dual')
-    channel.send(last.format_difference_message(diff, old_scores, past: true))
+    send_message(channel, content: last.format_difference_message(diff, old_scores, past: true))
   end
   GlobalProperty.set_saved_scores(type, ctp)
 
@@ -692,10 +707,11 @@ def send_channel_next(type, ctp = false)
 end
 
 # General driver for the function above
-# TODO: Do all this in a single post, 2 for CTP.
+# TODO: Do all this in fewer posts. We probably should distinguish if there were
+#       differences or not, check lengths, etc. Also look into components v2.
 def start_level_of_the_day(ctp = false)
   # Ensure channel is available
-  while (ctp ? $ctp_channel : $channel).nil?
+  while !(channel = ctp ? $ctp_channel : $channel)
     err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
     sleep(5)
   end
@@ -718,16 +734,15 @@ def start_level_of_the_day(ctp = false)
   sleep(0.25)
 
   # Post reminders
-  send_eotw_reminder(ctp) if test_lotd || post_lotd && !eotw_day
-  sleep(0.25)
-  send_cotm_reminder(ctp) if test_lotd || post_lotd && !cotm_day
-  sleep(0.25)
+  reminders = []
+  reminders << '* ' + eotw_reminder(ctp) if test_lotd || post_lotd && !eotw_day
+  reminders << '* ' + cotm_reminder(ctp) if test_lotd || post_lotd && !cotm_day
+  send_message(channel, content: reminders.join("\n")) unless reminders.empty?
 
   # Post report and summary
   if !ctp && (REPORT_METANET || TEST_LOTD || DO_EVERYTHING)
-    send_report
     sleep(0.25)
-    send_summary
+    send_message(channel, content: generate_report + "\n" + generate_summary)
   end
 end
 

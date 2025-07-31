@@ -1280,6 +1280,7 @@ module Highscoreable
   # pad_rank   - Length of rank change number
   # pad_change - Length of score change number
   # inc        - Whether higher scores are better, for coloring
+  # TODO: Remove trailing whitespace
   def self.format_diff_change(c, diff, diff_score, pad_rank, pad_change, inc = true)
     # Score is brand new
     if !c
