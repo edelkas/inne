@@ -1,4 +1,4 @@
-- Add embed info to the sent message log in the terminal (count, chars, etc)
+- Add color diffs when navigating scores.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
   * Recover most scores using NSim.
   * Recover level scores from episode replays, again using NSim.

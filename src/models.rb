@@ -1239,6 +1239,8 @@ module Highscoreable
     ret
   end
 
+  # Given a date, compute the differences between the current leaderboards and
+  # the leaderboards on that date.
   def difference(date, board = 'hs')
     rfield = is_mappack? ? "rank_#{board}" : 'rank'
     sfield = is_mappack? ? "score_#{board}" : 'score'
@@ -1246,15 +1248,25 @@ module Highscoreable
     cur_scale =  is_mappack? && board == 'hs' ? 60.0 : 1
 
     # Fetch old and current leaderboards
-    old_boards = Archive.scores(self, date.to_i)
+    if is_mappack?
+      old_boards = leaderboard(board, truncate: 0, pluck: true, date: date).map{ |s|
+        { score: s[sfield], player_id: s['player_id'] }
+      }
+    else
+      old_boards = Archive.scores(self, date.to_i).map{ |s|
+        { score: s[1], player_id: s[2] }
+      }
+    end
     cur_boards = leaderboard(board, pluck: false)
 
     # Compute differences
     cur_boards.map do |cur_score|
-      old_score = old_boards.each_with_index.find{ |o, i| o[2] == cur_score.player_id }
+      old_score = old_boards.each_with_index.find{ |s, i|
+        s[:player_id] == cur_score.player_id
+      }
       change = {
         rank:  old_score[1] - cur_score[rfield],
-        score: cur_score[sfield] / cur_scale - old_score[0][1] / old_scale
+        score: cur_score[sfield] / cur_scale - old_score[0][:score] / old_scale
       } if old_score
       { score: cur_score, change: change }
     end

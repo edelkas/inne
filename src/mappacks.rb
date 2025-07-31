@@ -507,11 +507,13 @@ module MappackHighscoreable
       aliases:    false, # Use player names or display names
       metanet_id: nil,   # Player making the request if coming from CLE
       offset:     0,     # Starting rank of the board
-      frac:       false  # Include fractional field
+      frac:       false, # Include fractional field
+      obsolete:   false, # Include obsolete runs (null rank)
+      date:       nil    # Maximum date threshold (when no obsoletes, only works well when plucking)
     )
     m = 'hs' if !['hs', 'sr', 'gm'].include?(m)
     names = aliases ? 'IF(display_name IS NOT NULL, display_name, name)' : 'name'
-    attr_names = %W[id score_#{m} name metanet_id]
+    attr_names = %W[id score_#{m} name metanet_id player_id]
 
     # Check if a manual replay ID has been set, so that we only select that one
     manual = GlobalProperty.find_by(key: 'replay_id').value rescue nil
@@ -519,18 +521,19 @@ module MappackHighscoreable
 
     # Handle manual board
     if use_manual
-      attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
+      attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id player_id]
       board = scores.where(id: manual)
     else
       case m
       when 'hs', 'sr' # Handle standard boards
-        attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id]
+        attrs = %W[mappack_scores.id score_#{m} #{names} metanet_id player_id]
         attr_names << 'fraction' if frac
         attrs      << 'fraction' if frac
-        board = scores.where("rank_#{m} IS NOT NULL")
+        board = scores.where(!obsolete && !date ? "rank_#{m} IS NOT NULL" : '')
+                      .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date.to_i}" : '')
         sfield = "`score_#{m}`"
-        order = m == 'hs' ? 'DESC' : 'ASC'
         sfield += (m == 'hs' ? ' - ' : ' + ') + '`fraction`' if frac
+        order = m == 'hs' ? 'DESC' : 'ASC'
         board = board.order("#{sfield} #{order}", '`date` ASC')
         #board = board.order("rank_#{m} ASC")
       when 'gm'       # Handle gold boards
@@ -538,9 +541,10 @@ module MappackHighscoreable
           'MIN(subquery.id) AS id',
           'MIN(score_gm) AS score_gm',
           "MIN(#{names}) AS name",
-          'subquery.metanet_id'
+          'subquery.metanet_id',
+          'MIN(player_id) AS player_id'
         ]
-        join = %{
+        join = <<~SQL
           INNER JOIN (
             SELECT metanet_id, MIN(gold) AS score_gm
             FROM mappack_scores
@@ -548,7 +552,7 @@ module MappackHighscoreable
             GROUP BY metanet_id
           ) AS opt
           ON mappack_scores.metanet_id = opt.metanet_id AND gold = score_gm
-        }.gsub(/\s+/, ' ').strip
+        SQL
         subquery = scores.select(:id, :score_gm, :player_id, :metanet_id).joins(join)
         board = MappackScore.from(subquery).group(:metanet_id).order('score_gm', 'id')
       end
@@ -558,8 +562,10 @@ module MappackHighscoreable
     board = board.offset(offset) if offset > 0
     board = board.limit(truncate) if truncate > 0
     return board if !pluck
-    board.joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
-         .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
+    board = board.joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
+                 .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
+    board.uniq!{ |s| s['metanet_id'] } if !obsolete && date
+    board
   end
 
   # Return scores in JSON format expected by N++
