@@ -1,4 +1,5 @@
-- Add color diffs when navigating scores.
+- Add dupe player removal in sanitization function, this requires carefully adjusting the player_id of the removed players in all tables that refer to it.
+- Add color diffs when navigating scores, and ability to specify date when querying scores.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
   * Recover most scores using NSim.
   * Recover level scores from episode replays, again using NSim.

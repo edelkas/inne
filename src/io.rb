@@ -3,6 +3,7 @@
 # sending files...)
 
 require 'active_support/core_ext/integer/inflections' # ordinalize
+require 'active_support/core_ext/numeric/time'        # 1.hour, 3.minutes.ago, etc
 
 
 # Fetch message from an event. Depending on the event that was triggered, this
@@ -419,11 +420,11 @@ rescue
 end
 
 # Parse a highscoreable based on a "code" (e.g. lotd/eotw/cotm)
-def parse_highscoreable_by_code(msg, user = nil, channel = nil, mappack: false)
+def parse_highscoreable_by_code(msg, user = nil, channel = nil, mappack: false, type: nil)
   # Parse type
-  lotd = !!msg[/(level of the day|lotd)/i]
-  eotw = !!msg[/(episode of the week|eotw)/i]
-  cotm = !!msg[/(column of the month|cotm)/i]
+  lotd = !!msg[/(level of the day|lotd)/i]    && (!type || type == Level)
+  eotw = !!msg[/(episode of the week|eotw)/i] && (!type || type == Episode)
+  cotm = !!msg[/(column of the month|cotm)/i] && (!type || type == Story)
   return ['', []] if !lotd && !eotw && !cotm
 
   klass = lotd ? Level : eotw ? Episode : Story
@@ -446,7 +447,11 @@ end
 
 # Parse a highscoreable based on the name
 # 'mappack' specifies whether searching for mappack highscoreables is allowed, not enforced
-def parse_highscoreable_by_name(msg, user = nil, channel = nil, mappack: true)
+def parse_highscoreable_by_name(msg, user = nil, channel = nil, mappack: true, type: nil)
+  # Only levels have names
+  return ['', []] if name.empty? if type && type != Level
+
+  # Extract elements from message
   pack = mappack ? parse_mappack(msg, user, channel) : nil
   klass = pack && pack.id != 0 ? MappackLevel.where(mappack: pack) : Level
   pack = pack && pack.id != 0 ? pack.code.upcase + ' ' : 'MET '
@@ -493,36 +498,44 @@ end
 # Parse a highscoreable (Level, Episode, Story, or the corresponding Mappack ones)
 # Returns it if a single result is found, or prints the list if multiple (see params).
 def parse_highscoreable(
-    event,          # Event whose content contains the highscoreable to parse
-    msg:     nil,   # String to parse, instead of the event content
-    list:    false, # Force to print list, even if there's a single match
-    mappack: false, # Search mappack highscoreables as well
-    page:    0,     # Page offset when navigating list of matches
-    vanilla: true,  # Don't return Metanet highscoreables as MappackHighscoreable
-    map:     false, # Force Metanet highscoreables to MappackHighscoreable
-    type:    nil    # Force a specific type
+    event,             # Event whose content contains the highscoreable to parse
+    msg:        nil,   # String to parse, instead of the event content
+    list:       false, # Force to print list, even if there's a single match
+    mappack:    false, # Search mappack highscoreables as well
+    page:       0,     # Page offset when navigating list of matches
+    vanilla:    true,  # Don't return Metanet highscoreables as MappackHighscoreable
+    map:        false, # Force Metanet highscoreables to MappackHighscoreable
+    type:       nil,   # Force a specific type
+    silent:     false, # If no results, return quietly instead of throwing
+    parse_id:   true,  # Parse by ID
+    parse_code: true,  # Parse by code (lotd / eotw / cotm)
+    parse_name: true   # Parse by level name
   )
+
+  # Parse message
   msg.prepend('for ') if msg
   msg ||= parse_message(event)
+  empty = msg.to_s.strip.empty?
+  return nil if empty && silent
+  perror("Couldn't find the level, episode or story you were looking for :(") if empty
+
+  # Parse other useful elements (for user defaults)
   user = parse_user(event.user)
   channel = event.channel
-  perror("Couldn't find the level, episode or story you were looking for :(") if msg.to_s.strip.empty?
   pack = mappack ? parse_mappack(msg, user, channel) : nil
   ret = ['', []]
 
   # Search for highscoreable according to different criteria
-  ret = parse_highscoreable_by_id(msg, user, channel, mappack: mappack, type: type)
-  ret = parse_highscoreable_by_code(msg, user, channel, mappack: mappack) if ret[1].empty?
-  ret = parse_highscoreable_by_name(msg, user, channel, mappack: mappack) if ret[1].empty?
+  ret = parse_highscoreable_by_id(msg,   user, channel, mappack: mappack, type: type) if parse_id
+  ret = parse_highscoreable_by_code(msg, user, channel, mappack: mappack, type: type) if parse_code && ret[1].empty?
+  ret = parse_highscoreable_by_name(msg, user, channel, mappack: mappack, type: type) if parse_name && ret[1].empty?
 
   # No results
   pack_str = pack && pack.id != 0 ? pack.code.upcase + ' ' : ''
   if ret[1].empty?
-    if list
-      perror("No #{pack_str}results found.")
-    else
-      perror("Couldn't find the #{pack_str}level, episode or story you were looking for :(")
-    end
+    return nil if silent
+    perror("No #{pack_str}results found.") if list
+    perror("Couldn't find the #{pack_str}level, episode or story you were looking for :(")
   end
 
   # Transform to vanilla or map if appropriate
@@ -530,11 +543,9 @@ def parse_highscoreable(
   ret[1].map!{ |m| m.map } if map
 
   # Return single highscoreable or print list of results
-  if (!list && ret[1].size == 1) || ret[1].any?{ |h| !h.is_level? }
-    return ret[1].first
-  else
-    format_level_matches(event, msg, page, ret, 'results')
-  end
+  no_list = (!list && ret[1].size == 1) || ret[1].any?{ |h| !h.is_level? }
+  return ret[1].first if no_list
+  format_level_matches(event, msg, page, ret, 'results')
 rescue => e
   lex(e, 'Failed to parse highscoreable')
   nil
@@ -1254,10 +1265,11 @@ def format_timespan(time, prec = -1, pad: false, ms: false, iso: false, zero: fa
 
   # Initialize vars
   levels = [
-    ['d', 86400],
-    ['h',  3600],
-    ['m',    60],
-    ['s',     1]
+    ['y', 365 * 86400],
+    ['d',       86400],
+    ['h',        3600],
+    ['m',          60],
+    ['s',           1]
   ]
   levels << (['ms', 0.001]) if ms
   prec = levels.size if prec < 0

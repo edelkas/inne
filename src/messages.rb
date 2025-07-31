@@ -1264,26 +1264,39 @@ rescue => e
   lex(e, "Error performing query.", event: event)
 end
 
-# Sends the Top20 changes for the current lotd/eotw/cotm
+# Sends the Top20 changes in some leaderboard since the specified date, default to lotd
+# TODO: Integrity checks (board, etc), clamp date to the start of archiving (2020), test
 def send_diff(event)
-  # Parse params
-  msg      = parse_message(event)
-  mappack  = parse_mappack(event: event)
-  type     = parse_type(msg, default: Level)
-  period   = type == Level ? 'day'   : type == Episode ? 'week'    : 'month'
-  type_str = type == Level ? 'level' : type == Episode ? 'episode' : 'column'
-  code     = mappack.nil? || mappack.id == 0 ? '' : mappack.code.upcase + ' '
-  name     = "#{code}#{type_str} of the #{period}"
-  perror("There is no #{name}.") if mappack && !['met', 'ctp'].include?(mappack.code)
+  msg   = parse_message(event)
+  h     = parse_highscoreable(event, mappack: true, silent: true)
+  type  = parse_type(msg, default: Level)
+  board = parse_board(msg, 'dual', dual: true)
+
+  # If no highscoreable has been explicitly provided, default to lotd/eotw/cotm
+  if !h
+    # Ensure lotd exists
+    mappack  = parse_mappack(event: event)
+    period   = type == Level ? 'day'   : type == Episode ? 'week'    : 'month'
+    type_str = type == Level ? 'level' : type == Episode ? 'episode' : 'column'
+    code     = mappack.nil? || mappack.id == 0 ? '' : mappack.code.upcase + ' '
+    name     = "#{code}#{type_str} of the #{period}"
+    perror("There is no #{name}.") if mappack && !mappack.lotd
+
+    # Get highscoreable and date
+    ctp = mappack && mappack.code == 'ctp'
+    h = GlobalProperty.get_current(type, ctp)
+    perror("There is no current #{name}.") if h.nil?
+    date = GlobalProperty.get_saved_scores(type, ctp)
+    explicit = false
+  else
+    default_date = h.is_level? ? 1.day.ago : h.is_episode? ? 1.week.ago : 1.month.ago
+    date = [Time.parse(msg), Archive::EPOCH].max rescue default_date
+    explicit = true
+  end
 
   # Fetch and format differences
-  ctp = mappack && mappack.code == 'ctp'
-  current = GlobalProperty.get_current(type, ctp)
-  old_scores = GlobalProperty.get_saved_scores(type, ctp)
-  perror("There is no current #{name}.") if current.nil?
-  perror("The old scores for the current #{name} we not saved :S") if old_scores.nil?
-  diff = current.format_difference(old_scores, 'dual')
-  event << current.format_difference_header(diff)
+  str = h.format_difference_message(h.format_difference(date, board), date, explicit: explicit)
+  event << str
 rescue => e
   lex(e, "Error finding differences.", event: event)
 end
@@ -2260,6 +2273,7 @@ def robot(event)
   send_message(event, db: false, content: start.sample + middle.sample + ending.sample)
 end
 
+# TODO: Paginate
 def send_denubbed(event)
   mishu_id = 115572
   mishu_scores = Archive.where(metanet_id: mishu_id, expired: false)
@@ -2360,7 +2374,6 @@ def respond(event)
   if !msg[NAME_PATTERN, 2]
     return send_rankings(event)    if msg =~ /rank/i && msg !~ /history/i && msg !~ /table/i
     return send_history(event)     if msg =~ /history/i
-    return send_diff(event)        if msg =~ /\bdiff\b/i
     return send_community(event)   if msg =~ /community/i
     return send_cleanliness(event) if msg =~ /cleanest/i || msg =~ /dirtiest/i
     return send_ownages(event)     if msg =~ /ownage/i
@@ -2388,6 +2401,7 @@ def respond(event)
   return send_demo_download(event)   if (msg =~ /\breplay\b/i || msg =~ /\bdemo\b/i) && msg =~ /\bdownload\b/i
   return send_download(event)        if msg =~ /\bdownload\b/i
   return send_trace(event)           if msg =~ /\btrace\b/i || msg =~ /\banim/i
+  return send_diff(event)            if msg =~ /\bdiff(ences?)?\b/i
   return send_speedruns(event)       if msg =~ /\bspeed\s*runs?\b/
   return send_lotd(event, Level)     if msg =~ /lotd/i
   return send_lotd(event, Episode)   if msg =~ /eotw/i

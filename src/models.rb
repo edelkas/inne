@@ -1283,7 +1283,7 @@ module Highscoreable
   def self.format_diff_change(c, diff, diff_score, pad_rank, pad_change, inc = true)
     # Score is brand new
     if !c
-      diff << ANSI.alert + ANSI.bold if RICH_DIFFS
+      diff << ANSI.alert if RICH_DIFFS && diff_score
       diff << 'NEW'
       diff << ' ' * (pad_change + 2) if diff_score
       diff << ANSI.reset if RICH_DIFFS
@@ -1298,36 +1298,37 @@ module Highscoreable
       return ANSI.none
     end
 
-    # Format rank change
-    rank = "━▲▼"[c[:rank] <=> 0]
-    rank << (c[:rank] != 0 ? "%-#{pad_rank}d" % [c[:rank].abs] : ' ' * pad_rank)
-    diff << (c[:rank] > 0 ? ANSI.good : c[:rank] < 0 ? ANSI.bad : '') if RICH_DIFFS
-    diff << rank
-    diff << ANSI.reset if RICH_DIFFS && c[:rank] != 0
-
-    # Determine score color
+    # Determine score and rank colors
     better = inc && c[:score] >  0.01 || !inc && c[:score] < -0.01
     worse  = inc && c[:score] < -0.01 || !inc && c[:score] >  0.01
-    color  = better ? ANSI.good : worse ? ANSI.bad : ANSI.none
-    return color unless diff_score
+    score_color = better       ? ANSI.good : worse        ? ANSI.bad : ANSI.none
+    rank_color  = c[:rank] > 0 ? ANSI.good : c[:rank] < 0 ? ANSI.bad : ANSI.none
+
+    # Format rank change
+    needs_color = diff_score && rank_color != ANSI.none || !diff_score && score_color != rank_color
+    rank = "━▲▼"[c[:rank] <=> 0]
+    rank << (c[:rank] != 0 ? "%-#{pad_rank}d" % [c[:rank].abs] : ' ' * pad_rank)
+    diff << rank_color if RICH_DIFFS && needs_color
+    diff << rank
+    diff << ANSI.reset if RICH_DIFFS && rank_color != ANSI.none && !diff_score
+    return score_color unless diff_score
 
     # Format score change (optional, we don't use it in dual boards)
     fmt = c[:score].is_a?(Integer) ? 'd' : '.3f'
     score = "(%+#{pad_change + 1}#{fmt})" % c[:score]
     changed = better || worse
-    diff << color if RICH_DIFFS && changed
+    diff << score_color if RICH_DIFFS && score_color != rank_color
     diff << (changed ? ' ' + score : ' ' * (pad_change + 2))
-    diff << ANSI.reset if RICH_DIFFS && changed
+    diff << ANSI.reset if RICH_DIFFS && score_color != ANSI.none
 
-    color
+    score_color
   end
 
   # Format Top20 changes between the current boards and 'date' for a single board (e.g. hs / sr)
+  # Returns an array of strings, one per line / rank
   #   diff_score : Show score changes
   #   empty      : Return an empty array if there are no differences
-  # TODO: We should remove all that extra whitespace (padding) at the end of each line
-  # if the boards aren't dual, as it's not necessary in that case.
-  def format_difference_board(date, board = 'hs', diff_score: true, empty: true)
+  def format_difference_board(date, board = 'hs', diff_score: true, empty: true, pad_end: false)
     difffs = difference(date, board)
     return [] if empty && difffs.all?{ |d| !d[:change].nil? && d[:change][:score].abs < 0.01 && d[:change][:rank] == 0 }
 
@@ -1339,12 +1340,14 @@ module Highscoreable
     pad_score  = difffs.map{ |o| (o[:score][sfield] / scale).abs.to_i }.max.to_s.length + offset
     pad_rank   = [difffs.map{ |d| d[:change] }.compact.map{ |c| c[:rank].abs.to_i  }.max.to_s.length, 2].max
     pad_change = difffs.map{ |d| d[:change] }.compact.map{ |c| c[:score].abs.to_i }.max.to_s.length + offset
+    pad_rank   = 0 if !pad_end && !diff_score
+    pad_change = 0 if !pad_end
 
     difffs.each_with_index.map{ |o, i|
       diff = ''
       score = o[:score].format(pad_name, pad_score, false, board, i)
       color = Highscoreable.format_diff_change(o[:change], diff, diff_score, pad_rank, pad_change, board != 'sr')
-      score.gsub!(/(\S+)$/, color + '\1' + ANSI.reset) if RICH_DIFFS && !diff_score && color != ANSI.none
+      score.gsub!(/(\S+)$/, color + '\1') if RICH_DIFFS && !diff_score && color != ANSI.none
       "#{score} #{diff}"
     }
   rescue => e
@@ -1353,20 +1356,28 @@ module Highscoreable
   end
 
   # Format Top20 changes between the current boards and the boards on 'date'
+  # Returns a string, empty if no differences. Returns nil if error.
   def format_difference(date, board = 'hs')
-    if !is_mappack? || board != 'dual'
-      return format_difference_board(date, board).join("\n")
-    end
-    diffs_hs = format_difference_board(date, 'hs', diff_score: false, empty: false)
+    # Differences for a single board
+    return format_difference_board(date, board).join("\n") if !is_mappack? || board != 'dual'
+
+    # Construct differences for dual boards (hs and sr)
+    diffs_hs = format_difference_board(date, 'hs', diff_score: false, empty: false, pad_end: true)
     diffs_sr = format_difference_board(date, 'sr', diff_score: false, empty: false)
+
+    # Return empty string if there are no differences in hs nor sr
     empty_hs = diffs_hs.count{ |d| d.strip[-1] == '━' && d.scan(/\x1B\[\d+m/).size == 0 } == diffs_hs.size
     empty_sr = diffs_sr.count{ |d| d.strip[-1] == '━' && d.scan(/\x1B\[\d+m/).size == 0 } == diffs_sr.size
     return '' if diffs_hs.empty? && diffs_sr.empty? || empty_hs && empty_sr
+
+    # Pad both boards to the same size (they should already be!)
     length_hs = diffs_hs.first.gsub(/\x1B\[\d+m/, '').length rescue 0
     length_sr = diffs_sr.first.gsub(/\x1B\[\d+m/, '').length rescue 0
     size = [diffs_hs.size, diffs_sr.size].max
     diffs_hs = diffs_hs.ljust(size, ' ' * length_hs)
     diffs_sr = diffs_sr.ljust(size, ' ' * length_sr)
+
+    # Format header and list
     header = '     ' + 'Highscore'.center(length_hs - 4) + '   ' + 'Speedrun'.center(length_sr - 4)
     ret = [header, *diffs_hs.zip(diffs_sr).map{ |hs, sr| hs.sub(':', ' │') + ' │ ' + sr[4..-1] }]
     ret.join("\n")
@@ -1375,22 +1386,27 @@ module Highscoreable
     nil
   end
 
-  # Format the header for the Top20 changes
-  def format_difference_header(diff, past: false)
-    article = past ? 'last' : 'this'
-    period = is_level? ? 'day' : is_episode? ? 'week' : 'month'
-    since = is_level? ? (past ? 'yesterday' : 'today') : is_episode? ? "#{article} week" : "#{article} month"
-    type = is_story? ? 'column' : self.class.to_s.downcase.remove('mappack')
-    mappack = is_mappack? ? self.mappack.code.upcase : ''
-
-    if diff.nil?
-      "Failed to calculate top20 changes on #{since}'s #{mappack} #{type} of the #{period}, #{format_name}.".squish
-    elsif diff.strip.empty?
-      "There #{past ? 'were' : 'have been'} no top20 changes on #{since}'s #{mappack} #{type} of the #{period}, #{format_name}.".squish
+  # Format the message for Top20 changes, header included
+  def format_difference_message(diff, date, past: false, explicit: false)
+    # Format highscoreable reference
+    if explicit
+      name = format_name
     else
-      header = "Top20 changes on #{since}'s #{mappack} #{type} of the #{period}, #{format_name}"
-      format_header(header) + format_block(diff)
+      article = past ? 'last' : 'this'
+      period = is_level? ? 'day' : is_episode? ? 'week' : 'month'
+      since = is_level? ? (past ? 'yesterday' : 'today') : is_episode? ? "#{article} week" : "#{article} month"
+      type = is_story? ? 'column' : self.class.to_s.downcase.remove('mappack')
+      mappack = is_mappack? ? self.mappack.code.upcase : ''
+      name = "#{since}'s #{mappack} #{type} of the #{period}, #{format_name},"
     end
+    #span = format_timespan(Time.now - date, 2)
+    span = format_timestamp(date, date: true, full: true)
+
+    # Format header and message
+    changes = "top20 changes on #{name} since #{span}"
+    return "Failed to calculate #{changes}.".squish if diff.nil?
+    return "There #{past ? 'were' : 'have been'} no #{changes}.".squish if diff.strip.empty?
+    format_header(changes) + format_block(diff)
   end
 
   def find_coolness
@@ -2939,7 +2955,8 @@ class GlobalProperty < ActiveRecord::Base
   # Get the old saved scores for lotd/eotw/cotm (to compare against current scores)
   def self.get_saved_scores(type, ctp = false)
     key = "saved_#{ctp ? 'ctp_' : ''}#{type.to_s.downcase}_scores"
-    Time.parse(self.find_by(key: key).value) rescue Time.now
+    default_date = type == Level ? 1.day.ago : type == Episode ? 1.week.ago : 1.month.ago
+    Time.parse(self.find_by(key: key).value) rescue default_date
   end
 
   # Save the date of the current lotd/eotw/cotm scores (to compute changes later)
@@ -3069,6 +3086,9 @@ class Challenge < ActiveRecord::Base
 end
 
 class Archive < ActiveRecord::Base
+  # When archiving began
+  EPOCH = Time.new(2020, 9, 3, 0, 0, 0, "+00:00")
+
   belongs_to :player
   belongs_to :highscoreable, polymorphic: true
   has_one :demo, foreign_key: :id, dependent: :destroy
@@ -3133,6 +3153,7 @@ class Archive < ActiveRecord::Base
   #   - Remove orphaned demos (without a corresponding archive)
   #   - Remove individually blacklisted archives
   #   - Remove duplicated archives
+  # TODO: Remove duplicated players and adjust all the tables that might refer to the deleted player_id's
   def self.sanitize
     # Store results to print summary after sanitization
     ret = {}
