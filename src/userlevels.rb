@@ -287,13 +287,13 @@ class UserlevelHistory < ActiveRecord::Base
     ties = r == 1
 
     # Fetch relevant histories to compare against
-    last = where('timestamp <= ?', time).order(timestamp: :desc).first.timestamp
+    last = where('timestamp <= ?', time).maximum(:timestamp)
     histories = where(timestamp: last - 3600 .. last)
 
     # Fetch current and old rankings, compute differences
     ranking = Userlevel.rank(type, ties, r - 1).map.with_index{ |e, rank| [rank, *e] }
     ranking_prev = histories.where(rank: r)
-                            .order(count: :desc)
+                            .order(count: :desc, id: :asc)
                             .pluck(:player_id, :count)
                             .map.with_index{ |e, rank| [rank, *e] }
     diffs = ranking.map{ |rank, id, count, _|
@@ -718,6 +718,7 @@ class Userlevel < ActiveRecord::Base
     ret
   end
 
+  # TODO: We should probably sort ties alphabetically and reject counts of 0 (see standard rankings)
   def self.rank(type, ties = false, par = nil, full = false, global = false, author_id = nil)
     scores = global ? UserlevelScore.global : UserlevelScore.newest
     if !author_id.nil?

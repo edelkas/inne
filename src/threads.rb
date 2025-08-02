@@ -567,7 +567,7 @@ end
 def update_userlevel_histories
   now = Time.now
   [-1, 1, 5, 10, 20].each{ |rank|
-    rankings = Userlevel.rank(rank == -1 ? :points : :rank, rank == 1 ? true : false, rank - 1, true)
+    rankings = Userlevel.rank(rank == -1 ? :points : :rank, rank == 1, rank - 1, true)
     attrs    = UserlevelHistory.compose(rankings, rank, now)
     ActiveRecord::Base.transaction do
       UserlevelHistory.create(attrs)
