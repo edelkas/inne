@@ -129,7 +129,7 @@ def parse_type(
   ret = []
   multiple ? ret << Level   : (return Level)   if !!msg[/\blevels?\b/i] || !!msg[/lotd/i]
   multiple ? ret << Episode : (return Episode) if !!msg[/\bepisodes?\b/i] || !!msg[/eotw/i]
-  multiple ? ret << Story   : (return Story)   if !!msg[/\bstory\b/i] || !!msg[/\bstories\b/i] || !!msg[/\bcolumn?\b/i] || !!msg[/\bhard\s*core\b/i] || !!msg[/\bhc\b/i] || !!msg[/cotm/i]
+  multiple ? ret << Story   : (return Story)   if !!msg[/\bstory\b/i] || !!msg[/\bstories\b/i] || !!msg[/\bcolumn\b/i] || !!msg[/\bhard\s*core\b/i] || !!msg[/\bhc\b/i] || !!msg[/cotm/i]
 
   if multiple
     # If still empty (and initial), push default types

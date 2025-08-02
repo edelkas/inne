@@ -1222,6 +1222,16 @@ def thread_continue(event)
   event << "Togglable thread with name `#{name}` awakened"
 end
 
+def test_lotd(event)
+  flags = parse_flags(event)
+  ctp = flags.key?(:ctp)
+  start_level_of_the_day(event.channel, ctp: ctp, save: false, test: true) if flags.key?(:full)
+  send_channel_next(event.channel, Level,   ctp: ctp, save: false) if flags.key?(:level)
+  send_channel_next(event.channel, Episode, ctp: ctp, save: false) if flags.key?(:episode)
+  send_channel_next(event.channel, Story,   ctp: ctp, save: false) if flags.key?(:story)
+  event << lotd_reminders(ctp: ctp, episode: true, story: true) if flags.key?(:reminder)
+end
+
 
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
@@ -1255,6 +1265,7 @@ def respond_special(event)
   return send_shutdown(event, true)      if cmd == 'kill'
   return send_logs(event)                if cmd == 'log'
   return send_log_config(event)          if cmd == 'logconf'
+  return test_lotd(event)                if cmd == 'lotd'
   return send_mappack_authors(event)     if cmd == 'mappack_authors'
   return send_mappack_completions(event) if cmd == 'mappack_completions'
   return send_mappack_digest(event)      if cmd == 'mappack_digest'

@@ -477,7 +477,7 @@ def generate_report
     File.write(PATH_LOG_REPORT, log_text)
   end
 
-  "## 📋 Weekly highscoring report\n#{format_block([header, changes].join("\n"))}"
+  "## 📋 Weekly highscoring report:\n#{format_block([header, changes].join("\n"))}"
 rescue => e
   lex(e, 'Error generating highscoring report')
   'Failed to generate daily highscoring report :('
@@ -638,39 +638,47 @@ end
 
 ############ LOTD FUNCTIONS ############
 
-# Daily reminders for eotw and cotm
-def eotw_reminder(ctp = false)
-  channel = ctp ? $ctp_channel : $channel
-  eotw = GlobalProperty.get_current(Episode, ctp)
-  return '' if eotw.nil?
-  "Also, remember that the current #{ctp ? 'CTP ' : ''}episode of the week is #{eotw.format_name}."
+# Reminder for the current lotd/eotw/cotm
+def lotd_reminder(type, ctp: false)
+  h = GlobalProperty.get_current(type, ctp)
+  time = format_timestamp(next_lotd_time(type, ctp: ctp), rel: true)
+  period = type == Level ? 'day' : type == Episode ? 'week' : 'month'
+  type = type == Story ? 'column' : type.to_s.downcase
+  name = "current #{ctp ? 'CTP ' : ''}#{type} of the #{period}"
+  if h
+    "The #{name} is #{h.format_name(bold: true)} and ends #{time}."
+  else
+    "There is no #{name}, but I'll post a new one #{time}"
+  end
 rescue => e
-  lex(e, 'Failed to send eotw reminder')
+  lex(e, "Failed to draft #{type.to_s.downcase} reminder")
 end
 
-def cotm_reminder(ctp = false)
-  channel = ctp ? $ctp_channel : $channel
-  cotm = GlobalProperty.get_current(Story, ctp)
-  return '' if cotm.nil?
-  "Also, remember that the current #{ctp ? 'CTP ' : ''}column of the month is #{cotm.format_name}."
+# Reminder list after lotd
+def lotd_reminders(ctp: false, episode: true, story: true)
+  message = ''
+  message << "## 📌 Reminder:\n" if episode || story
+  message << '╰┈➢ ' << lotd_reminder(Episode, ctp: ctp) << "\n" if episode
+  message << '╰┈➢ ' << lotd_reminder(Story,   ctp: ctp) << "\n" if story
+  message
 rescue => e
-  lex(e, 'Failed to send cotm reminder')
+  lex(e, 'Failed to draft lotd reminders')
 end
 
 # Publish the lotd/eotw/cotm
 # This function also updates the scores of said board, and of the new one
-def send_channel_next(type, ctp = false)
+def send_channel_next(channel, type, ctp: false, save: true)
   # Get old and new levels/episodes/stories
   last = GlobalProperty.get_current(type, ctp)
   current = GlobalProperty.get_next(type, ctp)
-  GlobalProperty.set_current(type, current, ctp)
+  GlobalProperty.set_current(type, current, ctp) if save
   if current.nil?
     err("No more #{ctp ? 'CTP ' : ''}#{type.to_s.downcase.pluralize}")
     return false
   end
 
   # Update scores, if need be
-  if !OFFLINE_STRICT && UPDATE_SCORES_ON_LOTD && !ctp
+  if !OFFLINE_STRICT && UPDATE_SCORES_ON_LOTD && !ctp && save
     last.update_scores if !last.nil?
     current.update_scores
   end
@@ -680,69 +688,81 @@ def send_channel_next(type, ctp = false)
   type_n = type == Level ? 'level' : type == Episode ? 'episode' : 'column'
   period = type == Level ? 'day'   : type == Episode ? 'week'    : 'month'
   time   = type == Level ? 'today' : "this #{period}"
-  caption = "#{prefix} for a new #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}!"
-  caption << " The #{type_n} for #{time} is #{current.format_name}."
+  caption = "# 🔔 __New #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}!__\n"
+  caption << "## ➤ #{current.format_name}"
 
-  # Send screenshot and scores
-  channel = ctp ? $ctp_channel : $channel
+  # Presentation and screenshot
   screenshot = Map.screenshot(file: true, h: current.map) rescue nil
   caption += "\nThere was a problem generating the screenshot!" if screenshot.nil?
   send_message(channel, content: caption, files: screenshot.nil? ? [] : [screenshot])
   sleep(0.25)
-  scores = format_block(current.format_scores(mode: 'dual'))
-  send_message(channel, content: "Current #{OFFLINE_STRICT ? "(cached) " : ""}high scores:\n#{scores}")
-  sleep(0.25)
 
-  # Send differences, if available
-  old_scores = GlobalProperty.get_saved_scores(type, ctp)
-  if last.nil? || old_scores.nil?
-    send_message(channel, content: "There was no previous #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}.")
+  # Scores
+  caption1 = "Current #{OFFLINE_STRICT ? "(cached) " : ""}high scores:\n"
+  caption1 << format_block(current.format_scores(mode: 'dual'))
+
+  # Differences, if available
+  date = GlobalProperty.get_saved_scores(type, ctp)
+  if last.nil? || date.nil?
+    caption2 = "There was no previous #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}."
   elsif !OFFLINE_STRICT || ctp
-    diff = last.format_difference(old_scores, 'dual')
-    send_message(channel, content: last.format_difference_message(diff, old_scores, past: true))
+    diff = last.format_difference(date, 'dual')
+    caption2 = last.format_difference_message(diff, date, past: true)
   end
-  GlobalProperty.set_saved_scores(type, ctp)
 
+  # Send message(s)
+  if caption1.length + caption2.length + 1 <= DISCORD_CHAR_LIMIT
+    send_message(channel, content: caption1 + caption2)
+  else
+    send_message(channel, content: caption1)
+    sleep(0.25)
+    send_message(channel, content: caption2)
+  end
+
+  # Save date for next lotd/eotw/cotm score diff
+  GlobalProperty.set_saved_scores(type, ctp) if save
   return true
 end
 
 # General driver for the function above
-# TODO: Do all this in fewer posts. We probably should distinguish if there were
-#       differences or not, check lengths, etc. Also look into components v2.
-def start_level_of_the_day(ctp = false)
+def start_level_of_the_day(channel = nil, ctp: false, save: true, test: false)
   # Ensure channel is available
-  while !(channel = ctp ? $ctp_channel : $channel)
+  channel = ctp ? $ctp_channel : $channel if !channel
+  while !channel
     err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
     sleep(5)
+    channel = ctp ? $ctp_channel : $channel
   end
 
   # Flags
   lotd_day  = true
   eotw_day  = Time.now.sunday?
   cotm_day  = Time.now.day == 1
-  test_lotd = ctp ? TEST_CTP_LOTD : TEST_LOTD
+  test_lotd = (ctp ? TEST_CTP_LOTD : TEST_LOTD) || test
   post_lotd = test_lotd || ((ctp ? POST_CTP_LOTD : POST_LOTD) || DO_EVERYTHING) && lotd_day
   post_eotw = test_lotd || ((ctp ? POST_CTP_EOTW : POST_EOTW) || DO_EVERYTHING) && eotw_day
   post_cotm = test_lotd || ((ctp ? POST_CTP_COTM : POST_COTM) || DO_EVERYTHING) && cotm_day
 
   # Post each highscoreable, if enabled
-  send_channel_next(Level,   ctp) if post_lotd
+  send_channel_next(channel, Level,   ctp: ctp, save: save) if post_lotd
   sleep(0.25)
-  send_channel_next(Episode, ctp) if post_eotw
+  send_channel_next(channel, Episode, ctp: ctp, save: save) if post_eotw
   sleep(0.25)
-  send_channel_next(Story,   ctp) if post_cotm
-  sleep(0.25)
+  send_channel_next(channel, Story,   ctp: ctp, save: save) if post_cotm
 
-  # Post reminders
-  reminders = []
-  reminders << '* ' + eotw_reminder(ctp) if test_lotd || post_lotd && !eotw_day
-  reminders << '* ' + cotm_reminder(ctp) if test_lotd || post_lotd && !cotm_day
-  send_message(channel, content: reminders.join("\n")) unless reminders.empty?
+  # Draft reminders
+  post_eotw_rem = test_lotd || post_lotd && !eotw_day
+  post_cotm_rem = test_lotd || post_lotd && !cotm_day
+  message = lotd_reminders(ctp: ctp, episode: post_eotw_rem, story: post_cotm_rem)
 
-  # Post report and summary
-  if !ctp && (REPORT_METANET || TEST_LOTD || DO_EVERYTHING)
+  # Draft report and summary
+  post_report = !ctp && (REPORT_METANET || TEST_LOTD || DO_EVERYTHING || test)
+  message << generate_report << "\n" << generate_summary if post_report
+
+  # Send final message
+  if !message.empty?
     sleep(0.25)
-    send_message(channel, content: generate_report + "\n" + generate_summary)
+    send_message(channel, content: message)
   end
 end
 
@@ -872,12 +892,12 @@ def start_discord_tasks
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
   time = TEST && TEST_LOTD ? nil : 'level'
-  Scheduler.add("Level of the day", freq: freq, time: time) { start_level_of_the_day(false) }
+  Scheduler.add("Level of the day", freq: freq, time: time) { start_level_of_the_day(ctp: false) }
 
   # Post CTP lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_CTP_LOTD ? -1 : CTP_LEVEL_FREQUENCY
   time = TEST && TEST_CTP_LOTD ? nil : 'ctp_level'
-  Scheduler.add("CTP level of the day", freq: freq, time: time) { start_level_of_the_day(true) }
+  Scheduler.add("CTP level of the day", freq: freq, time: time) { start_level_of_the_day(ctp: true) }
 
   # Post highscoring report for newest userlevels, and save histories
   freq = TEST && TEST_UL_REPORT ? -1 : USERLEVEL_REPORT_FREQUENCY

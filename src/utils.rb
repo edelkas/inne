@@ -2438,6 +2438,22 @@ def unpack_replay_id(id)
   [id >> REPLAY_ID_BITS, id & ((1 << REPLAY_ID_BITS) - 1)]
 end
 
+# Compute the date of the next lotd/eotw/cotm
+def next_lotd_time(type, ctp: false)
+  time = GlobalProperty.get_next_update(Level, ctp)
+  time += 1.day while time.wday != 0 if type == Episode
+  time += 1.day while time.day  != 1 if type == Story
+  time
+end
+
+# Compute the date of the previous lotd/eotw/cotm
+def prev_lotd_time(type, ctp: false)
+  time = GlobalProperty.get_next_update(Level, ctp) - 1.day
+  time -= 1.day while time.wday != 0 if type == Episode
+  time -= 1.day while time.day  != 1 if type == Story
+  time
+end
+
 # <---------------------------------------------------------------------------->
 # <------                           GRAPHICS                             ------>
 # <---------------------------------------------------------------------------->
@@ -3183,4 +3199,21 @@ def md5(data, hex: false)
 rescue => e
   lex(e, 'Failed to compute MD5 hash')
   nil
+end
+
+# <---------------------------------------------------------------------------->
+# <------                             OTHER                              ------>
+# <---------------------------------------------------------------------------->
+
+# Use Time.parse to parse the date. This method is very flexible so it allows
+# many different formats almost seamlessly. In fact, it's too flexible and infers
+# missing values using a placeholder class that responds to day, mon and year.
+# Sometimes this is too flexible, in those cases we can return nil instead.
+def parse_date(str, infer: false)
+  validator = Class.new
+  def validator.day()  raise end
+  def validator.mon()  raise end
+  def validator.year() raise end
+  inferrer = infer ? Time.now : validator.new
+  Time.parse(str, inferrer) rescue nil
 end

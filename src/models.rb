@@ -1061,6 +1061,10 @@ module Highscoreable
     self.is_a?(Storyish)
   end
 
+  def is_lotd?
+    GlobalProperty.get_current(self.class.vanilla, is_mappack?) == self
+  end
+
   def type_id
     case self
     when Levelish
@@ -1406,7 +1410,7 @@ module Highscoreable
     # Format header and message
     changes = "top20 changes on #{name} since #{span}"
     return "Failed to calculate #{changes}.".squish if diff.nil?
-    return "There #{past ? 'were' : 'have been'} no #{changes}.".squish if diff.strip.empty?
+    return "There #{past ? 'were' : 'have been'} no #{changes} :(".squish if diff.strip.empty?
     format_header(changes) + format_block(diff)
   end
 
@@ -1523,8 +1527,9 @@ module Levelish
     [self]
   end
 
-  def format_name
-    str = "#{verbatim(longname)} (#{name.remove('MET-')})"
+  def format_name(bold: false)
+    bd = bold ? '**' : ''
+    str = "#{verbatim(longname)} (#{bd}#{name.remove('MET-')}#{bd})"
     str += " by #{verbatim(author)}" if author rescue ''
     str
   end
@@ -1603,8 +1608,13 @@ module Episodish
     return episode ? episode : null ? nil : self
   end
 
-  def format_name
-    "#{name.remove('MET-')}"
+  def is_eotw?
+    GlobalProperty.get_current(Episode, is_mappack?) == self
+  end
+
+  def format_name(bold: false)
+    bd = bold ? '**' : ''
+    "#{bd}#{name.remove('MET-')}#{bd}"
   end
 
   def cleanliness(rank = 0, board = 'hs')
@@ -1731,8 +1741,13 @@ module Storyish
     return story ? story : null ? nil : self
   end
 
-  def format_name
-    "#{name.remove('MET-')}"
+  def is_cotm?
+    GlobalProperty.get_current(Story, is_mappack?) == self
+  end
+
+  def format_name(bold: false)
+    bd = bold ? '**' : ''
+    "#{bd}#{name.remove('MET-')}#{bd}"
   end
 
   def levels
@@ -2956,8 +2971,7 @@ class GlobalProperty < ActiveRecord::Base
   # Get the old saved scores for lotd/eotw/cotm (to compare against current scores)
   def self.get_saved_scores(type, ctp = false)
     key = "saved_#{ctp ? 'ctp_' : ''}#{type.to_s.downcase}_scores"
-    default_date = type == Level ? 1.day.ago : type == Episode ? 1.week.ago : 1.month.ago
-    Time.parse(self.find_by(key: key).value) rescue default_date
+    Time.parse(self.find_by(key: key).value) rescue prev_lotd_time(type, ctp: ctp)
   end
 
   # Save the date of the current lotd/eotw/cotm scores (to compute changes later)

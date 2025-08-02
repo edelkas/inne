@@ -1269,13 +1269,13 @@ end
 def send_diff(event)
   msg   = parse_message(event)
   h     = parse_highscoreable(event, mappack: true, silent: true)
-  type  = parse_type(msg, default: Level)
+  type  = h ? h.class.vanilla : parse_type(msg, default: Level)
   board = parse_board(msg, 'dual', dual: true)
 
   # If no highscoreable has been explicitly provided, default to lotd/eotw/cotm
-  if !h
+  if !h || h.is_lotd?
     # Ensure lotd exists
-    mappack  = parse_mappack(event: event)
+    mappack  = h && h.is_mappack? ? h.mappack : parse_mappack(event: event)
     period   = type == Level ? 'day'   : type == Episode ? 'week'    : 'month'
     type_str = type == Level ? 'level' : type == Episode ? 'episode' : 'column'
     code     = mappack.nil? || mappack.id == 0 ? '' : mappack.code.upcase + ' '
@@ -1286,11 +1286,12 @@ def send_diff(event)
     ctp = mappack && mappack.code == 'ctp'
     h = GlobalProperty.get_current(type, ctp)
     perror("There is no current #{name}.") if h.nil?
-    date = GlobalProperty.get_saved_scores(type, ctp)
+    default_date = GlobalProperty.get_saved_scores(type, ctp)
+    date = parse_date(msg) || default_date
     explicit = false
   else
     default_date = h.is_level? ? 1.day.ago : h.is_episode? ? 1.week.ago : 1.month.ago
-    date = [Time.parse(msg), Archive::EPOCH].max rescue default_date
+    date = [parse_date(msg) || default_date, Archive::EPOCH].max
     explicit = true
   end
 
@@ -1875,31 +1876,11 @@ end
 
 # Send info about current and next lotd/eotw/cotm
 def send_lotd(event, type = Level)
-  # Parse params
-  mappack = parse_mappack(event: event)
-  type = Level if ![Level, Episode, Story].include?(type)
-  ctp = mappack && mappack.code.upcase == 'CTP'
-  period = type == Level ? 'day' : (type == Episode ? 'week' : 'month')
-  perror("There is no #{mappack.code.upcase} #{type.to_s.downcase} of the #{period}.") if mappack && mappack.id > 1
-
-  # Fetch lotd and time
-  curr_h = GlobalProperty.get_current(type, ctp)
-  next_h = GlobalProperty.get_next_update(Level, ctp)
-  if type == Episode
-    next_h += 24 * 60 ** 2 while next_h.wday != 0
-  elsif type == Story
-    next_h += 24 * 60 ** 2 while next_h.day != 1
-  end
-  rem = next_h - Time.now
-
-  # Send messages
-  if !curr_h.nil?
-    event << "The current #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} is #{curr_h.format_name}."
-    event.attach_file(send_screenshot(event, curr_h, ret: true)[0])
-  else
-    event << "There is no current #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period}."
-  end
-  event << "I'll post a new #{ctp ? 'CTP ' : ''}#{type.to_s.downcase} of the #{period} on #{format_timestamp(next_h)}, #{format_timespan(rem, 2)} from now."
+  msg = parse_message(event)
+  ctp = !!msg[/\bctp\b/i]
+  h   = GlobalProperty.get_current(type, ctp)
+  event << lotd_reminder(type, ctp: ctp)
+  event.attach_file(send_screenshot(event, h, ret: true)[0]) if h
 rescue => e
   lex(e, "Error sending lotd/eotw/cotm info.", event: event)
 end
