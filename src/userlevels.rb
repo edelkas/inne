@@ -293,11 +293,12 @@ class UserlevelHistory < ActiveRecord::Base
     # Fetch current and old rankings, compute differences
     ranking = Userlevel.rank(type, ties, r - 1).map.with_index{ |e, rank| [rank, *e] }
     ranking_prev = histories.where(rank: r)
-                            .order(count: :desc, id: :asc)
+                            .order('`count` DESC, LOWER(`name`) ASC')
+                            .joins('INNER JOIN `userlevel_players` ON `userlevel_players`.`id` = `player_id`')
                             .pluck(:player_id, :count)
                             .map.with_index{ |e, rank| [rank, *e] }
-    diffs = ranking.map{ |rank, id, count, _|
-      old_rank, _, old_count = ranking_prev.find{ |_, old_id, _| id == old_id }
+    diffs = ranking.map{ |rank, id, count, name|
+      old_rank, old_id, old_count = ranking_prev.find{ |old_rank, old_id, old_count| id == old_id }
       old_rank ? { rank: old_rank - rank, score: count - old_count } : nil
     }
 
@@ -718,7 +719,6 @@ class Userlevel < ActiveRecord::Base
     ret
   end
 
-  # TODO: We should probably sort ties alphabetically and reject counts of 0 (see standard rankings)
   def self.rank(type, ties = false, par = nil, full = false, global = false, author_id = nil)
     scores = global ? UserlevelScore.global : UserlevelScore.newest
     if !author_id.nil?
@@ -782,8 +782,11 @@ class Userlevel < ActiveRecord::Base
     players = UserlevelPlayer.where(id: scores.map(&:first)).pluck(:id, :name).to_h
     scores = scores.map{ |id, count| [id, count, players[id]] }
     scores.reject!{ |id, count, name| count <= 0  } unless type == :avg_rank
-    bench(:step) if BENCHMARK
 
+    # Sort ONLY ties alphabetically by player
+    scores.sort!{ |a, b| (a[1] <=> b[1]) != 0 ? 0 : a[2].downcase <=> b[2].downcase }
+
+    bench(:step) if BENCHMARK
     scores
   end
 
