@@ -1265,7 +1265,6 @@ rescue => e
 end
 
 # Sends the Top20 changes in some leaderboard since the specified date, default to lotd
-# TODO: Integrity checks (board, etc), clamp date to the start of archiving (2020), test
 def send_diff(event)
   msg   = parse_message(event)
   h     = parse_highscoreable(event, mappack: true, silent: true)
@@ -1283,17 +1282,22 @@ def send_diff(event)
     perror("There is no #{name}.") if mappack && !mappack.lotd
 
     # Get highscoreable and date
-    ctp = mappack && mappack.code == 'ctp'
+    ctp = !!mappack && mappack.code == 'ctp'
     h = GlobalProperty.get_current(type, ctp)
     perror("There is no current #{name}.") if h.nil?
     default_date = GlobalProperty.get_saved_scores(type, ctp)
     date = parse_date(msg) || default_date
     explicit = false
   else
+    mappack = h.is_mappack? ? h.mappack : nil
     default_date = h.is_level? ? 1.day.ago : h.is_episode? ? 1.week.ago : 1.month.ago
     date = [parse_date(msg) || default_date, Archive::EPOCH].max
     explicit = true
   end
+
+  # Integrity checks
+  perror("Speedrun diffs aren't available for Metanet.") if board == 'sr' && !mappack
+  perror("Gold diffs aren't available.") if ['gm', 'gp'].include?(board)
 
   # Fetch and format differences
   str = h.format_difference_message(h.format_difference(date, board), date, explicit: explicit)
