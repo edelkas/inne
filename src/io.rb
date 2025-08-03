@@ -1311,6 +1311,14 @@ def format_timestamp(t, time: false, date: false, full: false, rel: false, long:
   "<t:#{t.to_i}#{fmt}>"
 end
 
+def format_date(date)
+  date ? 'on ' + format_timestamp(date, date: true, long: true) : ''
+end
+
+def format_cheaters(cheaters)
+  cheaters ? ' [with cheaters]' : ''
+end
+
 def format_sentence(e)
   return e[0].to_s if e.size == 1
   e[-2] = e[-2].to_s + " and #{e[-1].to_s}"

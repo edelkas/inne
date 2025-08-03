@@ -509,7 +509,8 @@ module MappackHighscoreable
       offset:     0,     # Starting rank of the board
       frac:       false, # Include fractional field
       obsolete:   false, # Include obsolete runs (null rank)
-      date:       nil    # Maximum date threshold (when no obsoletes, only works well when plucking)
+      date:       nil,   # Maximum date threshold (when no obsoletes, only works well when plucking)
+      cheated:    false  # Include cheated runs, only for compatibility with Metanet ones
     )
     m = 'hs' if !['hs', 'sr', 'gm'].include?(m)
     names = aliases ? 'IF(display_name IS NOT NULL, display_name, name)' : 'name'

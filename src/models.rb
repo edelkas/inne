@@ -1096,6 +1096,7 @@ module Highscoreable
   # Arguments are unused, but they're necessary to be compatible with the corresponding
   # function in MappackHighscoreable
   def leaderboard(*args, **kwargs)
+    return Archive.scores(self, kwargs[:date], full: kwargs[:truncate] == 0, **kwargs) if kwargs[:date]
     return scores if kwargs[:pluck] == false # not nil!
     ul = is_userlevel?
     attr_names = %W[rank id score name metanet_id replay_id]
@@ -1115,17 +1116,21 @@ module Highscoreable
   end
 
   # Format a single leaderboard for printing
-  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true)
+  def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true, date: nil)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
-    boards = leaderboard(board, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?).each_with_index.select{ |_, r|
+    boards = leaderboard(board, pluck: true, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?, cheated: cheated, date: date).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
     }.sort_by{ |_, r| full ? r : ranks.index(r) }
     sfield = !is_mappack? ? 'score' : "score_#{board}"
     rfield = !is_mappack? ? 'replay_id' : 'id'
 
-    # Figure out if cheated scores need to be inserted
-    if cheated && SHOW_CHEATERS && is_vanilla?
+    # If we have a vanilla highscoreable and we don't provide a date then we're using
+    # the scores table. Otherwise we're using the archives table or the mappack_scores table.
+    vanilla_table = is_vanilla? && !date
+
+    # Figure out if cheated scores need to be inserted (they already have if we provided a date)
+    if SHOW_CHEATERS && cheated && vanilla_table
       cheated_scores = Archive.where(highscoreable: self, expired: false, cheated: true)
                               .joins("INNER JOIN `players` ON `players`.`metanet_id` = `archives`.`metanet_id`")
                               .order('`score` DESC', '`replay_id` ASC')
@@ -1146,19 +1151,20 @@ module Highscoreable
     end
 
     # Scale scores stored as frame counts
-    boards.each{ |s, _| s[sfield] /= 60.0 } if is_mappack? && board == 'hs' || is_userlevel?
+    scale = is_mappack? && board == 'hs' || is_userlevel? || is_vanilla? && !!date
+    boards.each{ |s, _| s[sfield] /= 60.0 } if scale
 
     # Figure out if interpolated fractional scores need to be used instead
     frac &&= is_level? && ['hs', 'sr'].include?(board)
     equals = []
     if frac
-      if is_vanilla?
+      if vanilla_table
         boards.each{ |s, _| s[sfield] = round_score(s[sfield]) } # Normalize scores
         fractions = Archive.where(highscoreable: self).pluck(:replay_id, :fraction).to_h
       end
       cools = false
       boards.each{ |s, _|
-        fraction = is_vanilla? ? fractions[s[rfield]] : s['fraction']
+        fraction = vanilla_table ? fractions[s[rfield]] : s['fraction']
         s['question'] = true if fraction == 1
         if board == 'hs'
           s[sfield] -= fraction / 60.0
@@ -1213,10 +1219,10 @@ module Highscoreable
   end
 
   # Format a dual leaderboard for printing
-  def format_scores_dual(np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true)
+  def format_scores_dual(np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true, date: nil)
     # Fetch scores
-    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
-    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
+    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags, date: date)
+    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags, date: date)
     size = [board_hs.size, board_sr.size].max
     return [] if size == 0
 
@@ -1232,11 +1238,11 @@ module Highscoreable
   end
 
   # Format a leaderboard for printing
-  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true)
+  def format_scores(np: 0, sp: 0, mode: 'hs', ranks: 20.times.to_a, join: true, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true, date: nil)
     ret = if !is_mappack? || mode != 'dual'
-      format_scores_single(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
+      format_scores_single(mode, np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags, date: date)
     else
-      format_scores_dual(np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags)
+      format_scores_dual(np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags, date: date)
     end
     ret = ["This #{self.class.to_s.remove('Mappack').downcase} has no scores!"] if ret.size == 0
     ret = ret.join("\n") if join
@@ -1405,7 +1411,7 @@ module Highscoreable
       name = "#{since}'s #{mappack} #{type} of the #{period}, #{format_name},"
     end
     #span = format_timespan(Time.now - date, 2)
-    span = format_timestamp(date, date: true, full: true)
+    span = format_timestamp(date, date: true, long: true)
 
     # Format header and message
     changes = "top20 changes on #{name} since #{span}"
@@ -1818,7 +1824,22 @@ end
 # Implemented by Score and MappackScore
 module Scorish
 
-  def self.format(name_padding = DEFAULT_PADDING, score_padding = 0, cools: true, stars: true, mode: 'hs', t_rank: nil, mappack: false, userlevel: false, h: {}, frac: false, equal: false, prec: -1, flags: true, color: nil)
+  def self.format(
+      name_pad  = DEFAULT_PADDING,
+      score_pad = 0,
+      cools:      true,
+      stars:      true,
+      mode:       'hs',
+      t_rank:     nil,
+      mappack:    false,
+      userlevel:  false,
+      h:          {},
+      frac:       false,
+      equal:      false,
+      prec:       -1,
+      flags:      true,
+      color:      nil
+    )
     mode = 'hs' if mode.nil?
     hs = mode == 'hs'
     cheat = !!h['cheated']
@@ -1829,9 +1850,9 @@ module Scorish
     t_star   = userlevel || mappack || !stars || !flags ? '' : (h['star'] ? '*' : ' ')
     t_rank   = cheat ? 'xx' : dev ? '++' : t_rank || h['rank'] || '--'
     t_rank   = Highscoreable.format_rank(t_rank)
-    t_player = format_string(h['name'], name_padding)
+    t_player = format_string(h['name'], name_pad)
     f_score  = !mappack ? 'score' : "score_#{mode}"
-    t_fmt    = decimals > 0 ? "%#{score_padding}.#{decimals}f" : "%#{score_padding}d"
+    t_fmt    = decimals > 0 ? "%#{score_pad}.#{decimals}f" : "%#{score_pad}d"
     t_score  = t_fmt % [h[f_score]]
     t_cool   = flags && !mappack && cools && h['cool'] ? " 😎" : ""
     t_eql    = flags && equal && !h['question'] ? ' =' : ''
@@ -3110,14 +3131,22 @@ class Archive < ActiveRecord::Base
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # Returns the leaderboards at a particular point in time
-  def self.scores(highscoreable, date = nil, cheated: false, full: false)
-    self.where(highscoreable: highscoreable)
-        .where(!cheated ? '`cheated` = 0' : '')
-        .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date}" : '')
-        .group(:metanet_id)
-        .order('MAX(`score`) DESC, MAX(`replay_id`) ASC')
-        .limit(full ? nil : 20)
-        .pluck(:metanet_id, 'MAX(`score`)', 'MAX(`player_id`)')
+  def self.scores(highscoreable, date = nil, cheated: false, full: false, pluck: true, aliases: true, **kwargs)
+    ids = Archive.where(highscoreable: highscoreable)
+                 .where(!cheated ? '`cheated` = 0' : '')
+                 .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date.to_i}" : '')
+                 .group(:metanet_id)
+                 .maximum(:replay_id)
+    board = Archive.where(replay_id: ids.values)
+                   .joins(:player)
+                   .order(score: :desc, replay_id: :asc)
+                   .limit(full ? nil : 20)
+    return board unless pluck
+    names = aliases ? 'IF(`display_name` IS NOT NULL, `display_name`, `name`)' : '`name`'
+    attr_names = %W[id score name metanet_id player_id fraction]
+    attrs = %W[archives.id score #{names} metanet_id player_id fraction]
+    board.pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
+    #.pluck(:metanet_id, 'MAX(`score`)', 'MAX(`player_id`)')
   end
 
   # Return a list of all dates where a highscoreable changed

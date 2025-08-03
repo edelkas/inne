@@ -445,10 +445,12 @@ def send_scores(event, map = nil, ret = false)
   mappack   = h.is_mappack?
   board     = parse_board(msg, 'hs', dual: true)
   board     = 'hs' if !mappack && board == 'dual'
-  full      = parse_full(msg)
+  full      = parse_full(msg) && !h.is_mappack?
   cheated   = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
   frac      = parse_frac(msg, mappack ? h&.mappack : nil, board) && h.is_level?
   use_embed = SCORE_EMBEDS && !msg[/\bmobile\b/i]
+  date      = parse_date(msg)
+  date      = [date, Archive::EPOCH].max if date && !h.is_mappack?
 
   perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
   res   = ""
@@ -468,12 +470,15 @@ def send_scores(event, map = nil, ret = false)
   end
 
   # Format message
-  scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated, frac: frac)
+  scores = h.format_scores(mode: board, full: full, join: false, cheated: cheated, frac: frac, date: date)
   export = full && scores.count > 20
   use_embed = false if export
   name = use_embed ? h.name : h.format_name
-  args = [format_full(full), format_frac(frac), format_board(board).pluralize, name, cheated ? ' [with cheaters]' : '']
-  header = format_header("%s %s %s for %s %s" % args)
+  args = [
+    format_full(full), format_frac(frac), format_board(board).pluralize,
+    name, format_cheaters(cheated), format_date(date)
+  ]
+  header = format_header("%s %s %s for %s %s %s" % args)
   files << tmp_file(scores.join("\n"), "#{h.name}-scores.txt") if export
 
   # Format body
