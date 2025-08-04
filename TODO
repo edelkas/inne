@@ -1,4 +1,4 @@
-- Merge scores and nav scores. Adapt everything to new Archive.scores (including Archive.zeroths), and compute stars and cools on the fly when using archives.
+- Compute stars and cools on the fly when using archives.
 - Add dupe player removal in sanitization function, this requires carefully adjusting the player_id of the removed players in all tables that refer to it.
 - Add color diffs when navigating scores, and ability to specify date when querying scores.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:

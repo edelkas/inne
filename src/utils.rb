@@ -321,7 +321,7 @@ end
 #   log     - Log message to terminal
 #   discord - Log message to Discord
 class OutteError < Exception
-  attr_reader :log, :discord
+  attr_reader :log, :discord, :ephemeral
 
   def initialize(msg = 'Unknown outte error', log: false, discord: true, ephemeral: false)
     @discord   = discord

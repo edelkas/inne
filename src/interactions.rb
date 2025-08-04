@@ -251,11 +251,11 @@ def interaction_add_level_navigation(view, name)
     labels:   ["❮❮", "❮", name, "❯", "❯❯"],
     disabled: [false, false, true, false, false],
     ids:      [
-      "button:id:-2",
-      "button:id:-1",
-      "button:id:page",
-      "button:id:1",
-      "button:id:2"
+      "nav_scores:h:-2",
+      "nav_scores:h:-1",
+      "nav_scores:h:page",
+      "nav_scores:h:1",
+      "nav_scores:h:2"
     ]
   )
 end
@@ -267,11 +267,11 @@ def interaction_add_date_navigation(view, page = 1, pages = 1, date = 0, label =
     labels:   ["❙❮", "❮", label, "❯", "❯❙"],
     disabled: [page == 1, page == 1, true, page == pages, page == pages],
     ids:      [
-      "button:date:-1000000000",
-      "button:date:-1",
-      "button:date:#{date}",
-      "button:date:1",
-      "button:date:1000000000"
+      "nav_scores:date:-1000000000",
+      "nav_scores:date:-1",
+      "nav_scores:date:#{date}",
+      "nav_scores:date:1",
+      "nav_scores:date:1000000000"
     ]
   )
 end
@@ -528,12 +528,12 @@ def respond_interaction_button(event)
     when 'confirm'
       delete_score(event, yes: keys[2] == 'yes')
     end
-  when 'navigating'
+  when 'nav_scores'
     case keys[1]
-    when 'id'
-      send_nav_scores(event, offset: keys[2])
+    when 'h'
+      send_scores(event, offset: keys[2])
     when 'date'
-      send_nav_scores(event, date: keys[2])
+      send_scores(event, date_change: keys[2])
     end
   when 'rankings'
     case keys[1]

@@ -428,44 +428,55 @@ rescue => e
   lex(e, "Error performing spreads.", event: event)
 end
 
-# Send highscore leaderboard for a highscoreable.
-#   'map'  means the highscoreable will be sent as a parameter, rather than
-#          being parsed from the message (used, e.g., for lotd)
-#   'ret'  means the leaderboards will be returned to be used in another
-#          function (e.g., screenscores), rather than sent
-def send_scores(event, map = nil, ret = false, ss: false)
+# Send leaderboard for a highscoreable. Optionally add navigation widgets or a
+# thumbnail. Can show interpolated scores, cheated scores, different boards...
+def send_scores(event, offset: nil, date_change: nil)
   # Parse message parameters
   msg       = parse_message(event)
+  initial   = parse_initial(event)
   hash      = parse_palette(event)
   msg       = hash[:msg]
   palette   = hash[:palette]
-  h         = map.nil? ? parse_highscoreable(event, mappack: true) : map
+  h         = parse_highscoreable(event, mappack: true)
   offline   = parse_offline(msg)
-  nav       = parse_nav(msg)
   mappack   = h.is_mappack?
   board     = parse_board(msg, 'hs', dual: true)
   board     = 'hs' if !mappack && board == 'dual'
-  full      = parse_full(msg) && h.is_mappack?
   cheated   = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
   frac      = parse_frac(msg, mappack ? h&.mappack : nil, board) && h.is_level?
+  ss        = msg =~ /screenscores/i || msg =~ /shotscores/i || msg =~ /scoreshot/i || msg =~ /scorescreen/i
+  nav       = parse_nav(msg) && !ss && ['hs', 'sr'].include?(board)
+  full      = parse_full(msg) && h.is_mappack? && !nav && !ss
   use_embed = SCORE_EMBEDS && !msg[/\bmobile\b/i] || ss
   date      = parse_date(msg)
   date      = [date, Archive::EPOCH].max if date && !h.is_mappack?
 
-  perror("Sorry, Metanet levels only support highscore mode for now.") if !mappack && board != 'hs'
+  # Integrity checks
+  perror("Sorry, Metanet levels only support highscore mode.") if !mappack && board != 'hs'
+
+  # Initialize final message elements
   res   = ""
   files = []
+  embed = nil
+  view  = Discordrb::Webhooks::View.new
 
-  # Navigating scores goes into a different method (see below this one)
-  if nav && !h.is_mappack?
-    send_nav_scores(event)
-    return
+  # If navigating, retrieve highscoreable and date
+  if nav
+    h = h.nav(offset.to_i)
+    dates = h.changes(board).map(&:to_i).sort.reverse
+    if initial || !date_change
+      new_index = 0
+    else
+      old_date  = event.message.components[1].to_a[2].custom_id.to_s.split(':').last.to_i
+      new_index = (dates.index{ |d| d == old_date } + date_change.to_i).clamp(0, dates.size - 1)
+    end
+    date = Time.at(dates[new_index])
   end
 
   # Update scores, unless we're in offline mode or the connection fails
   if OFFLINE_STRICT
     res << "Strict offline mode is ON, sending local cached scores.\n"
-  elsif !offline && h.is_a?(Downloadable) && h.update_scores(fast: true) == -1
+  elsif !nav && !offline && h.is_a?(Downloadable) && h.update_scores(fast: true) == -1
     res << "Connection to the server failed, sending local cached scores.\n"
   end
 
@@ -475,10 +486,11 @@ def send_scores(event, map = nil, ret = false, ss: false)
   use_embed = false if export
   name = use_embed ? h.name : h.format_name
   args = [
+    nav ? 'navigating ' : '',
     format_full(full), format_frac(frac), format_board(board).pluralize,
     name, format_cheaters(cheated), format_date(date)
   ]
-  header = format_header("%s %s %s for %s %s %s" % args)
+  header = format_header("%s %s %s %s for %s %s %s" % args)
   files << tmp_file(scores.join("\n"), "#{h.name}-scores.txt") if export
 
   # Format body
@@ -534,53 +546,22 @@ def send_scores(event, map = nil, ret = false, ss: false)
   end
 
   # If enabled, show thumbnail button (broken)
-  view = nil
   if SCORE_THUMBNAILS
-    view = Discordrb::Webhooks::View.new
     view.row{ |r|
       r.button(label: 'Thumbnail', style: :primary, custom_id: "thumbnail:#{h.name}", emoji: '📷')
     }
   end
 
-  # Send response or return it
-  return res if ret
+  # Navigation widgets
+  if nav
+    interaction_add_level_navigation(view, h.name.center(11, ' '))
+    interaction_add_date_navigation(view, new_index + 1, dates.size, date.to_i, date.strftime("%Y-%b-%d"))
+  end
+
+  # Send response
   send_message(event, content: res, files: files, components: view, embed: embed)
 rescue => e
   lex(e, "Error sending scores.", event: event)
-end
-
-# Navigating scores: Main differences:
-# - Does not update the scores.
-# - Adds navigating between levels.
-# - Adds navigating between dates.
-def send_nav_scores(event, offset: nil, date: nil)
-  # Parse message parameters
-  initial = parse_initial(event)
-  scores  = parse_highscoreable(event)
-
-  # Retrieve scores for specified date and highscoreable
-  scores = scores.nav(offset.to_i)
-  dates  = Archive.changes(scores).sort.reverse
-  if initial || date.nil?
-    new_index = 0
-  else
-    old_date  = event.message.components[1].to_a[2].custom_id.to_s.split(':').last.to_i
-    new_index = (dates.find_index{ |d| d == old_date } + date.to_i).clamp(0, dates.size - 1)
-  end
-  date = dates[new_index] || 0
-
-  # Format response
-  str = "Navigating highscores for #{scores.format_name}:\n"
-  str += format_block(Archive.format_scores(Archive.scores(scores, date), Archive.zeroths(scores, date))) rescue ""
-  str += "*Warning: Navigating scores does not update them.*"
-
-  # Send response
-  view = Discordrb::Webhooks::View.new
-  interaction_add_level_navigation(view, scores.name.center(11, ' '))
-  interaction_add_date_navigation(view, new_index + 1, dates.size, date, date == 0 ? 'Date' : Time.at(date).strftime("%Y-%b-%d"))
-  send_message(event, content: str, components: view)
-rescue => e
-  lex(e, "Error navigating scores.", event: event)
 end
 
 # Send a screenshot of a level/episode/story
@@ -2377,8 +2358,7 @@ def respond(event)
   # contain many other words that could accidentally trigger commands.
   return send_query(event)           if msg =~ /\bsearch\b/i || msg =~ /\bbrowse\b/i
   return send_screenshot(event)      if msg =~ /screenshot/i
-  return send_scores(event, ss: true)if msg =~ /screenscores/i || msg =~ /shotscores/i || msg =~ /scoreshot/i || msg =~ /scorescreen/i
-  return send_scores(event)          if msg =~ /scores/i && !!msg[NAME_PATTERN, 2]
+  return send_scores(event)          if msg =~ /scores/i
   return send_analysis(event)        if msg =~ /analysis/i
   return send_level_name(event)      if msg =~ /\blevel name\b/i
   return send_level_id(event)        if msg =~ /\blevel id\b/i

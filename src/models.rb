@@ -879,6 +879,19 @@ module Downloadable
   def correct_ties(score_hash)
     score_hash.sort_by{ |s| [-s['score'], s['replay_id']] }
   end
+
+  # Return a list of all dates where the top20 changed
+  # We consider dates less than MAX_SECS apart to be the same
+  # The board is unused but necessary for compatibility with the mappack version
+  def changes(board = 'hs')
+    return [] if is_userlevel?
+    dates = Archive.where(highscoreable: self, cheated: false)
+                   .order(:date)
+                   .distinct
+                   .pluck(:date)
+    dates[0..-2].each_with_index.select{ |d, i| dates[i + 1] - d > MAX_SECS }
+                .map(&:first).push(dates.last)
+  end
 end
 
 # Common functionality for all models that have leaderboards, whether we download
@@ -3142,25 +3155,13 @@ class Archive < ActiveRecord::Base
     attr_names = %W[id score name metanet_id player_id fraction]
     attrs = %W[archives.id score #{names} metanet_id player_id fraction]
     board.pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
-    #.pluck(:metanet_id, 'MAX(`score`)', 'MAX(`player_id`)')
-  end
-
-  # Return a list of all dates where a highscoreable changed
-  # We consider dates less than MAX_SECS apart to be the same
-  def self.changes(highscoreable)
-    dates = self.where(highscoreable: highscoreable, cheated: false)
-                .select('UNIX_TIMESTAMP(`date`)')
-                .distinct
-                .pluck('UNIX_TIMESTAMP(`date`)')
-                .sort
-    dates[0..-2].each_with_index.select{ |d, i| dates[i + 1] - d > MAX_SECS }.map(&:first).push(dates.last)
   end
 
   # Return a list of all 0th holders in history on a specific highscoreable
   # until a certain date (nil = present)
   # Care must be taken when the 0th was improved multiple times in the same update
   def self.zeroths(highscoreable, date = nil)
-    dates = changes(highscoreable)
+    dates = highscoreable.changes
     return [] if dates.size == 0
     prev_date = dates[0]
     zeroth = scores(highscoreable, prev_date).first
@@ -3178,14 +3179,6 @@ class Archive < ActiveRecord::Base
       end
     }
     zeroths.map(&:first)
-  end
-
-  def self.format_scores(board, zeroths = [])
-    pad = board.map{ |s| ("%.3f" % (s[1].to_f / 60.0)).length.to_i }.max
-    board.each_with_index.map{ |s, i|
-      star = zeroths.include?(s[0]) ? '*' : ' '
-      "#{star}#{"%02d" % i}: #{format_string(Player.find_by(metanet_id: s[0]).print_name)} - #{"%#{pad}.3f" % (s[1].to_f / 60.0)}"
-    }.join("\n")
   end
 
   # Clean database:

@@ -8,7 +8,7 @@ require 'active_support/core_ext/numeric/time'        # 1.hour, 3.minutes.ago, e
 
 # Fetch message from an event. Depending on the event that was triggered, this
 # may accessed and handled in a different way.
-def parse_message(event, clean: true)
+def parse_message(event, clean: true, embed: false)
   # Integrity checks
   is_message   = event.is_a?(Discordrb::Events::MessageEvent)
   is_component = event.is_a?(Discordrb::Events::ComponentEvent)
@@ -20,6 +20,7 @@ def parse_message(event, clean: true)
   # Extract message
   return '' if !event.message
   msg = event.message.content
+  msg << "\n" << event.message.embeds.map{ |e| e.title }.join("\n") if embed
   msg = msg.gsub(/```.*```/m, '') if !is_message && clean # Exclude text blocks
 
   msg
@@ -514,7 +515,7 @@ def parse_highscoreable(
 
   # Parse message
   msg.prepend('for ') if msg
-  msg ||= parse_message(event)
+  msg ||= parse_message(event, embed: true)
   empty = msg.to_s.strip.empty?
   return nil if empty && silent
   perror("Couldn't find the level, episode or story you were looking for :(") if empty
@@ -1020,10 +1021,10 @@ def parse_board(msg, dflt = nil, dual: false)
   return dflt if msg.to_s.empty?
   board = nil
   board = 'dual' if !!msg[/\bdual\b/i] && dual
-  board = 'hs'   if !!msg[/\bhs\b/i] || !!msg[/\bhigh\s*score\b/i]
+  board = 'hs'   if !!msg[/\bhs\b/i] || !!msg[/\bhigh\s*scores?\b/i]
   board = 'gm'   if !!msg[/\bng\b/i] || !!msg[/\bg--(\s|$)/i]
   #board = 'gp'   if !!msg[/\bagd?\b/i] || !!msg[/\bg\+\+(\s|$)/i]
-  board = 'sr'   if !!msg[/\bsr\b/i] || !!msg[/\bspeed\s*run\b/i]
+  board = 'sr'   if !!msg[/\bsr\b/i] || !!msg[/\bspeed\s*runs?\b/i]
   board = dflt   if board.nil?
   board
 end

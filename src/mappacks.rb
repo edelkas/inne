@@ -561,12 +561,39 @@ module MappackHighscoreable
 
     # Paginate (offset and truncate), fetch player names, and convert to hash
     board = board.offset(offset) if offset > 0
-    board = board.limit(truncate) if truncate > 0
+    board = board.limit(truncate) if truncate > 0 && !pluck
     return board if !pluck
     board = board.joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
                  .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
     board.uniq!{ |s| s['metanet_id'] } if !obsolete && date
+    board = board.take(truncate) if truncate > 0
     board
+  end
+
+  # Return a list of all dates where the top20 changed
+  def changes(board = 'hs')
+    hs = board == 'hs'
+    dates = []
+    top20 = {}
+    scores.order(:date).pluck(:metanet_id, :score_hs, :score_sr, :date)
+                       .each{ |metanet_id, score_hs, score_sr, date|
+      # Only PB's can produce a visible change
+      old = top20[metanet_id]
+      cur = hs ? score_hs : score_sr
+      pb = !old || (hs ? cur > old[:score] : cur < old[:score])
+      next if !pb
+
+      # Only changes in the top20 are visible
+      bottom = top20.max_by{ |id, h| [hs ? -h[:score] : h[:score], h[:date]] }
+      outside = top20.size >= 20 && (hs ? cur <= bottom[1][:score] : cur >= bottom[1][:score])
+      next if outside
+
+      # Save date and update top20
+      dates << date
+      top20[metanet_id] = { score: cur, date: date }
+      top20.delete(bottom[0]) if top20.size > 20
+    }
+    dates
   end
 
   # Return scores in JSON format expected by N++
