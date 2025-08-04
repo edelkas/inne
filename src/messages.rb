@@ -2240,20 +2240,45 @@ end
 def send_denubbed(event, page: nil)
   msg = parse_message(event)
   mishu_id = 115572
-  mishu_scores = Archive.where(metanet_id: mishu_id, expired: false)
-                        .pluck(:highscoreable_type, :highscoreable_id, :score, :replay_id)
-                        .map{ |s|
-                          [s[0].constantize.find(s[1]), { score: s[2], replay_id: s[3] }]
-                        }.to_h
-  max_scores = {}
-  mishu_scores.each{ |k, v|
-    scores = Archive.scores(k, nil, cheated: true, full: true)
-    index = scores.index{ |s| s['metanet_id'] == mishu_id }
-    next unless index && index > 0
-    max_scores[k] = [scores[0]['name'], scores[0]['score'] - v[:score], index]
+
+  outer_binding = binding
+  join = -> (name, id = true) {
+    temp_table = outer_binding.local_variable_get(name.to_sym).to_sql
+    str = "INNER JOIN (#{temp_table}) AS `#{name}` ON "
+    str << "`archives`.`highscoreable_type` = `#{name}`.`highscoreable_type`"
+    str << " AND `archives`.`highscoreable_id` = `#{name}`.`highscoreable_id`" if id
+    str
   }
-  list = max_scores.sort_by{ |h, gap| [-gap[1], h.id] }.to_h
-                   .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{'%2d' % gap[1]}f - #{gap[2]} people - #{gap[0]}" }
+
+  # Get 0th scores by maximizing score
+  zero_scores = Archive.group(:highscoreable_type, :highscoreable_id)
+                       .select(:highscoreable_type, :highscoreable_id, 'MAX(`score`) AS `score`')
+
+  # Get actual 0ths by minimizing replay ID
+  zeroes = Archive.joins(join.('zero_scores'))
+                  .where('`archives`.`score` = `zero_scores`.`score`')
+                  .group(:highscoreable_type, :highscoreable_id)
+                  .select(:highscoreable_type, :highscoreable_id, 'MAX(`archives`.`score`) AS `score`', 'MIN(`archives`.`replay_id`) AS `replay_id`')
+
+  # Get differences between 0th and Mishu
+  denubbings = Archive.joins(join.('zeroes'))
+                 .where(metanet_id: mishu_id)
+                 .select(:highscoreable_type, :replay_id, '`zeroes`.`replay_id` AS `zero_replay_id`', '`zeroes`.`score` - `archives`.`score` AS `diff`')
+                 .having('`diff` > 0 OR `diff` = 0 AND `archives`.`replay_id` > `zeroes`.`replay_id`')
+                 .order(diff: :desc, highscoreable_id: :asc)
+
+  # Get fields
+  final = Archive.joins(join.('denubbings', false) + ' AND `archives`.`replay_id` = `denubbings`.`zero_replay_id`')
+                 .joins("INNER JOIN `players` ON `players`.`id` = `archives`.`player_id`")
+                 .joins("INNER JOIN `levels` ON `levels`.`id` = `archives`.`highscoreable_id`")
+                 .where(highscoreable_type: 'Level')
+                 .order(diff: :desc)
+                 .pluck('`levels`.`name`', '`denubbings`.`diff`', '`players`.`name`')
+
+  # Format list
+  list = final.map{ |level, diff, player|
+    "%-10s %2df - %s" % [level, diff, player]
+  }
   pager(event, page, header: 'Denubbed boards', list: list, func: 'send_denubbed')
 rescue => e
   lex(e, "Error fetching denubbed scores.", event: event)
