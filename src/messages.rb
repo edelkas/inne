@@ -433,7 +433,7 @@ end
 #          being parsed from the message (used, e.g., for lotd)
 #   'ret'  means the leaderboards will be returned to be used in another
 #          function (e.g., screenscores), rather than sent
-def send_scores(event, map = nil, ret = false)
+def send_scores(event, map = nil, ret = false, ss: false)
   # Parse message parameters
   msg       = parse_message(event)
   hash      = parse_palette(event)
@@ -445,10 +445,10 @@ def send_scores(event, map = nil, ret = false)
   mappack   = h.is_mappack?
   board     = parse_board(msg, 'hs', dual: true)
   board     = 'hs' if !mappack && board == 'dual'
-  full      = parse_full(msg) && !h.is_mappack?
+  full      = parse_full(msg) && h.is_mappack?
   cheated   = !!msg[/\bwith\s+(nubs)|(cheaters)\b/i] && h.is_vanilla?
   frac      = parse_frac(msg, mappack ? h&.mappack : nil, board) && h.is_level?
-  use_embed = SCORE_EMBEDS && !msg[/\bmobile\b/i]
+  use_embed = SCORE_EMBEDS && !msg[/\bmobile\b/i] || ss
   date      = parse_date(msg)
   date      = [date, Archive::EPOCH].max if date && !h.is_mappack?
 
@@ -483,7 +483,7 @@ def send_scores(event, map = nil, ret = false)
 
   # Format body
   if use_embed
-    thumb = Map.screenshot(palette, h: h, file: true, scale: THUMBNAIL_SCALE, vertical: true)
+    thumb = Map.screenshot(palette, h: h, file: true, vertical: true)
     fn = File.basename(thumb.path) if thumb
     files << thumb if thumb
     color = Map::PALETTE[2, Map::THEMES.index(palette)] >> 8
@@ -491,7 +491,7 @@ def send_scores(event, map = nil, ret = false)
       title:       header[..-2],
       description: export ? nil : format_block(scores.join("\n")),
       color:       color,
-      thumbnail:   thumb ? Discordrb::Webhooks::EmbedThumbnail.new(url: "attachment://#{fn}") : nil
+      image:       thumb ? Discordrb::Webhooks::EmbedImage.new(url: "attachment://#{fn}") : nil
     )
   else
     res << header
@@ -619,32 +619,6 @@ def send_thumbnail(event, id)
   screenshot = h[0].screenshot(file: true, scale: THUMBNAIL_SCALE)
   perror("Failed to generate thumbnail", ephemeral: true) if !screenshot
   send_message(event, files: [screenshot], ephemeral: true)
-end
-
-# One command to return a screenshot and then the scores,
-# since it's a very common combination
-def send_screenscores(event)
-  # Parse message parameters
-  map = parse_highscoreable(event, mappack: true)
-  ss  = send_screenshot(event, map, ret: true)
-  s   = send_scores(event, map, true)
-  send_message(event, content: ss[1], files: [ss[0]], spoiler: ss[2])
-  sleep(0.25)
-  send_message(event, content: s)
-rescue => e
-  lex(e, "Error sending screenshot or scores.", event: event)
-end
-
-# Same, but sending the scores first and the screenshot second
-def send_scoreshot(event)
-  map = parse_highscoreable(event, mappack: true)
-  s   = send_scores(event, map, true)
-  ss  = send_screenshot(event, map, ret: true)
-  send_message(event, content: s)
-  sleep(0.25)
-  send_message(event, content: ss[1], files: [ss[0]], spoiler: ss[2])
-rescue => e
-  lex(e, "Error sending screenshot or scores.", event: event)
 end
 
 # Returns rank distribution of a player's scores, in both table and histogram form
@@ -2263,8 +2237,8 @@ def robot(event)
   send_message(event, db: false, content: start.sample + middle.sample + ending.sample)
 end
 
-# TODO: Paginate
-def send_denubbed(event)
+def send_denubbed(event, page: nil)
+  msg = parse_message(event)
   mishu_id = 115572
   mishu_scores = Archive.where(metanet_id: mishu_id, expired: false)
                         .pluck(:highscoreable_type, :highscoreable_id, :score, :replay_id)
@@ -2274,14 +2248,13 @@ def send_denubbed(event)
   max_scores = {}
   mishu_scores.each{ |k, v|
     scores = Archive.scores(k, nil, cheated: true, full: true)
-    index = scores.index{ |s| s[0] == mishu_id }
+    index = scores.index{ |s| s['metanet_id'] == mishu_id }
     next unless index && index > 0
-    max_scores[k] = [Player.find_by(metanet_id: scores[0][0]).name, scores[0][1] - v[:score], index]
+    max_scores[k] = [scores[0]['name'], scores[0]['score'] - v[:score], index]
   }
-  str = max_scores.sort_by{ |h, gap| [-gap[1], h.id] }.to_h
-                  .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{'%2d' % gap[1]}f - #{gap[2]} people - #{gap[0]}" }
-                  .join("\n")
-  event << format_block(str)
+  list = max_scores.sort_by{ |h, gap| [-gap[1], h.id] }.to_h
+                   .map{ |h, gap| "#{h.name.ljust(10, ' ')} - #{'%2d' % gap[1]}f - #{gap[2]} people - #{gap[0]}" }
+  pager(event, page, header: 'Denubbed boards', list: list, func: 'send_denubbed')
 rescue => e
   lex(e, "Error fetching denubbed scores.", event: event)
 end
@@ -2379,8 +2352,7 @@ def respond(event)
   # contain many other words that could accidentally trigger commands.
   return send_query(event)           if msg =~ /\bsearch\b/i || msg =~ /\bbrowse\b/i
   return send_screenshot(event)      if msg =~ /screenshot/i
-  return send_screenscores(event)    if msg =~ /screenscores/i || msg =~ /shotscores/i
-  return send_scoreshot(event)       if msg =~ /scoreshot/i || msg =~ /scorescreen/i
+  return send_scores(event, ss: true)if msg =~ /screenscores/i || msg =~ /shotscores/i || msg =~ /scoreshot/i || msg =~ /scorescreen/i
   return send_scores(event)          if msg =~ /scores/i && !!msg[NAME_PATTERN, 2]
   return send_analysis(event)        if msg =~ /analysis/i
   return send_level_name(event)      if msg =~ /\blevel name\b/i

@@ -411,15 +411,15 @@ def download_demos
 end
 
 # Compute and send the weekly highscoring report
-def generate_report
-  base  = Archive::EPOCH.to_i # when archiving begun
-  now   = Time.now.to_i
-  time  = [now - REPORT_UPDATE_SIZE,  base].max
+def generate_report(date = nil)
+  base  = Archive::EPOCH # when archiving begun
+  now   = Time.now
+  time  = [date || now - REPORT_UPDATE_SIZE, base].max
   pad   = [2, DEFAULT_PADDING, 6, 6, 6, 5, 4]
   log   = [] if LOG_REPORT
   sep   = '│'
 
-  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time} AND `cheated` = 0")
+  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time.to_i} AND `cheated` = 0")
                    .order('`date` DESC')
                    .map{ |ar| [ar.metanet_id, ar.find_rank(time), ar.find_rank(now), ar.highscoreable, ar.score] }
                    .group_by{ |s| s[0] }
@@ -489,13 +489,13 @@ end
 # 3) Total number of changes.
 # 4) Total number of involved players.
 # 5) Total number of involved highscoreables.
-def generate_summary
-  base  = Time.new(2020, 9, 3, 0, 0, 0, "+00:00").to_i # when archiving begun
-  now   = Time.now.to_i
-  time  = [now - SUMMARY_UPDATE_SIZE, base].max
+def generate_summary(date = nil)
+  base  = Archive::EPOCH # when archiving begun
+  now   = Time.now
+  time  = [date || now - SUMMARY_UPDATE_SIZE, base].max
   total = { "Level" => [0, 0, 0, 0, 0], "Episode" => [0, 0, 0, 0, 0], "Story" => [0, 0, 0, 0, 0] }
 
-  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time} AND `cheated` = 0")
+  changes = Archive.where("UNIX_TIMESTAMP(`date`) > #{time.to_i} AND `cheated` = 0")
                    .order('`date` DESC')
                    .map{ |ar|
                      total[ar.highscoreable.class.to_s][2] += 1
@@ -511,8 +511,8 @@ def generate_summary
          .each{ |h|
                 cur_scores = Archive.scores(h, now)
                 old_scores = Archive.scores(h, time)
-                total[h.class.to_s][0] += cur_scores.first[1] - old_scores.first[1]
-                total[h.class.to_s][1] += cur_scores.last[1] - old_scores.last[1]
+                total[h.class.to_s][0] += cur_scores.first['score'] - old_scores.first['score']
+                total[h.class.to_s][1] += cur_scores.last['score'] - old_scores.last['score']
               }
 
   total = total.map{ |klass, n|
@@ -529,7 +529,7 @@ end
 
 # Compute and send the daily userlevel highscoring report for the newest
 # 500 userlevels.
-def send_userlevel_report(channel = nil, histories: true)
+def send_userlevel_report(channel = nil, histories: true, date: nil)
   channel = $mapping_channel if !channel
   while !channel
     err("Not connected to a channel, not sending userlevel report")
@@ -537,8 +537,8 @@ def send_userlevel_report(channel = nil, histories: true)
     channel = $mapping_channel
   end
 
-  report1 = UserlevelHistory.report(1, footer: false)
-  report2 = UserlevelHistory.report(-1)
+  report1 = UserlevelHistory.report(1, footer: false, date: date)
+  report2 = UserlevelHistory.report(-1, date: date)
   if report1.length + report2.length + 1 <= DISCORD_CHAR_LIMIT
     send_message(channel, content: report1 + "\n" + report2)
   else

@@ -1160,11 +1160,13 @@ end
 
 # Send the highscoring report
 def test_report(event)
+  msg = parse_message(event)
   flags = parse_flags(event)
+  date = parse_date(msg)
   if !flags.key?(:userlevel)
-    send_message(event, content: generate_report + "\n" + generate_summary)
+    send_message(event, content: generate_report(date) + "\n" + generate_summary(date))
   else
-    send_userlevel_report(event.channel, histories: false)
+    send_userlevel_report(event.channel, histories: false, date: date)
   end
 end
 

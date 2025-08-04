@@ -1259,24 +1259,20 @@ module Highscoreable
 
     # Fetch old and current leaderboards
     if is_mappack?
-      old_boards = leaderboard(board, truncate: 0, pluck: true, date: date).map{ |s|
-        { score: s[sfield], player_id: s['player_id'] }
-      }
+      old_boards = leaderboard(board, truncate: 0, pluck: true, date: date)
     else
-      old_boards = Archive.scores(self, date.to_i).map{ |s|
-        { score: s[1], player_id: s[2] }
-      }
+      old_boards = Archive.scores(self, date.to_i, pluck: true)
     end
     cur_boards = leaderboard(board, pluck: false)
 
     # Compute differences
     cur_boards.map do |cur_score|
       old_score = old_boards.each_with_index.find{ |s, i|
-        s[:player_id] == cur_score.player_id
+        s['player_id'] == cur_score.player_id
       }
       change = {
         rank:  old_score[1] - cur_score[rfield],
-        score: cur_score[sfield] / cur_scale - old_score[0][:score] / old_scale
+        score: cur_score[sfield] / cur_scale - old_score[0][sfield] / old_scale
       } if old_score
       { score: cur_score, change: change }
     end
@@ -3137,7 +3133,7 @@ class Archive < ActiveRecord::Base
                  .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date.to_i}" : '')
                  .group(:metanet_id)
                  .maximum(:replay_id)
-    board = Archive.where(replay_id: ids.values)
+    board = Archive.where(highscoreable: highscoreable, replay_id: ids.values)
                    .joins(:player)
                    .order(score: :desc, replay_id: :asc)
                    .limit(full ? nil : 20)
@@ -3302,11 +3298,7 @@ class Archive < ActiveRecord::Base
 
   # Returns the rank of the player at a particular point in time
   def find_rank(time)
-    old_score = Archive.scores(self.highscoreable, time)
-                       .each_with_index
-                       .map{ |s, i| [i, s[0]] }
-                       .select{ |s| s[1] == self.metanet_id }
-    old_score.empty? ? 20 : old_score.first[0]
+    Archive.scores(highscoreable, time).index{ |s| s['metanet_id'] == metanet_id } || 20
   end
 
   def format_score
