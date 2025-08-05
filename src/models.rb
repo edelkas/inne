@@ -32,6 +32,15 @@ module MonkeyPatches
     # Add bool to int casting
     ::TrueClass.class_eval  do def to_i; 1 end end
     ::FalseClass.class_eval do def to_i; 0 end end
+
+    # Add upwards truncation with precision
+    ::Numeric.class_eval do
+      def truncate_up(precision = 0)
+        factor = 10 ** -precision
+        n = (self.to_f / factor).ceil * factor
+        self.is_a?(Integer) || precision <= 0 ? n.round : n.to_f
+      end
+    end
   end
 
   def self.patch_activerecord
@@ -1132,7 +1141,7 @@ module Highscoreable
   def format_scores_single(board = 'hs', np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true, date: nil)
     # Reload scores, otherwise sometimes recent changes aren't in memory
     scores.reload
-    boards = leaderboard(board, pluck: true, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?, cheated: cheated, date: date).each_with_index.select{ |_, r|
+    boards = leaderboard(board, pluck: true, aliases: true, truncate: full ? 0 : 20, frac: frac && !is_vanilla?, cheated: cheated, date: date, cools: cools, stars: stars).each_with_index.select{ |_, r|
       full ? true : ranks.include?(r)
     }.sort_by{ |_, r| full ? r : ranks.index(r) }
     sfield = !is_mappack? ? 'score' : "score_#{board}"
@@ -1419,7 +1428,6 @@ module Highscoreable
       mappack = is_mappack? ? self.mappack.code.upcase : ''
       name = "#{since}'s #{mappack} #{type} of the #{period}, #{format_name},"
     end
-    #span = format_timespan(Time.now - date, 2)
     span = format_timestamp(date, date: true, long: true)
 
     # Format header and message
@@ -1429,14 +1437,33 @@ module Highscoreable
     format_header(changes) + format_block(diff)
   end
 
-  def find_coolness
-    max = scores.map(&:score).max.to_i.to_s.length + 4
-    s1  = scores.first.score.to_s
-    s2  = scores.last.score.to_s
+  # Computes the amount of cool scores on the board
+  # TODO: Support frac
+  def find_coolness(scores: nil, date: nil, board: 'hs')
+    # Fetch list of scores
+    scores = scores ? scores.map(&:dup) : leaderboard(board, aliases: true, date: date)
+    return 0 if scores.empty?
+    hs = board == 'hs'
+    sfield = !is_mappack? ? 'score' : "score_#{board}"
+    if hs
+      scores.each{ |s| s[sfield] /= 60.0 } if is_mappack? || date
+      scores.each{ |s| s[sfield] = round_score(s[sfield]) }
+    end
+
+    # Compare string scores and find first difference
+    max = scores.max_by{ |s| s[sfield] }[sfield].to_i.to_s.length
+    max += 4 if hs
+    fmt = hs ? '%0*.3f' : '%0*d'
+    s1  = fmt % [max, scores.first[sfield]]
+    s2  = fmt % [max, scores.last[sfield]]
     d   = (0...max).find{ |i| s1[i] != s2[i] }
     return 0 if !d
-    d = -(max - d - 5) - (max - d < 4 ? 1 : 0)
-    scores.size.times.find{ |i| scores[i].score < s1.to_f.truncate(d) }
+
+    # Count scores before first difference
+    d = hs ? -(max - d - 5) - (max - d < 4 ? 1 : 0) : -(max - d - 1)
+    threshold = scores[0][sfield].truncate(d)
+    threshold += 10 ** -d if !hs
+    scores.index{ |s| hs ? s[sfield] < threshold : s[sfield] >= threshold } || 0
   end
 
   # The next function navigates through highscoreables.
@@ -1863,7 +1890,7 @@ module Scorish
     f_score  = !mappack ? 'score' : "score_#{mode}"
     t_fmt    = decimals > 0 ? "%#{score_pad}.#{decimals}f" : "%#{score_pad}d"
     t_score  = t_fmt % [h[f_score]]
-    t_cool   = flags && !mappack && cools && h['cool'] ? " 😎" : ""
+    t_cool   = flags && cools && h['cool'] ? " 😎" : ""
     t_eql    = flags && equal && !h['question'] ? ' =' : ''
     t_quest  = flags && h['question'] ? ' ?' : ''
 
@@ -3140,7 +3167,7 @@ class Archive < ActiveRecord::Base
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   # Returns the leaderboards at a particular point in time
-  def self.scores(highscoreable, date = nil, cheated: false, full: false, pluck: true, aliases: true, **kwargs)
+  def self.scores(highscoreable, date = nil, cheated: false, full: false, pluck: true, aliases: true, cools: false, stars: false, **kwargs)
     ids = Archive.where(highscoreable: highscoreable)
                  .where(!cheated ? '`cheated` = 0' : '')
                  .where(date ? "UNIX_TIMESTAMP(`date`) <= #{date.to_i}" : '')
@@ -3151,10 +3178,21 @@ class Archive < ActiveRecord::Base
                    .order(score: :desc, replay_id: :asc)
                    .limit(full ? nil : 20)
     return board unless pluck
+
+    # Optionally pluck only the relevant fields, this is what we tend to use
     names = aliases ? 'IF(`display_name` IS NOT NULL, `display_name`, `name`)' : '`name`'
     attr_names = %W[id score name metanet_id player_id fraction]
     attrs = %W[archives.id score #{names} metanet_id player_id fraction]
-    board.pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
+    board = board.pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
+    return board if !cools && !stars
+
+    # We don't store cool and star flags, so compute them
+    cool_count = highscoreable.find_coolness(scores: board, date: date) if cools
+    board.each_with_index{ |s, i|
+      s['cool'] = true if cools && i < cool_count
+      # TODO: Add star here
+    }
+    board
   end
 
   # Return a list of all 0th holders in history on a specific highscoreable

@@ -510,7 +510,9 @@ module MappackHighscoreable
       frac:       false, # Include fractional field
       obsolete:   false, # Include obsolete runs (null rank)
       date:       nil,   # Maximum date threshold (when no obsoletes, only works well when plucking)
-      cheated:    false  # Include cheated runs, only for compatibility with Metanet ones
+      cheated:    false, # Include cheated runs, only for compatibility with Metanet ones
+      cools:      false, # Compute cool scores
+      stars:      false  # Compute star scores
     )
     m = 'hs' if !['hs', 'sr', 'gm'].include?(m)
     names = aliases ? 'IF(display_name IS NOT NULL, display_name, name)' : 'name'
@@ -559,14 +561,23 @@ module MappackHighscoreable
       end
     end
 
-    # Paginate (offset and truncate), fetch player names, and convert to hash
+    # Paginate
     board = board.offset(offset) if offset > 0
     board = board.limit(truncate) if truncate > 0 && !pluck
     return board if !pluck
+
+    # Optionally pluck relevant fields only
     board = board.joins("INNER JOIN `players` ON `players`.`id` = `player_id`")
                  .pluck(*attrs).map{ |s| attr_names.zip(s).to_h }
     board.uniq!{ |s| s['metanet_id'] } if !obsolete && date
     board = board.take(truncate) if truncate > 0
+
+    # We don't store cool and star flags, so compute them
+    cool_count = find_coolness(scores: board, date: date, board: m) if cools
+    board.each_with_index{ |s, i|
+      s['cool'] = true if cools && i < cool_count
+      # TODO: Add star here
+    }
     board
   end
 
