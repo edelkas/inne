@@ -258,8 +258,7 @@ module Log extend self
     action_inc('errors') if [:error, :fatal].include?(mode)
     action_inc('warnings') if mode == :warn
 
-    # Return original text
-    text
+    nil
   rescue => e
     puts "Failed to log text: #{e.message}"
     puts e.backtrace.join("\n") if LOG_BACKTRACES
@@ -273,7 +272,7 @@ module Log extend self
     write(e.message, :error)
     write(e.backtrace.join("\n"), :debug) if LOG_BACKTRACES
     action_inc('exceptions')
-    msg
+    nil
   end
 
   # Send DM to botmaster
@@ -454,7 +453,7 @@ def post_form(host: 'dojo.nplusplus.ninja', path: '', args: {}, parts: [], silen
     steam_auth: ''
   }
   query = def_args.merge(args).map{ |k, v| "#{k}=#{v}" }.join('&')
-  uri = URI.parse("https://#{host}#{path}?#{query}")
+  uri = URI.parse("https://#{host}#{METANET_PATH}/#{path}?#{query}")
   post = Net::HTTP::Post.new(uri)
 
   # Generate boundary

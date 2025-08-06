@@ -564,6 +564,10 @@ API_FAVICON = 'molebruh'
 # <---------------------------------------------------------------------------->
 
 APP_ID              = 230270     # N++'s Steam app ID
+PACKAGE_ID          = 94152      # N++'s Steam package ID
+DEPOT_WIN_ID        = 230271
+DEPOT_MACOS_ID      = 230272
+DEPOT_LINUX_ID      = 230273
 BOTMASTER_NPP_ID    = 54303      # Botmaster's N++ player ID
 OUTTE_ID            = 361131     # outte's N++ player ID
 OUTTE2_ID           = 409973     # outte's secondary N++ player

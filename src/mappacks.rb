@@ -1342,7 +1342,7 @@ class MappackScore < ActiveRecord::Base
   # - A player and a highscoreable, in which case, his current hs PB will be taken
   # - An ID, in which case that specific score will be chosen
   # It performs score validation via gold check before changing it
-  def self.patch_score(id, highscoreable, player, score, silent: false, frac: false)
+  def self.patch_score(id, highscoreable, player, score, silent: false, frac: false, output: nil)
     # Find score
     if !id.nil? # If ID has been provided
       s = MappackScore.find_by(id: id)
@@ -1383,7 +1383,9 @@ class MappackScore < ActiveRecord::Base
     highscoreable.delete_obsoletes(player, frac: frac)
 
     # Log
-    succ("Patched #{player.name}'s score (#{s.id}) in #{highscoreable.name} from #{'%.3f' % old_score} to #{'%.3f' % score}")
+    str = "Patched #{player.name}'s score (#{s.id}) in #{highscoreable.name} from #{'%.3f' % old_score} to #{'%.3f' % score}"
+    output << str if output
+    succ(str)
   rescue => e
     lex(e, 'Failed to patch score')
   rescue OutteError

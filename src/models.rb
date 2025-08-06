@@ -680,7 +680,7 @@ module Downloadable
 
     # Perform HTTP POST request
     res = post_form(
-      path:   METANET_PATH + '/' + METANET_POST_SCORE,
+      path:   METANET_POST_SCORE,
       args:   { user_id: player.metanet_id, steam_id: player.steam_id },
       parts:  parts,
       silent: silent
@@ -2459,6 +2459,29 @@ class Player < ActiveRecord::Base
   rescue => e
     lex(e, 'Failed to proxy login request')
     return nil
+  end
+
+  # Send a POST request to N++'s server with this player
+  def send_post(path, args: {}, parts: [], auth: false, silent: false)
+    return err("No Steam ID for #{name}") if !steam_id
+    args = { user_id: metanet_id, steam_id: steam_id }.merge(args)
+    res = post_form(path: path, args: args, parts: parts, silent: silent)
+    return err("Failed to POST to #{path} via #{name} (bad HTTP).") if !res
+    return err("Failed to POST to #{path} via #{name} (inactive Steam ID).") if res == METANET_INVALID_RES
+    res
+  end
+
+  # Manually craft and send the login request for this player
+  def login(steam_auth: nil)
+    parts = [
+      { name: 'user_id',    binary: false, value: metanet_id.to_s },
+      { name: 'size',       binary: false, value: '16'            },
+      { name: 'stats_size', binary: false, value: '0'             },
+      { name: 'data',       binary: true,  value: "\x00" * 16     },
+      { name: 'stats',      binary: true,  value: ''              }
+    ]
+    args = steam_auth ? { steam_auth: steam_auth } : {}
+    send_post(METANET_POST_LOGIN, args: args, parts: parts)
   end
 
   # Perform a request to N++'s server using this player's Steam ID

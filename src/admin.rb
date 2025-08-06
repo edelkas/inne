@@ -264,7 +264,9 @@ def send_mappack_patch(event)
     highscoreable = parse_highscoreable(event, mappack: true) if !id
     player = parse_player(event, false, true, true, flag: :p) if !id
     score = parse_score(flags[:s]) if flags.key?(:s)
-    event << MappackScore.patch_score(id, highscoreable, player, score)
+    output = ''
+    MappackScore.patch_score(id, highscoreable, player, score, output: output)
+    event << output
   end
 rescue => e
   lex(e, "Error patching mappack score.", event: event)

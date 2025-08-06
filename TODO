@@ -205,6 +205,7 @@ Others:
   * Draw all tiles using polygon (in OilyPNG) rather than compose (and bench it)
   * Initialize the canvas in C
 
+- Implement the horizontal auto-centering. Essentially if one side has more filled (E tile) columns than the other, the game shifts the level half a tile in that direction.
 - Implement vector silhouettes (would need one more layer per object, and perhaps new colors in the master image, make them optional with a parameter to the screenshot function)
 - Allow to compose images out of bounds by cropping them appropriately. Make a commit to oily_png, like the original author intended. 
 - Show glitch tiles with some soft shade, e.g. red or the inverse of the background, perhaps with a pattern too, e.g. lines or dotted.
