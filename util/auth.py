@@ -1,4 +1,4 @@
-import argparse, datetime, os, struct, steam, steam.gateway
+import argparse, datetime, os, steam, steam.gateway, struct, sys
 
 # Helpers
 def log(str):
@@ -26,8 +26,17 @@ parser.add_argument('app',              type=int, help='App ID (e.g. 440 for TF2
 parser.add_argument('-u', '--username', type=str, help='Steam username used for login (cf. SSAA_USERNAME)')
 parser.add_argument('-p', '--password', type=str, help='Steam password used for login (cf. SSAA_PASSWORD)')
 parser.add_argument('-t', '--ticket',   type=str, help='App ownership ticket to reuse')
-parser.add_argument('-v', '--verbose', action='store_true', help='Print additional information to the terminal')
+parser.add_argument('-s', '--silent',  action='store_true', help='Supresses output to STDERR')
+parser.add_argument('-v', '--verbose', action='store_true', help='Print debug information to the terminal')
 args = parser.parse_args()
+
+# It's very hard to properly catch exceptions inside async contexts and we need the
+# terminal to be clean to export the ticket, so we optionally suppress STDERR to
+# prevent exceptions raised when disconnecting from cluttering the terminal.
+if args.silent:
+    sys.stderr.flush()
+    devnull = open(os.devnull, 'w')
+    os.dup2(devnull.fileno(), sys.stderr.fileno())
 
 USERNAME = args.username or os.environ.get('SSAA_USERNAME')
 PASSWORD = args.password or os.environ.get('SSAA_PASSWORD')
