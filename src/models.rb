@@ -4373,6 +4373,121 @@ module Speedrun extend self
 
 end
 
+# TODO: Add docs, use script when we receive a -1337, store them from CLE
+class SteamTicket < ActiveRecord::Base
+  # The ticket length is variable, for N++ they should always be 234 bytes
+  TOKEN_LENGTH      =  20
+  SESSION_LENGTH    =  24
+  MIN_TICKET_LENGTH = 230
+
+  # Make parsed attributes available after instantiation like regular attributes
+  attr_accessor :token,      :token_time, :conn_ip,     :conn_duration,
+                :conn_count, :version,    :external_ip, :internal_ip,
+                :flags,      :created_at, :expires,     :licenses,
+                :dlcs,       :signature
+  after_save :parse
+  after_initialize :parse
+
+  # Parse a raw ticket into a struct with the same field names as the ticket object
+  def self.parse(ticket)
+    # Basic integrity checks
+    if ticket.length < MIN_TICKET_LENGTH
+      err("Ticket is too short (#{ticket.length} < #{MIN_TICKET_LENGTH})")
+      return
+    end
+
+    # Read fields as a buffer
+    buffer = StringIO.new(ticket)
+    _, token, _, token_time = ioparse(buffer, 'L<Q<2L<') # GC token
+    _, _, _, conn_ip, _, conn_duration, conn_count = ioparse(buffer, 'L<7') # Session header
+    _, _, version, id, app, ext_ip, int_ip, flags, gen_time, exp_time = ioparse(buffer, 'L<3Q<L<6') # Ownership ticket
+    license_count, = ioparse(buffer, 'S<')
+    licenses = ioparse(buffer, "L<#{license_count}")
+    dlc_count, = ioparse(buffer, 'S<')
+    dlcs = {}
+    dlc_count.times.map{
+      dlc_id, package_count= ioparse(buffer, 'L<S<')
+      dlcs[dlc_id] = ioparse(buffer, "L<#{package_count}")
+    }
+    signature, = ioparse(buffer, 'x2a128')
+
+    # Convert times and IP addresses to more suited types
+    token_time, gen_time, exp_time = [token_time, gen_time, exp_time].map{ |t| Time.at(t) }
+    conn_ip, ext_ip, int_ip = [conn_ip, ext_ip, int_ip].map{ |ip| IPAddr.new(ip, Socket::AF_INET) }
+    conn_duration /= 1000.0 # from ms to s
+
+    # Build struct
+    Struct.new(
+      :token,       :token_time,  :conn_ip,  :conn_duration,
+      :conn_count,  :version,     :steam_id, :app_id,
+      :external_ip, :internal_ip, :flags,    :created_at,
+      :expires,     :licenses,    :dlcs,     :signature,
+      :ticket
+    ).new(
+      token,      token_time, conn_ip, conn_duration,
+      conn_count, version,    id,      app,
+      ext_ip,     int_ip,     flags,   gen_time,
+      exp_time,   licenses,   dlcs,    signature,
+      ticket
+    )
+  rescue => e
+    lex(e, 'Failed to parse Steam ticket')
+    nil
+  end
+
+  # Parse a ticket in ASCII form, which is how they're typically sent over the wire
+  def self.parse_ascii(ticket)
+    parse([ticket].pack('H*'))
+  end
+
+  # Creates a new ticket or updated the one corresponding to this user / app pair.
+  def self.add(ticket, date = Time.now)
+    fields = parse(ticket)
+    obj = find_or_create_by(steam_id: fields.steam_id, app_id: fields.app_id)
+    obj.update(ticket: ticket, date: date)
+    obj
+  end
+
+  # Create a new ticket object from an ASCII ticket
+  def self.add_ascii(ticket)
+    add([ticket].pack('H*'))
+  end
+
+  # The ownership ticket portion is signed by Steam using their system public key.
+  # The method is 1024bit RSA-SHA1 so the sig should be 128 bytes.
+  def self.verify_signature(data, signature)
+    OpenSSL::PKey::RSA.new(File.read(PATH_STEAM_KEY)).verify('SHA1', signature, data)
+  end
+
+  def ownership_ticket
+    offset = TOKEN_LENGTH + SESSION_LENGTH + 12
+    size = ticket.unpack1('L<', offset: offset)
+    ticket[offset, size]
+  end
+
+  def signed?
+    signature && self.class.verify_signature(ownership_ticket, signature)
+  end
+
+  # We leave 5 minutes to spare, no point reusing a ticket at that point
+  def expired?
+    Time.now > expires - 5 * 60
+  end
+
+  private
+
+  # This function will run when the object is initialized, thus giving access to
+  # the new attributes that are not present in the db directly but rather parsed
+  # from the raw ticket afterwards
+  def parse
+    return unless ticket
+    self.class.parse(ticket).each_pair{ |name, value|
+      next if ['steam_id', 'app_id', 'ticket'].include?(name)
+      self.send("#{name}=".to_sym, value)
+    }
+  end
+end
+
 # This class logs all messages sent by outte, and who it is in response to
 # That way, the user may request to delete the message later by any mechanism
 # we decide to devise

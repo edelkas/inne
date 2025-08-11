@@ -211,6 +211,8 @@ DIR_TEST        = 'test'
 DIR_UTILS       = 'util'
 DIR_FONTS       = "#{DIR_UTILS}/fonts"
 PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
+PATH_STEAM_AUTH = "#{DIR_UTILS}/auth.py"
+PATH_STEAM_KEY  = "#{DIR_UTILS}/steam.pem"
 
 FILENAME_MAPPACK_AUTHORS = 'AUTHORS'
 FILENAME_MAPPACK_SCORES  = 'SCORES'
