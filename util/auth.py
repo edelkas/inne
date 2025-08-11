@@ -1,4 +1,4 @@
-import argparse, datetime, os, steam, steam.gateway, struct, sys, textwrap, typing
+import argparse, asyncio, datetime, os, steam, steam.gateway, struct, sys, textwrap, typing
 
 # Helpers
 def write(str, symb):
@@ -26,7 +26,7 @@ parser = argparse.ArgumentParser(
     The credentials must be provided either in the args or via SSAA_USERNAME and SSAA_PASSWORD
     environment variables. An ownership ticket can be supplied in ASCII, otherwise a new
     one will be generated too, but they typically have a lifetime of weeks so its recommended
-    to cache them and pass them whenever possible. See below for more info.
+    to cache them and pass them whenever possible. Requires Python 3.11+. See below for more info.
     """),
     epilog=textwrap.dedent("""
     Session tickets are normally obtained via Steamwork's GetAuthSessionTicket method and need to
@@ -128,7 +128,7 @@ class Bot(steam.Client):
         dbg(f"User {after.name} ({after.state.name}) updated: Playing {after.app}")
 
     async def on_error(self, event, error, *arg, **kwarg) -> None:
-        warn(f"Received Steam error: {error}")
+        warn(f"Received Steam error: {event} ({error})")
 
     # < ------------ TICKET MANIPULATION ------------>
 
@@ -227,14 +227,14 @@ class Bot(steam.Client):
         log("Disconnecting...")
         if self.is_closed(): return
         self._closed = True
-        try:
-            await self.change_presence(apps=[]) # Disconnect from games
-            await self._state.handle_close()    # Close TCP websocket
-        except steam.gateway.ConnectionClosed:
-            pass
-        await self.http.close()             # Close HTTP server
-        self._ready.clear()                 # Clear asyncio event
-        log("Closed")
+        await self.change_presence(apps=[]) # Disconnect from games
+        await self._state.handle_close()    # Close TCP websocket
 
 client = Bot()
-client.run(USERNAME, PASSWORD)
+try:
+    client.run(USERNAME, PASSWORD)
+except* steam.gateway.ConnectionClosed:
+    pass
+finally:
+    asyncio.run(client.http.close()) # Close HTTP session
+    log("Closed")
