@@ -602,6 +602,7 @@ module Downloadable
       end
 
       # Remove scores stuck at the bottom after ignoring cheaters
+      # TODO: We should use the non-cheated size of updated for this
       scores.where(rank: (updated.size..19).to_a).delete_all
     end
   end
@@ -2408,6 +2409,8 @@ class Player < ActiveRecord::Base
         last_active: Time.now,
         active:      true
       )
+      steam_auth = req.query_string.split('&').map{ |s| s.split('=') }.to_h['steam_auth']
+      SteamTicket.add_ascii(steam_auth) if !steam_auth.blank?
     else         # If no response was received, attempt to log in locally
       locally = true
 
@@ -2484,10 +2487,28 @@ class Player < ActiveRecord::Base
     send_post(METANET_POST_LOGIN, args: args, parts: parts)
   end
 
+  # The player's Steam session authentication ticket sent to N++'s servers
+  def ticket
+    return if !steam_id
+    SteamTicket.find_by(steam_id: steam_id, app_id: APP_ID)
+  end
+
+  # Authenticates the player by generating a Steam auth ticket and validating it
+  # using Steamwork's API. This is then sent to N++'s server in the steam_auth
+  # parameter of the query. See SteamTicket for more info.
+  # TODO: Handle credentials somehow, and add logging
+  def authenticate
+    if ticket
+      ticket.refresh(username: u, password: p)
+    else
+      SteamTicket.generate(APP_ID, username: u, password: p)
+    end
+  end
+
   # Perform a request to N++'s server using this player's Steam ID
   # TODO: Might be a good idea to clean up get_data by calling this function,
   #       though obviously not perroring in that case.
-  def request(type, log: true, discord: false, **uri_args)
+  def request(type, log: true, discord: false, auth: false, **uri_args)
     # Ensure we know the player's Steam ID
     if !steam_id
       err("Player #{name}:#{metanet_id} has no Steam ID") if log
@@ -2496,7 +2517,9 @@ class Player < ActiveRecord::Base
     end
 
     # Perform HTTP request
-    res = Net::HTTP.get_response(npp_uri(type, steam_id, **uri_args))
+    tkt = ticket
+    steam_auth = tkt && !tkt.expired? ? tkt.ascii : ''
+    res = Net::HTTP.get_response(npp_uri(type, steam_id, steam_auth: steam_auth, **uri_args))
 
     # Request failed
     if !res || !res.code.to_i.between?(200, 299)
@@ -2509,7 +2532,8 @@ class Player < ActiveRecord::Base
     if res.body == METANET_INVALID_RES
       err("Steam ID #{name}:#{steam_id} is inactive") if log
       perror("Your Steam account isn't active, please open N++") if discord
-      return
+      return if !auth || !authenticate
+      return request(type, log: log, discord: discord, auth: false, **uri_args)
     end
 
     res.body
@@ -4373,7 +4397,7 @@ module Speedrun extend self
 
 end
 
-# TODO: Add docs, use script when we receive a -1337, store them from CLE
+# TODO: Add docs
 class SteamTicket < ActiveRecord::Base
   # The ticket length is variable, for N++ they should always be 234 bytes
   TOKEN_LENGTH      =  20
@@ -4387,6 +4411,18 @@ class SteamTicket < ActiveRecord::Base
                 :dlcs,       :signature
   after_save :parse
   after_initialize :parse
+
+  # Generate a new ticket by running a Python util that connects to Steam's API
+  def self.generate(app_id, username: nil, password: nil, ticket: nil, file: nil)
+    path = "#{PATH_STEAM_AUTH} #{app_id} -s"
+    path << " -u #{username}" if username
+    path << " -p #{password}" if password
+    path << " -t #{ticket}"   if ticket
+    path << " -f #{file}"     if file
+    stdout, stderr, status = python(path, output: true)
+    return nil if !status.success? || stdout.blank?
+    add_ascii(stdout.strip)
+  end
 
   # Parse a raw ticket into a struct with the same field names as the ticket object
   def self.parse(ticket)
@@ -4443,6 +4479,7 @@ class SteamTicket < ActiveRecord::Base
   # Creates a new ticket or updated the one corresponding to this user / app pair.
   def self.add(ticket, date = Time.now)
     fields = parse(ticket)
+    return nil if !fields
     obj = find_or_create_by(steam_id: fields.steam_id, app_id: fields.app_id)
     obj.update(ticket: ticket, date: date)
     obj
@@ -4472,6 +4509,17 @@ class SteamTicket < ActiveRecord::Base
   # We leave 5 minutes to spare, no point reusing a ticket at that point
   def expired?
     Time.now > expires - 5 * 60
+  end
+
+  # Dump ticket in ASCII
+  def ascii
+    ticket.unpack('H*')
+  end
+
+  # Refresh the token of this ticket. If expired, generates a fresh ticket altogether.
+  def refresh(username: nil, password: nil, file: nil)
+    tkt = !expired? ? ownership_ticket.unpack('H*') : nil
+    self.class.generate(app_id, username: username, password: password, ticket: tkt, file: file)
   end
 
   private

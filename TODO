@@ -14,7 +14,6 @@
 - Add Userlevel -> Metanet and viceversa converters.
 - Reload Discordrb main branch from bundler, which allows to respond to interactions with attachments. Use this to implement screenshots when searching multiple pages of levels, or even when browsing userlevels. To prevent regenerating the screenshots when browsing, cache them in /tmp using some kind of hash for the name to identify the query, and clear them regularly (and when there are too many).
 - We can simplify paging: parse_page and compute_pages should be merged, also only pass the event itself instead of the message and the components separately, and use kwargs. Think about how to use the pager, but in a more flexible way that works for more contexts.
-- Extend diff command to any highscoreable using the archives table, allowing to also specify a date.
 - Persist task counters in db (using task_ prefix). Don't do it constantly, perhaps only sum them when shutting down.
 - Migrate highscoreable_type to integers from 0 to 2.
 - Add a special command to run arbitrary Ruby code, sent from Discord, and print the return inside a text block. Ensure to execute inside guards for exceptions. Perhaps even code a simple Debugger that can be started in a separate Thread, which waits for commands (e.g. using a Queue).
@@ -28,7 +27,6 @@
 - Restrict display names to ASCII only
 - For Archive scores function: Make sure to sort ties in descending order by using the replay id.
 - Improve the migration of video challenges to the database: Parse the spreadsheet directly, otherwise it takes longer to update it and it doesn't work unless you have the csv files, which are not in the github repo.
-- Suggestion: Change Steam ID when we get the Bad Gateway error, since I think it depends on the player and thus we might benefit from a new ID, although we don't want to lose the other one since we know it's active, so maybe we could keep a cache of recently active Steam IDs that lasts, say, 1 hour. Another idea is to have a column in the database "last seen active" that we could refer to for this purpose.
 - Implement "index" (maybe "tally"): Outputs file with a list (like "list") of something, like all 0ths. With a parameter we specify what, for instance, 0th scores or 0th frames. With another parameter we specify the order, like the natural one, or by score in descending order...
 - Compare local scores (nprofile) vs server scores to find differences, a la NReality Score Comparer.
 - Add total <rank> score, and show total score and total 19th score gained daily and weekly.
@@ -184,7 +182,6 @@ Less priority:
 - Userlevel stats: How many unique authors, maps, averages, etc. Break down by mode and total.
 - When an ID is not in the database, if it's close (or always), download newest, but without printing it.
 - Store a daily list of all top 50 userlevels (just ID's for instance), so we can see how the hardest levels evolve.
-- Map Steam ID's to player names by looking it up in the database, so that they can be used when searching the server / database.
 - Browse user dependant categories
 - Browse other (made up but interesting) categories
 - Download maps (plural), like, all maps by an author or something.

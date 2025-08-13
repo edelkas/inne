@@ -362,7 +362,7 @@ def npp_uri(type, steam_id, **args)
   path = METANET_PATH + '/' + request
 
   # Build query component. We always add 2 default attributes plus the Steam ID.
-  args.merge!({ app_id: APP_ID, steam_auth: '', steam_id: steam_id })
+  args = { app_id: APP_ID, steam_auth: '', steam_id: steam_id }.merge(args)
   query = URI.encode_www_form(args)
 
   # Build full URI
