@@ -1,4 +1,4 @@
-import argparse, asyncio, datetime, os, steam, steam.gateway, struct, sys, textwrap, typing
+import argparse, asyncio, base64, datetime, json, os, steam, steam.gateway, struct, sys, textwrap, typing
 
 # Helpers
 def write(str, symb):
@@ -23,9 +23,9 @@ parser = argparse.ArgumentParser(
         - Simple Steam App Authenticator -
     Generates and activates a session authentication ticket for the given app via Steam's API,
     this cancels any outstanding tickets for the same user/app pair, and expires in ~5 minutes.
-    The credentials must be provided either in the args or via SSAA_USERNAME and SSAA_PASSWORD
-    environment variables. An ownership ticket can be supplied in ASCII, otherwise a new
-    one will be generated too, but they typically have a lifetime of weeks so its recommended
+    Login can be performed via refresh token or username + password, both of which can be supplied
+    as arguments or as environment variables. An ASCII ownership ticket can be supplied, otherwise
+    a new one will be generated, but they typically have a lifetime of 21 days so its recommended
     to cache them and pass them whenever possible. Requires Python 3.11+. See below for more info.
     """),
     epilog=textwrap.dedent("""
@@ -51,16 +51,22 @@ parser = argparse.ArgumentParser(
               2Ct64+AVzRkeRuh7h3SiGEYxqQMUeYKO6UWiSRKpI2hzic9pobFhRr3Bvr/WARvY
               gdTckPv+T1JzZsuVcNfFjrocejN1oWI0Rrtgt4Bo+hOneoo3S57G9F1fOpn5nsQ6
               6WOiu4gZKODnFMBCiQIBEQ==
+
+    For automated logins it's advised to use a refresh token. This will be fetched when you log
+    in with username and password in verbose mode, and allows to re-login without providing them
+    again. It's a Base64-encoded signed JWT (JSON Web Token) that expires in ~200 days and
+    specifies your Steam ID and IP, among other fields.
     """)
 )
 parser.add_argument('app',              type=int,            help='Steam app ID (e.g. 440 for TF2)')
 parser.add_argument('-c', '--connect',  action='store_true', help='Stay connected after exporting tickets (will require an Interrupt to close)')
 parser.add_argument('-d', '--dry',      action='store_true', help='Performs a dry run (logs in a verifies supplied ticket)')
 parser.add_argument('-f', '--file',     type=str,            help='Export tickets to this file instead of STDOUT')
+parser.add_argument('-o', '--ticket',   type=str,            help='App ownership ticket to attempt to reuse (also SSAA_TICKET)')
 parser.add_argument('-p', '--password', type=str,            help='Steam password used for login (also SSAA_PASSWORD env var)')
 parser.add_argument('-u', '--username', type=str,            help='Steam username used for login (also SSAA_USERNAME env var)')
 parser.add_argument('-s', '--silent',   action='store_true', help='Supresses all STDOUT and STDERR output except for the ticket itself')
-parser.add_argument('-t', '--ticket',   type=str,            help='App ownership ticket to attempt to reuse (also SSAA_TICKET)')
+parser.add_argument('-t', '--token',    type=str,            help='Refresh token JWT used for login (also SSAA_TOKEN env var)')
 parser.add_argument('-v', '--verbose',  action='store_true', help='Print additional technical information to the terminal')
 args = parser.parse_args()
 
@@ -72,15 +78,31 @@ if args.silent:
     devnull = open(os.devnull, 'w')
     os.dup2(devnull.fileno(), sys.stderr.fileno())
 
-USERNAME = args.username or os.environ.get('SSAA_USERNAME')
-PASSWORD = args.password or os.environ.get('SSAA_PASSWORD')
-TICKET   = args.ticket   or os.environ.get('SSAA_TICKET')
-if not USERNAME:
-    warn('Steam username must be provided by either the --username option or the SSAA_USERNAME environment variable')
-if not PASSWORD:
-    warn('Steam username must be provided by either the --password option or the SSAA_PASSWORD environment variable')
-if not USERNAME or not PASSWORD:
-    raise SystemExit(1)
+USERNAME: str | None = args.username or os.environ.get('SSAA_USERNAME')
+PASSWORD: str | None = args.password or os.environ.get('SSAA_PASSWORD')
+TOKEN:    str | None = args.token    or os.environ.get('SSAA_TOKEN')
+TICKET:   str | None = args.ticket   or os.environ.get('SSAA_TICKET')
+
+def verify_token(token: str) -> bool:
+    """Decode a token and perform some sanity checks"""
+    dbg("Refresh token supplied:")
+    dbg(token)
+    header, payload = [json.loads(base64.urlsafe_b64decode(bytes(block + '==', 'utf-8'))) for block in token.split('.')[:2]]
+    dbg(f"Header: {header}")
+    dbg(f"Payload: {payload}")
+    lower = datetime.datetime.fromtimestamp(payload['nbf'])
+    upper = datetime.datetime.fromtimestamp(payload['exp'])
+    now   = datetime.datetime.now()
+    if not (lower <= now <= upper):
+        warn(f"Refresh token is only valid between {date(lower)} and {date(upper)}")
+        return False
+    # No need to check Steam ID since we aren't logged in yet
+    dbg(f"Refresh token issued {date(datetime.datetime.fromtimestamp(payload['iat']))} valid for {payload['sub']}@{payload['ip_subject']}, expires {date(upper)}")
+    return True
+
+if TOKEN and not verify_token(TOKEN):
+    warn("Defaulting to username and password")
+    TOKEN = None
 
 class Bot(steam.Client):
     """Handle communications via Steamworks API using Gobot1234/steam.py"""
@@ -93,6 +115,8 @@ class Bot(steam.Client):
     async def on_ready(self) -> None:
         log(f"Logged in as {self.user.name} ({self.user.id64})")
         self.log_tokens()
+        if not TOKEN and args.verbose:
+            dbg(f"Refresh token: {self.refresh_token}")
 
         # Reuse ownership ticket or fetch a new one
         app = self.get_app(args.app)
@@ -232,7 +256,15 @@ class Bot(steam.Client):
 
 client = Bot()
 try:
-    client.run(USERNAME, PASSWORD)
+    if TOKEN:
+        log("Logging in with refresh token...")
+        client.run(refresh_token=TOKEN)
+    elif USERNAME and PASSWORD:
+        log("Logging in with username and password...")
+        client.run(USERNAME, PASSWORD)
+    else:
+        warn("No valid login credentials found, supply them via refresh token or username and password.")
+        raise SystemExit(1)
 except* steam.gateway.ConnectionClosed:
     pass
 finally:

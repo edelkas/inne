@@ -4417,7 +4417,7 @@ class SteamTicket < ActiveRecord::Base
     path = "#{PATH_STEAM_AUTH} #{app_id} -s"
     path << " -u #{username}" if username
     path << " -p #{password}" if password
-    path << " -t #{ticket}"   if ticket
+    path << " -o #{ticket}"   if ticket
     path << " -f #{file}"     if file
     stdout, stderr, status = python(path, output: true)
     return nil if !status.success? || stdout.blank?
