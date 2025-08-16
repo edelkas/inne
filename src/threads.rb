@@ -389,7 +389,6 @@ end
 # and send notices
 def update_speedrun
   Speedrun::fetch_new_runs.each{ |run|
-    alert("New speedrun event", discord: true)
     embed = Speedrun::format_embed(run)
     send_message($speedrun_channel, embed: embed)
   }

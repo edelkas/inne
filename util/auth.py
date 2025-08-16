@@ -1,4 +1,4 @@
-import argparse, asyncio, base64, datetime, json, os, steam, steam.gateway, struct, sys, textwrap, typing
+import argparse, asyncio, base64, datetime, enum, json, os, steam, steam.gateway, struct, sys, textwrap, typing
 
 # Helpers
 def write(str, symb):
@@ -11,10 +11,27 @@ def log(str): write(str, '-')
 def warn(str): write(str, '!')
 def date(d): return d.strftime('%Y-%m-%d %H:%M:%S')
 def time(t): return date(datetime.datetime.fromtimestamp(t))
-async def end(reason = None) -> typing.NoReturn:
-    if reason: warn(reason)
-    await client.disconnect()
-    raise SystemExit(1 if reason else 0)
+
+# Exiting the program
+class ExitCode(enum.Enum):
+    OK                       = 0
+    NO_CREDENTIALS           = 1
+    NO_OWNERSHIP_TICKET      = 2
+    NO_AUTHENTICATION_TICKET = 3
+
+async def end(code: ExitCode = ExitCode.OK) -> typing.NoReturn:
+    match code:
+        case ExitCode.OK:
+            log("Exited normally")
+        case ExitCode.NO_CREDENTIALS:
+            warn("No valid login credentials found, supply them via refresh token or username and password.")
+        case ExitCode.NO_OWNERSHIP_TICKET:
+            warn("Invalid ownership ticket supplied / fetched")
+        case ExitCode.NO_AUTHENTICATION_TICKET:
+            warn("Failed to generate valid authentication ticket")
+    if code != ExitCode.NO_CREDENTIALS:
+        await client.disconnect()
+    raise SystemExit(code.value)
 
 # Argument parsing
 parser = argparse.ArgumentParser(
@@ -123,14 +140,14 @@ class Bot(steam.Client):
         await self.change_presence(app=app)
         ticket = await self.get_ownership_ticket(app)
         if not ticket:
-            await end("Invalid ownership ticket supplied / fetched")
+            await end(ExitCode.NO_OWNERSHIP_TICKET)
         if args.dry:
             await end()
 
         # Build and activate ticket
         ticket = self.get_authentication_ticket(ticket)
         if not ticket:
-            await end("Failed to generate valid authentication ticket")
+            await end(ExitCode.NO_AUTHENTICATION_TICKET)
         log("Activating ticket...")
         await ticket.activate()
 
@@ -152,7 +169,7 @@ class Bot(steam.Client):
         dbg(f"User {after.name} ({after.state.name}) updated: Playing {after.app}")
 
     async def on_error(self, event, error, *arg, **kwarg) -> None:
-        warn(f"Received Steam error: {event} ({error})")
+        warn(f"Received error: {event} ({error})")
 
     # < ------------ TICKET MANIPULATION ------------>
 
@@ -182,12 +199,15 @@ class Bot(steam.Client):
         # First try to use supplied ticket
         if TICKET:
             log("Attempting to use provided ownership ticket:")
-            ticket = bytes.fromhex(TICKET)
-            dbg(ticket.hex().upper())
-            ticket = steam.OwnershipTicket(self._state, steam.utils.StructIO(ticket))
-            if self.verify_ticket(ticket):
-                self.log_ownership_ticket(ticket)
-                return ticket
+            dbg(TICKET)
+            try:
+                ticket = bytes.fromhex(TICKET)
+                ticket = steam.OwnershipTicket(self._state, steam.utils.StructIO(ticket))
+                if self.verify_ticket(ticket):
+                    self.log_ownership_ticket(ticket)
+                    return ticket
+            except:
+                warn("Failed to parse supplied ownership ticket")
 
         # Otherwise, fetch a new ticket
         if args.dry:
@@ -269,4 +289,3 @@ except* steam.gateway.ConnectionClosed:
     pass
 finally:
     asyncio.run(client.http.close()) # Close HTTP session
-    log("Closed")

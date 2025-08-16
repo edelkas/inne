@@ -2493,15 +2493,22 @@ class Player < ActiveRecord::Base
     SteamTicket.find_by(steam_id: steam_id, app_id: APP_ID)
   end
 
+  # Get the player's Steam refresh token that can be used to login. It's issued
+  # on command when we login with username and password and expires in ~200 days.
+  def refresh_token
+    return nil if !steam_id
+    ENV["STEAM_TOKEN_#{steam_id}"]
+  end
+
   # Authenticates the player by generating a Steam auth ticket and validating it
   # using Steamwork's API. This is then sent to N++'s server in the steam_auth
   # parameter of the query. See SteamTicket for more info.
-  # TODO: Handle credentials somehow, and add logging
   def authenticate
+    return nil if !refresh_token
     if ticket
-      ticket.refresh(username: u, password: p)
+      ticket.refresh(token: refresh_token)
     else
-      SteamTicket.generate(APP_ID, username: u, password: p)
+      SteamTicket.generate(APP_ID, token: refresh_token)
     end
   end
 
@@ -2539,15 +2546,19 @@ class Player < ActiveRecord::Base
     res.body
   end
 
-  # Fetches the player's score in the specified highscoreable
-  def get_score(h, log: true, discord: false)
+  # Downloads the scores for the specified highscoreable with this player's Steam ID
+  def get_scores(h, qt: 0, log: true, discord: false, auth: false)
     return if !h.is_a?(Downloadable)
-
-    # Perform HTTP request. We also update the scores.
     id_key = (h.is_userlevel? ? 'level' : h.class.to_s.downcase) + '_id'
-    res = request(:scores, qt: 0, id_key => h.id, log: log, discord: discord)
+    res = request(:scores, qt: qt, id_key => h.id, log: log, discord: discord, auth: auth)
     return if !res
-    json = JSON.parse(res)
+    JSON.parse(res)
+  end
+
+  # Fetches the player's score in the specified highscoreable
+  def get_score(h, log: true, discord: false, auth: false)
+    # Download scores
+    json = get_scores(h, log: log, discord: discord, auth: auth)
     scores = h.correct_ties(h.clean_scores(json['scores']))
 
     # First, try to find personal score in global leaderboard.
@@ -4404,6 +4415,12 @@ class SteamTicket < ActiveRecord::Base
   SESSION_LENGTH    =  24
   MIN_TICKET_LENGTH = 230
 
+  # Exit statuses of the Python authentication script
+  EXIT_OK                       = 0
+  EXIT_NO_CREDENTIALS           = 1
+  EXIT_NO_OWNERSHIP_TICKET      = 2
+  EXIT_NO_AUTHENTICATION_TICKET = 3
+
   # Make parsed attributes available after instantiation like regular attributes
   attr_accessor :token,      :token_time, :conn_ip,     :conn_duration,
                 :conn_count, :version,    :external_ip, :internal_ip,
@@ -4413,13 +4430,16 @@ class SteamTicket < ActiveRecord::Base
   after_initialize :parse
 
   # Generate a new ticket by running a Python util that connects to Steam's API
-  def self.generate(app_id, username: nil, password: nil, ticket: nil, file: nil)
+  def self.generate(app_id, username: nil, password: nil, token: nil, ticket: nil, file: nil)
     path = "#{PATH_STEAM_AUTH} #{app_id} -s"
     path << " -u #{username}" if username
     path << " -p #{password}" if password
+    path << " -t #{token}"    if token
     path << " -o #{ticket}"   if ticket
     path << " -f #{file}"     if file
+    dbg("Requesting new Steam ticket for #{app_id}...")
     stdout, stderr, status = python(path, output: true)
+    err("Steam credentials expired or unavailable", discord: true) if status.exitstatus == EXIT_NO_CREDENTIALS
     return nil if !status.success? || stdout.blank?
     add_ascii(stdout.strip)
   end
@@ -4478,8 +4498,10 @@ class SteamTicket < ActiveRecord::Base
 
   # Creates a new ticket or updated the one corresponding to this user / app pair.
   def self.add(ticket, date = Time.now)
+    dbg("Parsing Steam ticket...")
     fields = parse(ticket)
     return nil if !fields
+    dbg("Creating Steam ticket...")
     obj = find_or_create_by(steam_id: fields.steam_id, app_id: fields.app_id)
     obj.update(ticket: ticket, date: date)
     obj
@@ -4496,12 +4518,15 @@ class SteamTicket < ActiveRecord::Base
     OpenSSL::PKey::RSA.new(File.read(PATH_STEAM_KEY)).verify('SHA1', signature, data)
   end
 
-  def ownership_ticket
+  # Extract the ownership ticket part, which has an expiration period of 21 days
+  # Optionally also include the signature
+  def ownership_ticket(sign = false)
     offset = TOKEN_LENGTH + SESSION_LENGTH + 12
     size = ticket.unpack1('L<', offset: offset)
-    ticket[offset, size]
+    ticket[offset, size + (sign ? 128 : 0)]
   end
 
+  # Check Steam's signature is present and valid
   def signed?
     signature && self.class.verify_signature(ownership_ticket, signature)
   end
@@ -4517,9 +4542,9 @@ class SteamTicket < ActiveRecord::Base
   end
 
   # Refresh the token of this ticket. If expired, generates a fresh ticket altogether.
-  def refresh(username: nil, password: nil, file: nil)
-    tkt = !expired? ? ownership_ticket.unpack('H*') : nil
-    self.class.generate(app_id, username: username, password: password, ticket: tkt, file: file)
+  def refresh(username: nil, password: nil, token: nil, file: nil)
+    tkt = !expired? ? ownership_ticket(true).unpack1('H*') : nil
+    self.class.generate(app_id, username: username, password: password, token: token, ticket: tkt, file: file)
   end
 
   private
