@@ -4408,7 +4408,60 @@ module Speedrun extend self
 
 end
 
-# TODO: Add docs
+#------------------------------------------------------------------------------#
+#                           STEAM TICKET DOCUMENTATION                         |
+#------------------------------------------------------------------------------#
+# Parts                                                                        |
+#   Game Connect token (24 bytes): Identifies each session                     |
+#   Session Header (28 bytes):     Additional session information              |
+#   Ownership ticket (>46 bytes):  Proves ownership of app                     |
+#------------------------------------------------------------------------------#
+# Game Connect token                                                           |
+#     4B - Token size (always 20)                                              |
+#     8B - GC token   (seemingly random)                                       |
+#     8B - SteamID64                                                           |
+#     4B - Token generation timestamp                                          |
+#------------------------------------------------------------------------------#
+# Session header                                                               |
+#     4B - Header size (always 24)                                             |
+#     4B - ?           (always 1)                                              |
+#     4B - ?           (always 2)                                              |
+#     4B - IP of Steam node we connected to?                                   |
+#     4B - ?                                                                   |
+#     4B - Time connected in ms                                                |
+#     4B - Connection count with this ticket                                   |
+#------------------------------------------------------------------------------#
+# Ownership ticket                                                             |
+#     4B - Complete block size (only present in authentication tickets)        |
+#     4B - Ticket size including itself                                        |
+#     4B - Ticket version (currently 4)                                        |
+#     8B - SteamID64                                                           |
+#     4B - App ID (230270 for N++)                                             |
+#     4B - External IP                                                         |
+#     4B - Internal IP                                                         |
+#     4B - License flags (usually 2)                                           |
+#     4B - Ticket generation timestamp                                         |
+#     4B - Ticket expiration timestamp (21 days)                               |
+#     2B - License count                                                       |
+#     ## - License IDs (4B x count, 94152 for N++)                             |
+#     2B - DLC count                                                           |
+#     ## - DLC list (ID + license count + license IDs each)                    |
+#     2B - Reserved / padding                                                  |
+#   128B - Ownership ticket signature (see verify_signature)                   |
+#------------------------------------------------------------------------------#
+# Notes                                                                        |
+#   - Ownership tickets are issued on command and prove ownership for Steam ID |
+#     ID / App ID pair. They expire in 21 days and we reuse them if possible.  |
+#   - Authentication tickets include the other blocks which are session        |
+#     dependent. GC tokens are issued automatically by Steam on login and in   |
+#     other ocassions, such as starting a game. The whole ticket is validated  |
+#     and at that point it expires in about 5 minutes. This is then sent to    |
+#     Metanet's server to authenticate, we remain authenaticated for 1 hour.   |
+#   - We use a custom Python utility (util/auth.py) to talk to Steamworks's    |
+#     API using the steam-py library to generate the tokens and validate the   |
+#     full tickets. We login using refresh tokens which are stored as env vars |
+#------------------------------------------------------------------------------#
+
 class SteamTicket < ActiveRecord::Base
   # The ticket length is variable, for N++ they should always be 234 bytes
   TOKEN_LENGTH      =  20
