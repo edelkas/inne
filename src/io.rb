@@ -1077,6 +1077,19 @@ def parse_spoiler(msg, h = nil, channel = nil)
   !!msg[/\bspoiler\b/i] || !old_enough && !in_dms
 end
 
+# Use Time.parse to parse the date. This method is very flexible so it allows
+# many different formats almost seamlessly. In fact, it's too flexible and infers
+# missing values using a placeholder class that responds to day, mon and year.
+# Sometimes this is too flexible, in those cases we can return nil instead.
+def parse_date(str, infer: false)
+  validator = Class.new
+  def validator.day()  raise end
+  def validator.mon()  raise end
+  def validator.year() raise end
+  inferrer = infer ? Time.now : validator.new
+  Time.parse(str, inferrer) rescue nil
+end
+
 def format_dev(dev)
   dev ? 'over-DEV' : ''
 end
