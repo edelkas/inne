@@ -617,14 +617,15 @@ def update_userlevel_tabs
   }
 end
 
-# Re-download a full page of userlevels for each mode, in reverse order of
-# last update. This way we keep certain stats (notably ++'s, but potentially
-# also author name changes) up-to-date.
+# Re-download a full page of userlevels for each mode. This way we keep certain
+# stats (notably ++'s, but potentially also author name changes) up-to-date.
+# Note we skip page 0 (that's taken care of).
 def update_userlevel_data
   [MODE_SOLO, MODE_COOP, MODE_RACE].each{ |mode|
-    id = Userlevel.where(mode: mode).order('map_update IS NOT NULL, map_update').first.id
-    page = Userlevel.where("`mode` = #{mode} AND `id` > #{id}").count / PART_SIZE
-    Userlevel.parse(Userlevel.get_levels(QT_NEWEST, page, mode))
+    prop = GlobalProperty.find_or_create_by(key: "current_page_#{MODES[mode]}")
+    page = prop.value.to_i + 1
+    more = Userlevel.parse(Userlevel.get_levels(QT_NEWEST, page, mode))
+    prop.update(value: more ? page : 0)
     dbg("Updated userlevel page #{page} of mode #{mode}")
   }
 end

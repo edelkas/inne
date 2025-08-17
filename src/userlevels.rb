@@ -438,6 +438,7 @@ class Userlevel < ActiveRecord::Base
   #----------------------------------------------------------------------------#
 
   # Parse binary file with userlevel collection received from N++'s server
+  # Returns if there are more pages left to parse
   def self.parse(buffer)
     buffer = StringIO.new(buffer.to_s)
     return false if buffer.size <= 48
@@ -501,6 +502,9 @@ class Userlevel < ActiveRecord::Base
         object_data: Map.encode_objects(map.objects)
       )
     end
+
+    # Are there more pages remaining?
+    header.count == header.max
   rescue => e
     lex(e, 'Error updating userlevels')
     false
