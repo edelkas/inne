@@ -443,57 +443,6 @@ rescue => e
   nil
 end
 
-# Send a multipart post-form to N++'s servers.
-#   args:  Hash with additional URL-encoded query arguments.
-#   parts: Array of body parts, each being a hash with 3 keys: name, value, binary.
-def post_form(host: 'dojo.nplusplus.ninja', path: '', args: {}, parts: [], silent: false)
-  # Create request
-  def_args = {
-    app_id:     APP_ID,
-    steam_auth: ''
-  }
-  query = def_args.merge(args).map{ |k, v| "#{k}=#{v}" }.join('&')
-  uri = URI.parse("https://#{host}#{METANET_PATH}/#{path}?#{query}")
-  post = Net::HTTP::Post.new(uri)
-
-  # Generate boundary
-  blen = 8
-  boundary = ''
-  while parts.any?{ |p| p[:name].to_s.include?(boundary) || p[:value].to_s.include?(boundary) }
-    boundary = blen.times.map{ rand(36).to_s(36) }.join
-  end
-
-  # Build and set body
-  body = ''
-  parts.each{ |p|
-    body << '--' + boundary + "\r\n"
-    body << "Content-Disposition: form-data; name=\"#{p[:name]}\""
-    body << "; filename=\"#{p[:name]}\"\r\nContent-Type: application/octet-stream" if p[:binary]
-    body << "\r\n\r\n#{p[:value]}\r\n"
-  }
-  body << '--' + boundary + "--\r\n"
-  post.body = body
-
-  # Add headers and clean default ones
-  post.to_hash.keys.each{ |h| post.delete(h) }
-  post['user-agent']     = 'libcurl-agent/1.0'
-  post['host']           = host
-  post['accept']         = '*/*'
-  post['cache-control']  = 'no-cache'
-  post['content-length'] = body.size.to_s
-  post['expect']         = '100-continue'
-  post['content-type']   = "multipart/form-data; boundary=#{boundary}"
-
-  # Execute request
-  res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 5){ |http|
-    http.request(post)
-  }
-  res.code.to_i < 200 || res.code.to_i > 299 ? nil : res.body.to_s
-rescue => e
-  lex(e, 'Failed to send multipart post-form to Metanet') unless silent
-  nil
-end
-
 # Simple way to cache results and avoid quick-repeat of (HTTP/db/...) requests
 # TODO: Make thread-safe
 class Cache

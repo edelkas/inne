@@ -680,7 +680,7 @@ module Downloadable
     ]
 
     # Perform HTTP POST request
-    res = player.send_post(METANET_POST_SCORE, parts: parts, auth: true, silent: silent)
+    res = player.send_request(:submit, parts: parts, silent: silent)
     return if !res
     return false if res == METANET_INVALID_RES
     args = [score.to_i / 1000.0, frames, player.name, player.metanet_id, self.class.to_s.downcase, self.name, self.id]
@@ -2313,25 +2313,25 @@ class Player < ActiveRecord::Base
   # Only works for 1 type at a time
   def self.comparison_(type, tabs, p1, p2)
     type = ensure_type(type)
-    request = Score.where(highscoreable_type: type)
-    request = request.where(tab: tabs) if !tabs.empty?
+    query = Score.where(highscoreable_type: type)
+    query = query.where(tab: tabs) if !tabs.empty?
     t = type.to_s.downcase.pluralize
     bench(:start) if BENCHMARK
-    ids = request.where(player: [p1, p2])
+    ids = query.where(player: [p1, p2])
                  .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                  .group(:highscoreable_id)
                  .having('COUNT(`highscoreable_id`) > 1')
                  .pluck('MIN(`highscoreable_id`)')
-    scores1 = request.where(highscoreable_id: ids, player: p1)
+    scores1 = query.where(highscoreable_id: ids, player: p1)
                      .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                      .order(:highscoreable_id)
                      .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
-    scores2 = request.where(highscoreable_id: ids, player: p2)
+    scores2 = query.where(highscoreable_id: ids, player: p2)
                      .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                      .order(:highscoreable_id)
                      .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
     scores = scores1.zip(scores2).group_by{ |s1, s2| s1[3] <=> s2[3] }
-    s1 = request.where(player: p1)
+    s1 = query.where(player: p1)
                 .where.not(highscoreable_id: ids)
                 .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                 .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
@@ -2350,7 +2350,7 @@ class Player < ActiveRecord::Base
                                      .map{ |r, s| [r, s.sort_by{ |s1, s2| s2[1] }] }
                                      .to_h
                          : {}
-    s5 = request.where(player: p2)
+    s5 = query.where(player: p2)
                 .where.not(highscoreable_id: ids)
                 .joins("INNER JOIN `#{t}` ON `#{t}`.`id` = `scores`.`highscoreable_id`")
                 .pluck(:rank, :highscoreable_id, "`#{t}`.`name`", :score)
@@ -2454,31 +2454,8 @@ class Player < ActiveRecord::Base
     return nil
   end
 
-  # Send a POST request to N++'s server with this player
-  def send_post(path, args: {}, parts: [], auth: true, silent: false)
-    if !steam_id
-      err("No Steam ID for #{name}") unless silent
-      return nil
-    end
-    args = { user_id: metanet_id, steam_id: steam_id }.merge(args)
-    tkt = ticket
-    steam_auth = tkt && !tkt.expired? ? tkt.ascii : ''
-    args.merge!({ steam_auth: steam_auth })
-    res = post_form(path: path, args: args, parts: parts, silent: silent)
-    if !res
-      err("Failed to POST to #{path} via #{name} (bad HTTP).") unless silent
-      return
-    end
-    if res == METANET_INVALID_RES
-      err("Failed to POST to #{path} via #{name} (inactive Steam ID).")
-      return if !auth || !authenticate
-      return send_post(path, args: args, parts: parts, auth: false, silent: silent)
-    end
-    res
-  end
-
   # Manually craft and send the login request for this player
-  def login(steam_auth: nil)
+  def login
     parts = [
       { name: 'user_id',    binary: false, value: metanet_id.to_s },
       { name: 'size',       binary: false, value: '16'            },
@@ -2486,8 +2463,7 @@ class Player < ActiveRecord::Base
       { name: 'data',       binary: true,  value: "\x00" * 16     },
       { name: 'stats',      binary: true,  value: ''              }
     ]
-    args = steam_auth ? { steam_auth: steam_auth } : {}
-    send_post(METANET_POST_LOGIN, args: args, parts: parts)
+    send_request(:login, parts: parts)
   end
 
   # The player's Steam session authentication ticket sent to N++'s servers
@@ -2515,53 +2491,121 @@ class Player < ActiveRecord::Base
     end
   end
 
-  # Perform a request to N++'s server using this player's Steam ID
-  # TODO: Might be a good idea to clean up get_data by calling this function,
-  #       though obviously not perroring in that case.
-  def request(type, log: true, discord: false, auth: false, **uri_args)
+  # Perform arbitrary HTTP request to N++'s server with this player
+  # - type: The request to perform out of the following:
+  #     :scores  => GET the scores for a level/episode/story
+  #     :replay  => GET the demo data for a given replay
+  #     :levels  => GET a certain page of userlevels
+  #     :search  => GET the result of a userlevel search
+  #     :submit  => POST a new score and replay
+  #     :publish => POST a new userlevel
+  #     :login   => POST a login request
+  # - args: URL-encoded arguments of the query. The following are standard and
+  #         are added by default, so only additional ones need to be specified:
+  #     app_id     => The Steam ID of N++ (230270)
+  #     user_id    => The player ID in Metanet's database
+  #     steam_id   => The player ID in Steam's database (SteamID64)
+  #     steam_auth => The full Steam authentication ticket
+  # - parts: The parts of the multipart form data that will compose the body
+  #          of the request, only necessary for POST requests. Each part is a
+  #          hash with the name, the value, and whether it's binary or not.
+  # - auth: Whether to attempt to re-authenticate if possible. If we have the
+  #         credentials this will generate a new Steam auth ticket.
+  # - silent: Print stuff to the terminal
+  # - discord: Function being called by a Discord user, print useful error messages
+  # @return:
+  #   nil if the request failed
+  #   false if unauthenticated
+  #   The response body otherwise
+  def send_request(type, args: {}, parts: [], auth: true, silent: false, discord: false)
     # Ensure we know the player's Steam ID
     if !steam_id
-      err("Player #{name}:#{metanet_id} has no Steam ID") if log
-      perror("I don't know your Steam ID!") if discord
+      err("Player #{name} (#{metanet_id}) has no Steam ID") unless silent
+      perror("I don't know your Steam ID, please contact the botmaster!") if discord
       return
     end
 
-    # Perform HTTP request
-    tkt = ticket
-    steam_auth = tkt && !tkt.expired? ? tkt.ascii : ''
-    res = Net::HTTP.get_response(npp_uri(type, steam_id, steam_auth: steam_auth, **uri_args))
+    # Compose URI
+    args = {
+      app_id:     APP_ID,
+      user_id:    metanet_id,
+      steam_id:   steam_id,
+      steam_auth: auth && ticket && !ticket.expired? ? ticket.ascii : ''
+    }.merge(args)
+    uri = npp_uri(type, steam_id, **args)
 
-    # Request failed
-    if !res || !res.code.to_i.between?(200, 299)
-      err("HTTP request for #{type} failed (#{!!res ? res.code : '?'})") if log
-      perror("Failed to query Metanet score, try again later") if discord
+    # Compose body of the multipart form data, if necessary
+    body = ''
+    if parts
+      boundary = rand(36 ** 32).to_s(36)
+      parts.each{ |p|
+        body << '--' + boundary + "\r\n"
+        body << "Content-Disposition: form-data; name=\"#{p[:name]}\""
+        body << "; filename=\"#{p[:name]}\"\r\nContent-Type: application/octet-stream" if p[:binary]
+        body << "\r\n\r\n#{p[:value]}\r\n"
+      }
+      body << '--' + boundary + "--\r\n"
+    end
+
+    # Create HTTP request
+    if [:submit, :publish, :login].include?(type)
+      req = Net::HTTP::Post.new(uri)
+    else
+      req = Net::HTTP::Get.new(uri)
+    end
+    req.body = body
+
+    # Set headers. This is important since the default ones don't work properly,
+    # so we clean those first.
+    req.to_hash.keys.each{ |h| req.delete(h) }
+    req['user-agent']     = 'libcurl-agent/1.0'
+    req['host']           = METANET_HOST
+    req['accept']         = '*/*'
+    req['cache-control']  = 'no-cache'
+    req['content-length'] = body.size.to_s
+    req['expect']         = '100-continue'
+    req['content-type']   = "multipart/form-data; boundary=#{boundary}"
+
+    # Perform request
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 5){ |http|
+      http.request(req)
+    }
+
+    # Invalid request
+    if !res.is_a?(Net::HTTPSuccess)
+      err("Failed to request #{type} for player #{steam_id}") unless silent
+      perror("Failed to request #{type} from N++'s server :(") if discord
       return
     end
 
-    # Player is not authenticated in Steam
-    if res.body == METANET_INVALID_RES
-      err("Steam ID #{name}:#{steam_id} is inactive") if log
-      perror("Your Steam account isn't active, please open N++") if discord
-      return if !auth || !authenticate
-      return request(type, log: log, discord: discord, auth: false, **uri_args)
+    # Unauthenticated
+    if res.body.to_s == METANET_INVALID_RES
+      warn("Player #{name} (#{metanet_id}) is not authenticated") unless silent
+      if !auth || !authenticate
+        perror("You seem to be unauthenticated, please open N++") if discord
+        return false
+      end
+      return send_request(type, args: args, parts: parts, auth: false, silent: silent, discord: discord)
     end
 
-    res.body
+    res.body.to_s
+  rescue => e
+    lex(e, "Error when requesting #{uri}")
+    nil
   end
 
   # Downloads the scores for the specified highscoreable with this player's Steam ID
-  def get_scores(h, qt: 0, log: true, discord: false, auth: false)
+  def get_scores(h, qt: 0, discord: false)
     return if !h.is_a?(Downloadable)
     id_key = (h.is_userlevel? ? 'level' : h.class.to_s.downcase) + '_id'
-    res = request(:scores, qt: qt, id_key => h.id, log: log, discord: discord, auth: auth)
-    return if !res
-    JSON.parse(res)
+    res = send_request(:scores, args: { qt: qt, id_key => h.id }, discord: discord)
+    res ? JSON.parse(res) : nil
   end
 
   # Fetches the player's score in the specified highscoreable
-  def get_score(h, log: true, discord: false, auth: false)
+  def get_score(h, discord: false)
     # Download scores
-    json = get_scores(h, log: log, discord: discord, auth: auth)
+    json = get_scores(h, discord: discord)
     scores = h.correct_ties(h.clean_scores(json['scores']))
 
     # First, try to find personal score in global leaderboard.
@@ -2573,25 +2617,25 @@ class Player < ActiveRecord::Base
     return { score: score['my_score'] / 1000.0, rank: score['my_rank'], replay_id: score['my_replay_id'] } if score
 
     # No personal score found
-    err("Player #{name}:#{metanet_id} has no server score in #{h.name}") if log
-    perror("#{format_name} has no #{h.name} score in the server") if discord
+    err("Player #{name} (#{metanet_id}) has no server score in #{h.name}")
+    perror("You have no #{h.name} score in the server") if discord
     nil
   end
 
   # Fetches the player's replay given the type and ID
   # TODO: I feel like some of this logic should be in the Demo class
-  def get_replay(h, replay_id, log: true, discord: false)
+  def get_replay(h, replay_id, discord: false)
     return if !h.is_a?(Downloadable)
 
     # Perform HTTP request
     type = TYPES[h.class.to_s.remove('Mappack')] || TYPES['Level']
     qt = type[:qt] rescue 0
-    res = request(:replay, qt: qt, replay_id: replay_id, log: log, discord: discord)
+    res = send_request(:replay, args: { qt: qt, replay_id: replay_id }, discord: discord)
     return if !res
 
     # Replay doesn't exist anymore
     if res.empty?
-      err("#{type[:name]} replay #{replay_id} does not exist anymore") if log
+      err("#{type[:name]} replay #{replay_id} does not exist anymore")
       perror("The requested replay doesn't exist in the server anymore") if discord
       return
     end
@@ -2599,7 +2643,7 @@ class Player < ActiveRecord::Base
     # Integrity checks (see format documentation in Demo)
     rt, rid, hid, uid = res[0, 16].unpack('l<4')
     if rt != type[:rt] || rid != replay_id || uid != metanet_id
-      err("Received replay header doesn't match expected values") if log
+      err("Received replay header doesn't match expected values")
       perror("Received corrupt replay data from the server") if discord
       return
     end
