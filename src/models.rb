@@ -2548,7 +2548,9 @@ class Player < ActiveRecord::Base
     end
 
     # Create HTTP request
-    if [:submit, :publish, :login].include?(type)
+    method = [:submit, :publish, :login].include?(type) ? :post : :get
+    case method
+    when :post
       req = Net::HTTP::Post.new(uri)
     else
       req = Net::HTTP::Get.new(uri)
@@ -2561,10 +2563,12 @@ class Player < ActiveRecord::Base
     req['user-agent']     = 'libcurl-agent/1.0'
     req['host']           = METANET_HOST
     req['accept']         = '*/*'
-    req['cache-control']  = 'no-cache'
-    req['content-length'] = body.size.to_s
-    req['expect']         = '100-continue'
-    req['content-type']   = "multipart/form-data; boundary=#{boundary}"
+    if method == :post
+      req['cache-control']  = 'no-cache'
+      req['content-length'] = body.size.to_s
+      req['expect']         = '100-continue'
+      req['content-type']   = "multipart/form-data; boundary=#{boundary}"
+    end
 
     # Perform request
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 5){ |http|
