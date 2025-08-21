@@ -680,19 +680,9 @@ module Downloadable
     ]
 
     # Perform HTTP POST request
-    res = post_form(
-      path:   METANET_POST_SCORE,
-      args:   { user_id: player.metanet_id, steam_id: player.steam_id },
-      parts:  parts,
-      silent: silent
-    )
-    if !res
-      err("Failed to submit score by #{pname} to #{fname} (bad post-form).", discord: log) unless silent
-      return
-    elsif res == METANET_INVALID_RES
-      err("Failed to submit score by #{pname} to #{fname} (inactive Steam ID).", discord: log) unless silent
-      return false
-    end
+    res = player.send_post(METANET_POST_SCORE, parts: parts, auth: true, silent: silent)
+    return if !res
+    return false if res == METANET_INVALID_RES
     args = [score.to_i / 1000.0, frames, player.name, player.metanet_id, self.class.to_s.downcase, self.name, self.id]
     dbg("Submitted score %.3f (%df) by %s (%d) to %s %s (%d)" % args) unless silent
     JSON.parse(res)
@@ -2465,12 +2455,25 @@ class Player < ActiveRecord::Base
   end
 
   # Send a POST request to N++'s server with this player
-  def send_post(path, args: {}, parts: [], auth: false, silent: false)
-    return err("No Steam ID for #{name}") if !steam_id
+  def send_post(path, args: {}, parts: [], auth: true, silent: false)
+    if !steam_id
+      err("No Steam ID for #{name}") unless silent
+      return nil
+    end
     args = { user_id: metanet_id, steam_id: steam_id }.merge(args)
+    tkt = ticket
+    steam_auth = tkt && !tkt.expired? ? tkt.ascii : ''
+    args.merge!({ steam_auth: steam_auth })
     res = post_form(path: path, args: args, parts: parts, silent: silent)
-    return err("Failed to POST to #{path} via #{name} (bad HTTP).") if !res
-    return err("Failed to POST to #{path} via #{name} (inactive Steam ID).") if res == METANET_INVALID_RES
+    if !res
+      err("Failed to POST to #{path} via #{name} (bad HTTP).") unless silent
+      return
+    end
+    if res == METANET_INVALID_RES
+      err("Failed to POST to #{path} via #{name} (inactive Steam ID).")
+      return if !auth || !authenticate
+      return send_post(path, args: args, parts: parts, auth: false, silent: silent)
+    end
     res
   end
 
