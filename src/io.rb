@@ -1505,7 +1505,7 @@ def send_message(
   when Discordrb::Events::Respondable # Messages, reactions
     msg = dest.respond(content, false, embed, files, nil, nil, components)
   when Discordrb::Events::InteractionCreateEvent # Components, application commands
-    msg = dest.respond(content: content, embeds: [embed], components: components, wait: true, ephemeral: ephemeral)
+    msg = dest.respond(content: content, embeds: [embed].compact, components: components, attachments: files, wait: true, ephemeral: ephemeral)
   end
   return if !msg
 

@@ -87,6 +87,7 @@ GITHUB_LINK = "https://github.com/#{GITHUB_USER}/#{GITHUB_REPO}"
 # IDs
 BOTMASTER_ID           = 204332624288677890  # User ID of the bot manager (Eddy)
 SERVER_ID              = 197765375503368192  # Discord server/guild ID (N++ Server)
+TEST_SERVER_ID         = 535635802386857995  # Development server
 CHANNEL_HIGHSCORES     = 210778111594332181  # #highscores
 CHANNEL_SPEEDRUNNING   = 231135753059565568  # #speedrunning
 CHANNEL_USERLEVELS     = 221721273405800458  # #userlevels
@@ -98,7 +99,7 @@ CHANNEL_CTP_SECRETS    = 1137794113475969034 # #ctp-secrets
 
 # Limits
 DISCORD_CHAR_LIMIT     = 2000                # Message character limit
-DISCORD_FILE_LIMIT     = 25 * 1000 ** 2      # Attachment size limit
+DISCORD_FILE_LIMIT     = 10 * 1000 ** 2      # Attachment size limit
 DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
 CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 
@@ -115,14 +116,11 @@ WIDTH_KANJI = 1.67
 
 # Despite the bot being public, so that the botmaster does not need to be a mod
 # of the server, we only allow select servers. Otherwise randos could add outte.
-SERVER_WHITELIST = [
-  SERVER_ID,          # N++
-  535635802386857995  # Test server
-]
+SERVER_WHITELIST = [SERVER_ID, TEST_SERVER_ID]
 
 # Application commands
-SUPPORTED_COMMANDS = []
-DISABLED_COMMANDS = [:screenshot]
+SUPPORTED_COMMANDS = [:screenshot]
+DISABLED_COMMANDS = []
 
 # Emoji stuff
 EMOJIS_TO_DELETE = ['❌', '✖️', '🇽', '⛔', '🚫', '❎']

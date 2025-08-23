@@ -445,28 +445,40 @@ def delete_score(event, yes: false)
 end
 
 # Register a global command. Will update (overwrite) if it already exists.
-def register_command(cmd, update = false)
+def register_command(cmd, update = false, server_id: nil)
   sig = ''
   case cmd
   when :screenshot
     sig = 'str,str'
-    $bot.register_application_command(:screenshot, 'Generate a screenshot') do |cmd|
+    $bot.register_application_command(:screenshot, 'Generate a screenshot', server_id: server_id) do |cmd|
       cmd.string(:id, 'The level, episode or story')
       cmd.string(:palette, 'Official palette to use')
     end
   end
-  succ("%s command: %s(%s)" % [update ? 'Updated' : 'Registered', cmd, sig])
+  succ("%s %s command: %s(%s)" % [update ? 'Updated' : 'Registered', server_id ? 'guild' : 'global', cmd, sig])
 rescue => e
-  lex(e, "Failed to %s command: %s(%s)" % [update ? 'update' : 'register', cmd, sig])
+  lex(e, "Failed to %s %s command: %s(%s)" % [update ? 'update' : 'register', server_id ? 'guild' : 'global', cmd, sig])
 end
 
 # Check that all commands are registered, and create any new ones
 def register_commands()
-  names = $bot.get_application_commands.map(&:name)
+  commands = $bot.get_application_commands
+  registered = commands.map(&:name).map(&:to_sym)
+  to_register = SUPPORTED_COMMANDS - DISABLED_COMMANDS
   to_update = [] # To force an update, for development
-  SUPPORTED_COMMANDS.each{ |cmd|
-    next register_command(cmd, false) if !names.include?(cmd.to_s)
-    register_command(cmd, true) if to_update.include?(cmd)
+  to_test = [:screenshot] # Registers command in test server as opposed to globally (faster)
+
+  # Register or update all supported commands
+  to_register.each{ |cmd|
+    next if registered.include?(cmd) && !to_update.include?(cmd)
+    server_id = to_test.include?(cmd) ? TEST_SERVER_ID : nil
+    register_command(cmd, to_update.include?(cmd), server_id: server_id)
+  }
+
+  # Unregister unsupported commands
+  commands.each{ |cmd|
+    next if to_register.include?(cmd.name.to_sym)
+    $bot.delete_application_command(cmd.id)
   }
   log("Registered commands")
 end
