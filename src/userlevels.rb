@@ -181,17 +181,9 @@ class UserlevelScore < ActiveRecord::Base
     Userlevel.where(completions: nil).update_all(completions: 0)
   end
 
-  def replay_uri(steam_id)
-    npp_uri(:replay, steam_id, replay_id: replay_id, qt: 0 )
-  end
-
   # Download demo on the fly
   def demo
-    replay = get_data(
-      -> (steam_id) { replay_uri(steam_id) },
-      -> (data) { data },
-      "Error downloading userlevel #{id} replay #{replay_id}"
-    )
+    replay = get_data(:replay, fast: true, replay_id: replay_id, qt: 0)
     perror("Error downloading userlevel replay") if replay.nil?
     perror("Selected replay seems to be missing") if replay.empty?
     Demo.parse(replay[16..-1], 'Level')
@@ -377,10 +369,6 @@ class Userlevel < ActiveRecord::Base
     query
   end
 
-  def self.levels_uri(steam_id, qt = QT_NEWEST, page = 0, mode = MODE_SOLO)
-    npp_uri(:levels, steam_id, qt: qt, mode: mode, page: page)
-  end
-
   def self.serial(maps)
     maps.map{ |m|
       {
@@ -394,10 +382,7 @@ class Userlevel < ActiveRecord::Base
   end
 
   def self.get_levels(qt = QT_NEWEST, page = 0, mode = MODE_SOLO)
-    uri  = Proc.new { |steam_id, qt, page, mode| Userlevel::levels_uri(steam_id, qt, page, mode) }
-    data = Proc.new { |data| data }
-    err  = "error querying page #{page} of userlevels from category #{qt}"
-    get_data(uri, data, err, qt, page, mode)
+    get_data(:levels, qt: qt, mode: mode, page: page)
   end
 
   # For compatibility with Level, Episode and Story

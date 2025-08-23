@@ -396,17 +396,10 @@ end
 
 # Update missing demos (e.g., if they failed to download originally)
 def download_demos
-  archives = Archive.where(lost: false)
-                    .joins("LEFT JOIN demos ON demos.id = archives.id")
-                    .where("demos.demo IS NULL")
-                    .pluck(:id, :replay_id, :highscoreable_type)
-  archives.each_with_index do |ar, i|
-    attempts ||= 0
-    Demo.find_or_create_by(id: ar[0]).update_demo
-  rescue => e
-    lex(e, "Updating demo with ID #{ar[0].to_s}")
-    ((attempts += 1) < ATTEMPT_LIMIT) ? retry : next
-  end
+  Archive.where(lost: false)
+         .joins("LEFT JOIN demos ON demos.id = archives.id")
+         .where("demos.demo IS NULL")
+         .find_each{ |ar| Demo.find_or_create_by(id: ar.id).update_demo }
 end
 
 # Compute and send the weekly highscoring report

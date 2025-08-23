@@ -397,10 +397,9 @@ module Downloadable
 
   # Download the highscoreable's scores from Metanet's server
   def get_scores(fast: false)
-    uri  = Proc.new { |steam_id| scores_uri(steam_id) }
-    data = Proc.new { |data| correct_ties(clean_scores(JSON.parse(data)['scores'])) }
-    err  = "error getting scores for #{self.class.to_s.downcase} with id #{self.id.to_s}"
-    get_data(uri, data, err, fast: fast)
+    id_key = ("%s_id" % TYPES.keys[self.class::TYPE].downcase).to_sym
+    res = get_data(:scores, fast: fast, qt: 0, id_key => id)
+    res ? correct_ties(clean_scores(JSON.parse(res)['scores'])) : nil
   end
 
   # Download personal score
@@ -3146,35 +3145,19 @@ class GlobalProperty < ActiveRecord::Base
     self.find_or_create_by(key: key).update(value: Time.now.to_s)
   end
 
-  # Get the currently active Steam ID to latch onto
-  def self.get_last_steam_id
-    self.find_or_create_by(key: "last_steam_id").value
+  # Return the last authenticated player we found.
+  #   Note: Any request to N++'s server requires the steam ID of a player that
+  # is current authenticated with the server. The game will authenticate players
+  # for an hour, so we need to find one that has played recently enough.
+  def self.get_current_player
+    Player.find_by(steam_id: find_or_create_by(key: "last_steam_id").value)
   end
 
-  # Set currently active Steam ID
-  def self.set_last_steam_id(id)
-    self.find_or_create_by(key: "last_steam_id").update(value: id)
-  end
-
-  # Select a new Steam ID to set (we do it in order, so that we can loop the list)
-  # If 'fast', we only try the recently active Steam IDs
-  def self.update_last_steam_id(fast = false)
-    current = (Player.find_by(steam_id: get_last_steam_id).id || 0) rescue 0
-    query = Player.where.not(steam_id: nil)
-    query = query.where(active: true) if fast
-    next_player = (query.where('id > ?', current).first || query.first) rescue nil
-    set_last_steam_id(next_player.steam_id) if !next_player.nil?
-  end
-
-  # Mark date of when current Steam ID was active
-  def self.activate_last_steam_id
-    p = Player.find_by(steam_id: get_last_steam_id)
-    p.update(last_active: Time.now) if !p.nil?
-    update_steam_actives
-  end
-
-  # Update "active" boolean for recently active IDs
-  def self.update_steam_actives
+  # Save the steam ID of an authenticated player to latch onto for future
+  # requests to the game's server. Also update activity flags.
+  def self.set_current_player(player)
+    find_or_create_by(key: "last_steam_id").update(value: player.steam_id)
+    player.update(last_active: Time.now)
     period = FAST_PERIOD * 24 * 60 * 60
     Player.where("UNIX_TIMESTAMP(`last_active`) >= #{Time.now.to_i - period}").update_all(active: true)
     Player.where("UNIX_TIMESTAMP(`last_active`) <  #{Time.now.to_i - period}").update_all(active: false)
@@ -3559,21 +3542,12 @@ class Demo < ActiveRecord::Base
     TYPES[archive.highscoreable_type][:qt] rescue -1
   end
 
-  def replay_uri(steam_id)
-    npp_uri(:replay, steam_id, replay_id: archive.replay_id, qt: qt)
-  end
-
   def parse(replay)
     Demo.parse(replay, archive.highscoreable_type)
   end
 
   def get_demo
-    uri = Proc.new { |steam_id| replay_uri(steam_id) }
-    data = Proc.new { |data| data }
-    err  = "error getting demo with id #{archive.replay_id} "\
-           "for #{archive.highscoreable_type.downcase} "\
-           "with id #{archive.highscoreable_id}"
-    get_data(uri, data, err)
+    get_data(:replay, replay_id: archive.replay_id, qt: qt)
   end
 
   def update_archive(framecounts, lost)
@@ -3587,12 +3561,12 @@ class Demo < ActiveRecord::Base
   end
 
   def update_demo
-    return nil if !demo.nil?
+    return if demo
     replay = get_demo
-    return nil if replay.nil? # replay was not fetched successfully
+    return if !replay # replay was not fetched successfully
     if replay.empty? # replay does not exist
       archive.update(lost: true)
-      return nil
+      return
     end
     demos = parse(replay[16..-1])
     update_archive(demos.map(&:size), false)

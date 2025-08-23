@@ -369,40 +369,31 @@ def npp_uri(type, steam_id, **args)
   URI::HTTPS.build(host: METANET_HOST, path: path, query: query)
 end
 
-# Make a request to N++'s server.
-# Since we need to use an open Steam ID, the function goes through all
-# IDs until either an open is found (and stored), or the list ends and we fail.
-#   - uri_proc:  A Proc returning the exact URI, takes Steam ID as parameter
-#   - data_proc: A Proc that handles response data before returning it
-#   - err:       Error string to log if the request fails
-#   - vargs:     Extra variable arguments to pass to the uri_proc
-#   - fast:      Only try the recently active Steam IDs
-def get_data(uri_proc, data_proc, err, *vargs, fast: false)
-  attempts ||= 0
-  ids = Player.where.not(steam_id: nil)
-  ids = ids.where(active: true) if fast
-  count = ids.count
-  i = 0
-  initial_id = GlobalProperty.get_last_steam_id
-  response = Net::HTTP.get_response(uri_proc.call(initial_id, *vargs))
-  while response.body == METANET_INVALID_RES
-    GlobalProperty.update_last_steam_id(fast)
-    i += 1
-    break if GlobalProperty.get_last_steam_id == initial_id || i > count
-    response = Net::HTTP.get_response(uri_proc.call(GlobalProperty.get_last_steam_id, *vargs))
-  end
-  return nil if response.body == METANET_INVALID_RES
-  raise "502 Bad Gateway" if response.code.to_i == 502
-  GlobalProperty.activate_last_steam_id
-  data_proc.call(response.body)
+# Make a GET request to N++'s server. We need to find an authenticated player
+# to do so. This doesn't make sense for POST requests since they're dependent
+# on the player used. Requests available:
+#   :scores => Download the leaderboards (JSON)
+#   :replay => Download raw demo data (binary, zlibbed)
+#   :levels => Download a userlevel page (binary)
+#   :search => Download a page of searched userlevels (idem)
+def get_data(type, fast: false, **args)
+  # Attempt to perform request with currently stored player
+  player = GlobalProperty.get_current_player
+  res = player.send_request(type, args: args, auth: false, silent: true)
+  return res if res
+  attempts = 0
+
+  # Try to find a new authenticated player
+  Player.where.not(steam_id: nil).where(fast ? { active: true } : nil ).each{ |player|
+    if res = player.send_request(type, args: args, auth: false, silent: true)
+      GlobalProperty.set_current_player(player)
+      return res
+    end
+    (attempts += 1) < RETRIES ? redo : return if res.nil?
+  }
+  nil
 rescue => e
-  if (attempts += 1) < RETRIES
-    lex(e, err) if LOG_DOWNLOAD_ERRORS
-    sleep(0.25)
-    retry
-  else
-    return nil
-  end
+  lex(e, "Failed to GET #{type}")
 end
 
 # Forward an arbitrary request to Metanet, return response's body if 200, nil else

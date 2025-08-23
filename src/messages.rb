@@ -1319,9 +1319,9 @@ def send_analysis(event)
   boards = h.leaderboard(board, truncate: 0, pluck: false, frac: frac).all
   analysis = ranks.map{ |rank| [rank, (boards[rank].archive rescue nil)] }.to_h
   missing = analysis.select{ |r, a| a.nil? }.keys
-  event << "Warning: #{'Run'.pluralize(missing.size)} with rank #{missing.to_sentence} not found." if !missing.empty?
+  event << "-# __Warning__: #{'Run'.pluralize(missing.size)} with rank #{missing.to_sentence} not found." if !missing.empty?
   analysis.reject!{ |r, a| a.nil? }
-  return if analysis.size == 0
+  perror("No runs to analyze") if analysis.size == 0
 
   # Get run elements
   sfield = h.is_mappack? ? "score_#{board}" : 'score'
@@ -1335,6 +1335,10 @@ def send_analysis(event)
       'gold'   => run.gold
     }
   }
+  missing = analysis.select{ |a| !a['inputs'] }.map{ |a| a['rank'] }
+  event << "-# __Warning__: #{'Replay'.pluralize(missing.size)} for rank #{missing.to_sentence} not found." if !missing.empty?
+  analysis.reject!{ |a| !a['inputs'] }
+  perror("No runs to analyze") if analysis.size == 0
   length = analysis.map{ |a| a['inputs'].size }.max
   perror("The selected runs are empty.") if length == 0
 
