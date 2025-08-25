@@ -734,10 +734,10 @@ def parse_order(msg, order = nil)
   regex  = /(order|sort)(ed)?\s*by\s*((\w|\+|-)*)\s*(asc|desc)?/i
   order  = order || msg[regex, 3] || ""
   desc   = msg[regex, 5] == "desc"
-  invert = (order.strip[/\A-*/i].length % 2 == 1) ^ desc
+  reverse = (order.strip[/\A-*/i].length % 2 == 1) ^ desc
   order.delete!("-")
   msg.remove!(regex)
-  { msg: msg, order: order, invert: invert }
+  { msg: msg, order: order, reverse: reverse }
 end
 
 # Parse a quoted term from a string. Features:
@@ -1050,6 +1050,11 @@ end
 # or not (an edit, like after a button press)
 def parse_initial(event)
   !event.is_a?(Discordrb::Events::ComponentEvent)
+end
+
+# Determine if the event originated from a slash command
+def is_slash?(event)
+ event.is_a?(Discordrb::Events::ApplicationCommandEvent)
 end
 
 # Parse interpolated scores

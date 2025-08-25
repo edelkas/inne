@@ -448,10 +448,20 @@ end
 def register_command(cmd, update = false, server_id: nil)
   sig = ''
   case cmd
+  when :browse
+    sig = 'str,str,str,str,str,bool'
+    $bot.register_application_command(:browse, 'Browse or search userlevels', server_id: server_id) do |cmd|
+      cmd.string(:name, 'Search by title')
+      cmd.string(:author, 'Search by author name')
+      cmd.string(:mode, 'Gameplay mode', choices: { 'Solo' => 'solo', 'Coop' => 'coop', 'Race' => 'race' })
+      cmd.string(:tab, 'Search in a specific tab', choices: { 'Featured' => 'featured', 'Hardest' => 'hardest', 'Best' => 'best', 'Top Weekly' => 'top' })
+      cmd.string(:order, 'Order of the results', choices: { 'Date' => 'date', 'Title' => 'title', '++\'s' => 'favs' })
+      cmd.boolean(:reverse, 'Reverse ordering')
+    end
   when :screenshot
     sig = 'str,str'
     $bot.register_application_command(:screenshot, 'Generate a screenshot', server_id: server_id) do |cmd|
-      cmd.string(:id, 'The level, episode or story')
+      cmd.string(:name, 'The level, episode or story ID or name', required: true)
       cmd.string(:palette, 'Official palette to use')
     end
   end
@@ -462,23 +472,22 @@ end
 
 # Check that all commands are registered, and create any new ones
 def register_commands()
-  commands = $bot.get_application_commands
+  server_id = TEST ? TEST_SERVER_ID : nil
+  commands = $bot.get_application_commands(server_id: server_id)
   registered = commands.map(&:name).map(&:to_sym)
   to_register = SUPPORTED_COMMANDS - DISABLED_COMMANDS
   to_update = [] # To force an update, for development
-  to_test = [:screenshot] # Registers command in test server as opposed to globally (faster)
 
   # Register or update all supported commands
   to_register.each{ |cmd|
     next if registered.include?(cmd) && !to_update.include?(cmd)
-    server_id = to_test.include?(cmd) ? TEST_SERVER_ID : nil
     register_command(cmd, to_update.include?(cmd), server_id: server_id)
   }
 
   # Unregister unsupported commands
   commands.each{ |cmd|
     next if to_register.include?(cmd.name.to_sym)
-    $bot.delete_application_command(cmd.id)
+    $bot.delete_application_command(cmd.id, server_id: server_id)
   }
   log("Registered commands")
 end
@@ -621,6 +630,8 @@ def respond_application_command(event)
   opt = event.options
 
   case event.command_name
+  when :browse
+    send_userlevel_browse(event, **opt.symbolize_keys)
   when :screenshot
     send_screenshot(event, id: opt['id'], palette: opt['palette'])
   else

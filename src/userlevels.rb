@@ -556,7 +556,7 @@ class Userlevel < ActiveRecord::Base
   end
 
   # Produces the SQL order string, used when fetching maps from the db
-  def self.sort(order = "", invert = false)
+  def self.sort(order = "", reverse = false)
     return "" if !order.is_a?(String)
      # possible spellings for each field, to be used for sorting or filtering
      # doesn't include plurals (except "favs", read next line) because we "singularize" later
@@ -578,7 +578,7 @@ class Userlevel < ActiveRecord::Base
     return "" if !order.is_a?(Symbol)
     # sorting by date and id is equivalent, sans the direction
     str = order == :date ? "id" : fields[order][0]
-    str += " DESC" if inverted.include?(order) ^ invert
+    str += " DESC" if inverted.include?(order) ^ reverse
     str
   end
 
@@ -904,13 +904,16 @@ end
 #   Therefore, be CAREFUL when modifying the header of the message. It must still
 #   be a valid regex command containing all necessary info.
 def send_userlevel_browse(
-    event,       # Calling event
-    page:   nil, # Page offset, for button page navigation
-    order:  nil, # Chosen orden from select menu
-    tab:    nil, # Chosen tab from select menu
-    mode:   nil, # Chosen mode from select menu
-    query:  nil, # Full query, to execute this rather than parse the message
-    exec:   true # Execute query (otherwise, for interactions, the text will remain)
+    event,        # Calling event
+    name:    nil, # Title query
+    author:  nil, # Author name query
+    page:    nil, # Page offset, for button page navigation
+    order:   nil, # Chosen orden from select menu
+    reverse: nil, # Reverse the order
+    tab:     nil, # Chosen tab from select menu
+    mode:    nil, # Chosen mode from select menu
+    query:   nil, # Full query, to execute this rather than parse the message
+    exec:    true # Execute query (otherwise, for interactions, the text will remain)
   )
 
   # <------ PARSE all message elements ------>
@@ -921,27 +924,37 @@ def send_userlevel_browse(
   initial    = parse_initial(event)
   reset_page = page.nil? && exec && !initial
   msg        = query.nil? ? parse_message(event) : ''
-  h          = parse_order(msg, order) # Updates msg
-  msg        = h[:msg]
-  order      = h[:order]
-  invert     = h[:invert]
-  order_str  = Userlevel::sort(order, invert)
-  if query.nil?
+  is_slash   = is_slash?(event)
+
+  # Parse ordering
+  if is_slash
+    order = order.to_s
+    reverse = !!reverse
+  else
+    h = parse_order(msg, order) # Updates msg
+    msg, order, reverse = h[:msg], h[:order], h[:reverse]
+  end
+  order_str = Userlevel::sort(order, reverse)
+
+  # Parse title and author queries
+  if query
+    search, author = query[:title], query[:author]
+  elsif is_slash
+    search = name.to_s
+  else
     search, author, msg = parse_title_and_author(msg, false)
     search = search.to_s # Prev func might return int
     search = unescape(search) if search.is_a?(String)
     author = unescape(author) if author.is_a?(String)
-    author = UserlevelAuthor.parse(author, event: event)
-  else
-    search = query[:title]
-    author = UserlevelAuthor.parse(query[:author], event: event)
   end
-  page = parse_page(msg, page, reset_page)
-  mode = MODES.select{ |k, v| v == (mode || parse_mode(msg, true)) }.keys.first
+  author = UserlevelAuthor.parse(author, event: event)
 
-  # Determine the category / tab
+  # Parse mode, tab and page
+  page = parse_page(msg, page, reset_page)
+  mode = parse_mode(msg, true) if !mode
+  mode = MODES.invert[mode.downcase]
   cat = QT_NEWEST
-  USERLEVEL_TABS.each{ |qt, v| cat = qt if tab.nil? ? !!(msg =~ /#{v[:name]}/i) : tab == v[:name] }
+  USERLEVEL_TABS.each{ |qt, v| cat = qt if (tab || msg) =~ /#{v[:name]}/i }
   is_tab = USERLEVEL_TABS.select{ |k, v| v[:update] }.keys.include?(cat)
 
   #<------ FETCH userlevels ------>
@@ -985,7 +998,7 @@ def send_userlevel_browse(
     output = "Browsing #{USERLEVEL_TABS[cat][:name]}#{mode == -1 ? '' : ' ' + MODES[mode]} maps"
     output += " by #{verbatim(author.name[0...64])} (author id #{verbatim(author.id)})" if !author.nil?
     output += " for #{verbatim(search[0...64])}" if !search.empty?
-    output += " sorted by #{invert ? "-" : ""}#{!order_str.empty? ? order : (is_tab ? "default" : "date")}."
+    output += " sorted by #{reverse ? "-" : ""}#{!order_str.empty? ? order : (is_tab ? "default" : "date")}."
     output += format_userlevels(maps, pag[:page], pagesize: pagesize)
     output += count == 0 ? "\nNo results :shrug:" : "Page: **#{pag[:page]}** / **#{pag[:pages]}**. Results: **#{count}**."
   else
