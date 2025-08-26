@@ -904,16 +904,18 @@ end
 #   Therefore, be CAREFUL when modifying the header of the message. It must still
 #   be a valid regex command containing all necessary info.
 def send_userlevel_browse(
-    event,        # Calling event
-    name:    nil, # Title query
-    author:  nil, # Author name query
-    page:    nil, # Page offset, for button page navigation
-    order:   nil, # Chosen orden from select menu
-    reverse: nil, # Reverse the order
-    tab:     nil, # Chosen tab from select menu
-    mode:    nil, # Chosen mode from select menu
-    query:   nil, # Full query, to execute this rather than parse the message
-    exec:    true # Execute query (otherwise, for interactions, the text will remain)
+    event,         # Calling event
+    name:    nil,  # Title query
+    author:  nil,  # Author name query
+    page:    nil,  # Page offset, for button page navigation
+    order:   nil,  # Chosen orden from select menu
+    reverse: nil,  # Reverse the order
+    tab:     nil,  # Chosen tab from select menu
+    mode:    nil,  # Chosen mode from select menu
+    query:   nil,  # Full query, to execute this rather than parse the message
+    exec:    true, # Execute query (otherwise, for interactions, the text will remain)
+    header:  nil,  # Text to print before the results
+    footer:  nil   # Text to print after the results
   )
 
   # <------ PARSE all message elements ------>
@@ -995,12 +997,14 @@ def send_userlevel_browse(
   # message, so it needs to have a format compatible with the regex we use to
   # parse commands. I know, genius implementation.
   if exec
-    output = "Browsing #{USERLEVEL_TABS[cat][:name]}#{mode == -1 ? '' : ' ' + MODES[mode]} maps"
-    output += " by #{verbatim(author.name[0...64])} (author id #{verbatim(author.id)})" if !author.nil?
-    output += " for #{verbatim(search[0...64])}" if !search.empty?
-    output += " sorted by #{reverse ? "-" : ""}#{!order_str.empty? ? order : (is_tab ? "default" : "date")}."
-    output += format_userlevels(maps, pag[:page], pagesize: pagesize)
-    output += count == 0 ? "\nNo results :shrug:" : "Page: **#{pag[:page]}** / **#{pag[:pages]}**. Results: **#{count}**."
+    output = header ? "#{header}\n" : ''
+    output << "Browsing #{USERLEVEL_TABS[cat][:name]}#{mode == -1 ? '' : ' ' + MODES[mode]} maps"
+    output << " by #{verbatim(author.name[0...64])} (author id #{verbatim(author.id)})" if !author.nil?
+    output << " for #{verbatim(search[0...64])}" if !search.empty?
+    output << " sorted by #{reverse ? "-" : ""}#{!order_str.empty? ? order : (is_tab ? "default" : "date")}."
+    output << format_userlevels(maps, pag[:page], pagesize: pagesize)
+    output << (count == 0 ? "\nNo results :shrug:" : "Page: **#{pag[:page]}** / **#{pag[:pages]}**. Results: **#{count}**.")
+    output << "-# " << footer if footer
   else
     output = event.message.content
   end
@@ -1018,7 +1022,7 @@ def send_userlevel_browse(
   view = Discordrb::Webhooks::View.new
   if !(initial && count == 0)
     cur_emoji = initial ? nil : get_emoji(event, 'button:play:')
-    interaction_add_action_navigation(view, pag[:page], pag[:pages], 'play', 'Play', (EMOJIS_FOR_PLAY - [cur_emoji]).sample)
+    interaction_add_action_navigation(view, pag[:page], pag[:pages], 'play', 'Play', (EMOJIS_FOR_PLAY - [cur_emoji]).sample, source: 'browse')
     interaction_add_select_menu_order(view, 'browse', order_str, cat != QT_NEWEST)
     interaction_add_select_menu_tab(view, 'browse', USERLEVEL_TABS[cat][:name])
     interaction_add_select_menu_mode(view, 'browse', MODES[mode], false)
@@ -1084,18 +1088,15 @@ end
 #   3) If there are multiple matches, execute the browse function
 # We pass in the msg (instead of extracting it from the event)
 # because it might've been modified by the caller function already.
-def send_userlevel_individual(event, msg, userlevel = nil, &block)
-  map = parse_userlevel(event, userlevel)
+def send_userlevel_individual(event, msg = nil, userlevel = nil, &block)
+  map = parse_userlevel(event, userlevel, msg: msg)
   case map[:count]
   when 0
-    event << map[:msg]
-    return
+    send_message(event, content: map[:msg])
   when 1
     yield(map)
   else
-    send_message(event, content: map[:msg])
-    sleep(0.250) # Prevent rate limiting
-    send_userlevel_browse(event, query: map)
+    send_userlevel_browse(event, query: map, header: map[:msg])
   end
 end
 
@@ -1105,7 +1106,7 @@ def send_userlevel_demo_download(event)
   msg.sub!(/\w*download\w*/i, '')
   msg.sub!(/\w*replay\w*/i, '')
   msg.squish!
-  send_userlevel_individual(event, msg){ |map|
+  send_userlevel_individual(event){ |map|
     map[:query].update_scores
     rank  = [parse_range(msg).first, map[:query].scores.size - 1].min
     score = map[:query].scores[rank]
@@ -1128,7 +1129,7 @@ def send_userlevel_download(event)
   msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
   msg.sub!(/\w*download\w*/i, '')
   msg.squish!
-  send_userlevel_individual(event, msg){ |map|
+  send_userlevel_individual(event){ |map|
     output = "Downloading userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
@@ -1142,22 +1143,25 @@ end
 
 # We can pass the actual level instead of parsing it from the message
 # This is used e.g. by the random userlevel function
-def send_userlevel_screenshot(event, userlevel = nil)
-  msg = parse_message(event)
-  msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
-  msg.sub!(/\w*screenshot\w*/i, '')
-  msg.squish!
-  h = parse_palette(event)
-  send_userlevel_individual(event, h[:msg], userlevel){ |map|
+def send_userlevel_screenshot(event, userlevel = nil, name: nil, author: nil, palette: nil, **kwargs)
+  # Craft message from parameters received if we come from a slash command
+  h = parse_palette(event, msg: palette ? "palette \"#{palette}\"" : nil)
+  if name || author
+    level_id  = name.to_i   if is_num(name)   && name.to_i   >= 22715
+    author_id = author.to_i if is_num(author) && author.to_i >=  1000
+    msg =  (level_id  ? "for #{level_id}"  : name   ? "for \"#{name.tr('"', '')}\""   : '')
+    msg << (author_id ? " by #{author_id}" : author ? " by \"#{author.tr('"', '')}\"" : '')
+  end
+  send_userlevel_individual(event, msg, userlevel){ |map|
     output = "#{h[:error]}"
     output += "Screenshot for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
     output += "from #{verbatim(map[:query].date.strftime('%F'))} "
     output += "using palette #{verbatim(h[:palette])}:"
-    event << output
     bench(:start) if BENCH_IMAGES
-    send_file(event, map[:query].screenshot(h[:palette]), map[:query].id.to_s + ".png", true)
+    screenshot = map[:query].screenshot(h[:palette], file: true)
+    send_message(event, content: output, files: [screenshot].compact)
   }
 rescue => e
   lex(e, 'Error sending userlevel screenshot.', event: event)

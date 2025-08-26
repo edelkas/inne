@@ -225,7 +225,7 @@ def interaction_add_button_navigation_short(view, page = 1, pages = 1, func = ni
 end
 
 # ActionRow builder with Buttons for page navigation, together with center action button
-def interaction_add_action_navigation(view, page = 1, pages = 1, action = '', text = '', emoji = nil)
+def interaction_add_action_navigation(view, page = 1, pages = 1, action = '', text = '', emoji = nil, source: 'button')
   emoji = find_emoji(emoji).id rescue nil if emoji && emoji.ascii_only?
   text = "#{page} / #{pages}" if text.empty? && emoji.nil?
   interaction_add_navigation(
@@ -235,11 +235,11 @@ def interaction_add_action_navigation(view, page = 1, pages = 1, action = '', te
     styles:   [:primary, :primary, :success, :primary, :primary],
     emojis:   [nil, nil, emoji, nil, nil],
     ids:      [
-      "button:nav:-1000000",
-      "button:nav:-1",
-      "button:#{action}:",
-      "button:nav:1",
-      "button:nav:1000000"
+      "#{source}:nav:-1000000",
+      "#{source}:nav:-1",
+      "#{source}:#{action}:",
+      "#{source}:nav:1",
+      "#{source}:nav:1000000"
     ]
   )
 end
@@ -446,10 +446,8 @@ end
 
 # Register a global command. Will update (overwrite) if it already exists.
 def register_command(cmd, update = false, server_id: nil)
-  sig = ''
   case cmd
   when :browse
-    sig = 'str,str,str,str,str,bool'
     $bot.register_application_command(:browse, 'Browse or search userlevels', server_id: server_id) do |cmd|
       cmd.string(:name, 'Search by title')
       cmd.string(:author, 'Search by author name')
@@ -459,7 +457,6 @@ def register_command(cmd, update = false, server_id: nil)
       cmd.boolean(:reverse, 'Reverse ordering')
     end
   when :config
-    sig = 'str,str,str,str'
     $bot.register_application_command(:config, 'Configure your outte++ usage', server_id: server_id) do |cmd|
       cmd.string(:player, 'Specify your actual N++ / Steam player name so you can omit it in the future')
       cmd.string(:nickname, 'Specify your alternative display name, will be used in future output')
@@ -467,15 +464,17 @@ def register_command(cmd, update = false, server_id: nil)
       cmd.string(:mappack, 'Specify your default mappack (MET to restore to vanilla)')
     end
   when :screenshot
-    sig = 'str,str'
     $bot.register_application_command(:screenshot, 'Generate a screenshot', server_id: server_id) do |cmd|
-      cmd.string(:name, 'The level, episode or story ID or name', required: true)
+      cmd.string(:name, 'Name or ID of the level, episode, story or userlevel', required: true)
       cmd.string(:palette, 'Official palette to use')
+      cmd.string(:mappack, 'Search in this mappack')
+      cmd.boolean(:userlevel, 'Search in userlevels')
+      cmd.string(:author, 'Map author name or ID (userlevels only)')
     end
   end
-  succ("%s %s command: %s(%s)" % [update ? 'Updated' : 'Registered', server_id ? 'guild' : 'global', cmd, sig])
+  succ("%s %s command: %s" % [update ? 'Updated' : 'Registered', server_id ? 'guild' : 'global', cmd])
 rescue => e
-  lex(e, "Failed to %s %s command: %s(%s)" % [update ? 'update' : 'register', server_id ? 'guild' : 'global', cmd, sig])
+  lex(e, "Failed to %s %s command: %s" % [update ? 'update' : 'register', server_id ? 'guild' : 'global', cmd])
 end
 
 # Check that all commands are registered, and create any new ones
@@ -545,7 +544,7 @@ def respond_interaction_button(event)
     when 'nav'
       UserlevelAuthor.parse(event: event, page: keys[2])
     end
-  when 'browsing'
+  when 'browse'
     case keys[1]
     when 'nav'
       send_userlevel_browse(event, page: keys[2])
@@ -643,7 +642,11 @@ def respond_application_command(event)
   when :config
     send_config(event, **opt.symbolize_keys)
   when :screenshot
-    send_screenshot(event, id: opt['id'], palette: opt['palette'])
+    if opt['userlevel'] || opt['author']
+      send_userlevel_screenshot(event, **opt.symbolize_keys)
+    else
+      send_screenshot(event, **opt.symbolize_keys)
+    end
   else
     perror("Unrecognized application command.")
   end

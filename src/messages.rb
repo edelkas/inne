@@ -565,13 +565,18 @@ rescue => e
 end
 
 # Send a screenshot of a level/episode/story
-def send_screenshot(event, map = nil, ret: false, id: nil, palette: nil)
+def send_screenshot(event, map = nil, ret: false, name: nil, palette: nil, mappack: nil, **kwargs)
   # Parse message parameters
   msg     = parse_message(event)
   hash    = parse_palette(event, msg: palette)
   msg     = hash[:msg]
   palette = hash[:palette]
-  h       = map.nil? ? parse_highscoreable(event, mappack: true, msg: id) : map
+  if mappack
+    err_str = "No mappack found for #{verbatim(mappack)}"
+    mappack = parse_mappack(mappack, explicit: true, vanilla: false)
+    perror(err_str) if !mappack
+  end
+  h       = map.nil? ? parse_highscoreable(event, mappack: mappack || true, msg: name) : map
   version = msg[/v(\d+)/i, 1]
   channel = event.channel
   spoiler = parse_spoiler(msg, h, channel)

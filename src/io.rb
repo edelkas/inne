@@ -342,7 +342,7 @@ def parse_h_by_id_once(
     matches = [],   # Array to add the _normalized_ ID if found
     type:    Level, # Type of highscoreable ID
     vanilla: true,  # Whether to look for mappack IDs or regular ones
-    mappack: false, # Whether we allow mappacks or not
+    mappack: nil,   # Search in mappacks (truthy = all)
     dashed:  true   # Strict dashed IDs vs optionally-dashed IDs
   )
   # Parse selected pattern
@@ -365,7 +365,9 @@ def parse_h_by_id_once(
   if mappack
     res = type.mappack
               .joins('INNER JOIN `mappacks` ON `mappacks`.`id` = `mappack_id`')
-              .where("`mappacks`.`public` = 1").find_by(name: str)
+              .where("`mappacks`.`public` = 1")
+              .where(mappack.is_a?(Mappack) ? { mappack: mappack } : nil)
+              .find_by(name: str)
   else
     res = type.find_by(name: str)
   end
@@ -383,17 +385,17 @@ end
 #      even though it also fits the dashless level SU-A-1-5, because no such
 #      level exists).
 # 3) Then parse columns (no ambiguity as they don't have row letter).
-def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: false, type: nil, silent: false)
+def parse_highscoreable_by_id(msg, user = nil, channel = nil, mappack: nil, type: nil, silent: false)
   ret = ['', []]
 
   # Mappack variants, if allowed
   matches = []
   if mappack
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: true, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Level)
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: true, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Episode)
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: true, vanilla: false, dashed: false) if ret[1].empty? && (!type || type == Level)
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: true, vanilla: false, dashed: false) if ret[1].empty? && (!type || type == Episode)
-    ret = parse_h_by_id_once(msg, user, channel, matches, type: Story,   mappack: true, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Story)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: mappack, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Level)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: mappack, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Episode)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Level,   mappack: mappack, vanilla: false, dashed: false) if ret[1].empty? && (!type || type == Level)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Episode, mappack: mappack, vanilla: false, dashed: false) if ret[1].empty? && (!type || type == Episode)
+    ret = parse_h_by_id_once(msg, user, channel, matches, type: Story,   mappack: mappack, vanilla: false, dashed: true)  if ret[1].empty? && (!type || type == Story)
 
     # If there were ID matches, but they didn't exist, raise
     if ret[1].empty? && matches.size > 0
@@ -422,7 +424,7 @@ rescue
 end
 
 # Parse a highscoreable based on a "code" (e.g. lotd/eotw/cotm)
-def parse_highscoreable_by_code(msg, user = nil, channel = nil, mappack: false, type: nil)
+def parse_highscoreable_by_code(msg, user = nil, channel = nil, mappack: nil, type: nil)
   # Parse type
   lotd = !!msg[/(level of the day|lotd)/i]    && (!type || type == Level)
   eotw = !!msg[/(episode of the week|eotw)/i] && (!type || type == Episode)
@@ -433,7 +435,7 @@ def parse_highscoreable_by_code(msg, user = nil, channel = nil, mappack: false, 
   type = lotd ? 'level of the day' : eotw ? 'episode of the week' : 'column of the month'
 
   # Parse mappack (manually specified and default one)
-  pack = mappack ? parse_mappack(msg, user, channel) : nil
+  pack = mappack ? mappack.is_a?(Mappack) ? mappack : parse_mappack(msg, user, channel) : nil
   ctp = pack && pack.code.upcase == 'CTP'
   type.prepend(pack.code.upcase + ' ') unless pack.code.upcase == 'MET' if pack
   perror("There is no #{type}.") if pack && !pack.lotd
@@ -448,13 +450,14 @@ rescue
 end
 
 # Parse a highscoreable based on the name
-# 'mappack' specifies whether searching for mappack highscoreables is allowed, not enforced
-def parse_highscoreable_by_name(msg, user = nil, channel = nil, mappack: true, type: nil)
+# 'mappack' specifies whether searching for mappack highscoreables is allowed if
+# truthy, it can also be a Mappack itself
+def parse_highscoreable_by_name(msg, user = nil, channel = nil, mappack: nil, type: nil)
   # Only levels have names
   return ['', []] if name.empty? if type && type != Level
 
   # Extract elements from message
-  pack = mappack ? parse_mappack(msg, user, channel) : nil
+  pack = mappack ? mappack.is_a?(Mappack) ? mappack : parse_mappack(msg, user, channel) : nil
   klass = pack && pack.id != 0 ? MappackLevel.where(mappack: pack) : Level
   pack = pack && pack.id != 0 ? pack.code.upcase + ' ' : 'MET '
   name = msg.split("\n")[0][/(?:for|of) (.*)/i, 1].tr('"`:', '').strip
@@ -503,7 +506,7 @@ def parse_highscoreable(
     event,             # Event whose content contains the highscoreable to parse
     msg:        nil,   # String to parse, instead of the event content
     list:       false, # Force to print list, even if there's a single match
-    mappack:    false, # Search mappack highscoreables as well
+    mappack:    nil,   # Include mappack highscoreables (truthy = all mappacks)
     page:       0,     # Page offset when navigating list of matches
     vanilla:    true,  # Don't return Metanet highscoreables as MappackHighscoreable
     map:        false, # Force Metanet highscoreables to MappackHighscoreable
@@ -524,7 +527,7 @@ def parse_highscoreable(
   # Parse other useful elements (for user defaults)
   user = parse_user(event.user)
   channel = event.channel
-  pack = mappack ? parse_mappack(msg, user, channel) : nil
+  pack = mappack ? mappack.is_a?(Mappack) ? mappack : parse_mappack(msg, user, channel) : nil
   ret = ['', []]
 
   # Search for highscoreable according to different criteria
@@ -864,7 +867,7 @@ end
 
 # Parse a userlevel from a message by looking for a title or an ID, as well as
 # an author or author ID, optionally.
-def parse_userlevel(event, userlevel = nil)
+def parse_userlevel(event, userlevel = nil, msg: nil)
   # --- PARSE message elements
   return {
     query:  userlevel,
@@ -874,7 +877,7 @@ def parse_userlevel(event, userlevel = nil)
     author: userlevel.author.name.to_s
   } if userlevel
 
-  msg = parse_message(event)
+  msg ||= parse_message(event)
   title, author, msg = parse_title_and_author(msg, true)
   author = UserlevelAuthor.parse(author, event: event)
 
