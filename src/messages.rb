@@ -2323,6 +2323,71 @@ def send_tip(event, page: nil)
   send_message(event, content: str, components: components)
 end
 
+# Configure the settings for a user
+def send_config(event, **options)
+  user = parse_user(event.user)
+  msgs = []
+
+  # Parse player name
+  if player_name = options[:player]
+    player = parse_player_explicit(player_name, rais: false)
+    if !player
+      msgs << [:bad, "Player by the name #{verbatim(player_name)} not found"]
+    else
+      user.update(player: player)
+      msgs << [:good, "You are now identified as #{verbatim(player.name)}"]
+    end
+  end
+
+  # Parse display name
+  if display_name = options[:nickname]
+    if !user.player
+      msgs << [:bad, "I don't know who you are, you need to specify the `player` as well"]
+    else
+      user.player.update(display_name: display_name)
+      msgs << [:good, "Your name will now show as #{verbatim(display_name)}"]
+    end
+  end
+
+  # Parse default palette
+  if palette = options[:palette]
+    begin
+      palette = parse_palette(event, pal: palette, fallback: false)[:palette]
+    rescue OutteError => e
+      msgs << [:bad, e.message.strip]
+    else
+      user.update(palette: palette)
+      msgs << [:good, "Your default palette is now #{verbatim(palette)}"]
+    end
+  end
+
+  # Parse default mappack
+  if pack = options[:mappack]
+    mappack = parse_mappack(pack, explicit: true, vanilla: false)
+    if mappack.nil?
+      msgs << [:bad, "Mappack #{verbatim(pack)} not recognized"]
+    else
+      met = mappack.id == 0
+      user.update(
+        mappack_id:             mappack.id,
+        mappack_defaults:       !met,
+        mappack_default_always: !met,
+        mappack_default_dms:    !met
+      )
+      msgs << [:good, "Your default mappack is now #{verbatim(mappack.name)}"]
+    end
+  end
+
+  errors = msgs.count{ |status, msg| status == :bad }
+  str = "🔧 Changed your configuration" + (errors > 0 ? " with #{errors} errors" : '!')
+  msgs.each{ |status, msg|
+    str << "\n-# " << (status == :good ? '✅' : '❌') << ' ' << msg
+  }
+  send_message(event, content: str)
+rescue => e
+  lex(e, 'Failed to change configuration', event: event)
+end
+
 # Handle responses to new reactions
 def respond_reaction(event)
   # Only have tasks for reactions to outte messages

@@ -458,6 +458,14 @@ def register_command(cmd, update = false, server_id: nil)
       cmd.string(:order, 'Order of the results', choices: { 'Date' => 'date', 'Title' => 'title', '++\'s' => 'favs' })
       cmd.boolean(:reverse, 'Reverse ordering')
     end
+  when :config
+    sig = 'str,str,str,str'
+    $bot.register_application_command(:config, 'Configure your outte++ usage', server_id: server_id) do |cmd|
+      cmd.string(:player, 'Specify your actual N++ / Steam player name so you can omit it in the future')
+      cmd.string(:nickname, 'Specify your alternative display name, will be used in future output')
+      cmd.string(:palette, 'Specify your default palette to use in screenshots, traces and animations')
+      cmd.string(:mappack, 'Specify your default mappack (MET to restore to vanilla)')
+    end
   when :screenshot
     sig = 'str,str'
     $bot.register_application_command(:screenshot, 'Generate a screenshot', server_id: server_id) do |cmd|
@@ -632,6 +640,8 @@ def respond_application_command(event)
   case event.command_name
   when :browse
     send_userlevel_browse(event, **opt.symbolize_keys)
+  when :config
+    send_config(event, **opt.symbolize_keys)
   when :screenshot
     send_screenshot(event, id: opt['id'], palette: opt['palette'])
   else

@@ -182,7 +182,7 @@ end
 
 # The following are 2 auxiliary functions for the next ones
 #   Parse a single player when a name has been provided
-def parse_player_explicit(name, userlevel = false)
+def parse_player_explicit(name, userlevel = false, rais: true)
   return nil if name.strip.empty?
 
   # Check if player with this name exists
@@ -198,7 +198,8 @@ def parse_player_explicit(name, userlevel = false)
   end
 
   # No results
-  perror("#{name} doesn't have any high scores! Either you misspelled the name / alias, or they're exceptionally bad...")
+  perror("#{name} doesn't have any high scores! Either you misspelled the name / alias, or they're exceptionally bad...") if rais
+  nil
 end
 
 #   Parse a single player when a username has been provided
