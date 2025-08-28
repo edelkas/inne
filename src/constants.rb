@@ -119,7 +119,7 @@ WIDTH_KANJI = 1.67
 SERVER_WHITELIST = [SERVER_ID, TEST_SERVER_ID]
 
 # Application commands
-SUPPORTED_COMMANDS = [:browse, :config, :screenshot]
+SUPPORTED_COMMANDS = [:browse, :config, :download, :screenshot]
 DISABLED_COMMANDS = []
 
 # Emoji stuff

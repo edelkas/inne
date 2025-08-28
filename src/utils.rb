@@ -920,8 +920,13 @@ def cplural(word, n, pad = false)
   "%-#{pad}s" % word
 end
 
-def clean_userlevel_message(msg)
-  msg.sub(/(for|of)?\w*userlevel\w*/i, '').squish
+# Run this function immediately after calling a userlevel function to clean
+# some of the terms from the message
+def clean_userlevel_message(event, words = [])
+  msg = parse_message(event)
+  msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
+  words.each{ |word| msg.sub!(/\w*#{word}\w*/i, '') }
+  msg.squish!
 end
 
 # Removes the first instance of a substring and removes extra spaces

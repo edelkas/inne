@@ -463,6 +463,15 @@ def register_command(cmd, update = false, server_id: nil)
       cmd.string(:palette, 'Specify your default palette to use in screenshots, traces and animations')
       cmd.string(:mappack, 'Specify your default mappack (MET to restore to vanilla)')
     end
+  when :download
+    $bot.register_application_command(:download, 'Download a level, userlevel or replay', server_id: server_id) do |cmd|
+      cmd.string(:name, 'Name or ID of the level or userlevel', required: true)
+      cmd.integer(:rank, 'Rank of the score, to download the replay')
+      cmd.string(:board, 'The leaderboard mode (mappack replays only)', choices: { 'Speedrun' => 'sr', 'Highscore' => 'hs' })
+      cmd.string(:mappack, 'The mappack the level belongs to')
+      cmd.boolean(:userlevel, 'Whether the level is a userlevel or not')
+      cmd.string(:author, 'Map author name or ID (userlevels only)')
+    end
   when :screenshot
     $bot.register_application_command(:screenshot, 'Generate a screenshot', server_id: server_id) do |cmd|
       cmd.string(:name, 'Name or ID of the level, episode, story or userlevel', required: true)
@@ -641,6 +650,20 @@ def respond_application_command(event)
     send_userlevel_browse(event, **opt.symbolize_keys)
   when :config
     send_config(event, **opt.symbolize_keys)
+  when :download
+    if opt['userlevel'] || opt['author']
+      if opt['rank']
+        send_userlevel_demo_download(event, **opt.symbolize_keys)
+      else
+        send_userlevel_download(event, **opt.symbolize_keys)
+      end
+    else
+      if opt['rank']
+        send_demo_download(event, **opt.symbolize_keys)
+      else
+        send_download(event, **opt.symbolize_keys)
+      end
+    end
   when :screenshot
     if opt['userlevel'] || opt['author']
       send_userlevel_screenshot(event, **opt.symbolize_keys)

@@ -1088,8 +1088,18 @@ end
 #   3) If there are multiple matches, execute the browse function
 # We pass in the msg (instead of extracting it from the event)
 # because it might've been modified by the caller function already.
-def send_userlevel_individual(event, msg = nil, userlevel = nil, &block)
+def send_userlevel_individual(event, msg = nil, userlevel = nil, name: nil, author: nil, &block)
+  # If we have specific name / author arguments (likely coming from a slash command),
+  # we craft a regular command string and use that parse the userlevel from it.
+  # A bit hacky, but that way we can reuse what we already had.
+  if name || author
+    level_id  = name.to_i   if is_num(name)   && name.to_i   >= 22715
+    author_id = author.to_i if is_num(author) && author.to_i >=  1000
+    msg =  (level_id  ? "for #{level_id}"  : name   ? "for \"#{name.tr('"', '')}\""   : '')
+    msg << (author_id ? " by #{author_id}" : author ? " by \"#{author.tr('"', '')}\"" : '')
+  end
   map = parse_userlevel(event, userlevel, msg: msg)
+
   case map[:count]
   when 0
     send_message(event, content: map[:msg])
@@ -1100,42 +1110,42 @@ def send_userlevel_individual(event, msg = nil, userlevel = nil, &block)
   end
 end
 
-def send_userlevel_demo_download(event)
-  msg = parse_message(event)
-  msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
-  msg.sub!(/\w*download\w*/i, '')
-  msg.sub!(/\w*replay\w*/i, '')
-  msg.squish!
-  send_userlevel_individual(event){ |map|
-    map[:query].update_scores
-    rank  = [parse_range(msg).first, map[:query].scores.size - 1].min
-    score = map[:query].scores[rank]
-    perror("This userlevel has no scores.") if !score
-
+def send_userlevel_demo_download(event, name: nil, author: nil, rank: nil, **kwargs)
+  clean_userlevel_message(event, ['download', 'replay'])
+  send_userlevel_individual(event, name: name, author: author){ |map|
+    msg = parse_message(event)
+    scores = map[:query].scores
+    perror("There are no scores for this userlevel") if scores.empty?
+    rank ||= parse_range(msg).first
+    perror("The rank must be between 0 and #{scores.size - 1} for this board") if !rank.between?(0, scores.size - 1)
+    score = scores[rank]
     output = "Downloading #{rank.ordinalize} score by `#{score.player.name}` "
     output += "(#{"%.3f" % [score.score / 60.0]}) in userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
     output += "from #{verbatim(map[:query].date.strftime('%F'))}"
-    event << format_header(output)
-    send_file(event, Demo.encode(score.demo), "#{map[:query].id}_#{rank}", true)
+    send_message(
+      event,
+      content: format_header(output),
+      files: [tmp_file(Demo.encode(score.demo), "#{map[:query].id}_#{rank}", binary: true)]
+    )
   }
 rescue => e
   lex(e, 'Error fetching userlevel demo download.', event: event)
 end
 
-def send_userlevel_download(event)
-  msg = parse_message(event)
-  msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
-  msg.sub!(/\w*download\w*/i, '')
-  msg.squish!
-  send_userlevel_individual(event){ |map|
+def send_userlevel_download(event, name: nil, author: nil, **kwargs)
+  clean_userlevel_message(event, ['download'])
+  send_userlevel_individual(event, name: name, author: author){ |map|
     output = "Downloading userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
     output += "by #{verbatim(map[:query].author.name)} "
     output += "from #{verbatim(map[:query].date.strftime('%F'))}"
-    event << format_header(output)
-    send_file(event, map[:query].dump_level, map[:query].id.to_s, true)
+    send_message(
+      event,
+      content: format_header(output),
+      files: [tmp_file(map[:query].dump_level, map[:query].id.to_s, binary: true)]
+    )
   }
 rescue => e
   lex(e, 'Error fetching userlevel download.', event: event)
@@ -1145,14 +1155,9 @@ end
 # This is used e.g. by the random userlevel function
 def send_userlevel_screenshot(event, userlevel = nil, name: nil, author: nil, palette: nil, **kwargs)
   # Craft message from parameters received if we come from a slash command
+  clean_userlevel_message(event, ['screenshot'])
   h = parse_palette(event, msg: palette ? "palette \"#{palette}\"" : nil)
-  if name || author
-    level_id  = name.to_i   if is_num(name)   && name.to_i   >= 22715
-    author_id = author.to_i if is_num(author) && author.to_i >=  1000
-    msg =  (level_id  ? "for #{level_id}"  : name   ? "for \"#{name.tr('"', '')}\""   : '')
-    msg << (author_id ? " by #{author_id}" : author ? " by \"#{author.tr('"', '')}\"" : '')
-  end
-  send_userlevel_individual(event, msg, userlevel){ |map|
+  send_userlevel_individual(event, nil, userlevel, name: name, author: author){ |map|
     output = "#{h[:error]}"
     output += "Screenshot for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
@@ -1168,12 +1173,9 @@ rescue => e
 end
 
 def send_userlevel_scores(event)
-  msg = parse_message(event)
-  msg.sub!(/(for|of)?\w*userlevel\w*/i, '')
-  msg.sub!(/\w*scores\w*/i, '')
-  msg.squish!
+  clean_userlevel_message(event, ['scores'])
   frac = false # parse_frac(msg)
-  send_userlevel_individual(event, msg){ |map|
+  send_userlevel_individual(event){ |map|
     map[:query].update_scores if !OFFLINE_STRICT
     output = "#{format_frac(frac)} scores for userlevel #{verbatim(map[:query].title)} "
     output += "with ID #{verbatim(map[:query].id.to_s)} "
@@ -1669,10 +1671,8 @@ def send_userlevel_trace(event)
   wait_msg = send_message(event, content: 'Queued...', db: false) if $mutex[:trace].locked?
   $mutex[:trace].synchronize do
     wait_msg.delete if !wait_msg.nil? rescue nil
-    parse_message(event).sub!(/user\s*level/i, '')
-    parse_message(event).squish!
-    msg = parse_palette(event)[:msg]
-    send_userlevel_individual(event, msg){ |map|
+    clean_userlevel_message(event)
+    send_userlevel_individual(event){ |map|
       Map.trace(event, anim: !!parse_message(event)[/anim/i], h: map[:query])
     }
   end

@@ -571,12 +571,9 @@ def send_screenshot(event, map = nil, ret: false, name: nil, palette: nil, mappa
   hash    = parse_palette(event, msg: palette)
   msg     = hash[:msg]
   palette = hash[:palette]
-  if mappack
-    err_str = "No mappack found for #{verbatim(mappack)}"
-    mappack = parse_mappack(mappack, explicit: true, vanilla: false)
-    perror(err_str) if !mappack
-  end
-  h       = map.nil? ? parse_highscoreable(event, mappack: mappack || true, msg: name) : map
+  pack    = mappack ? parse_mappack(mappack, explicit: true, vanilla: false) : true
+  perror("No mappack found for #{verbatim(mappack)}") if !pack
+  h       = map.nil? ? parse_highscoreable(event, mappack: pack, msg: name) : map
   version = msg[/v(\d+)/i, 1]
   channel = event.channel
   spoiler = parse_spoiler(msg, h, channel)
@@ -1445,23 +1442,40 @@ rescue => e
   lex(e, "Error performing demo analysis.", event: event)
 end
 
-def send_demo_download(event)
+def send_demo_download(event, name: nil, mappack: nil, rank: nil, board: nil, **kwargs)
   msg   = parse_message(event)
-  h     = parse_highscoreable(event)
+  pack = mappack ? parse_mappack(mappack, explicit: true, vanilla: false) : true
+  perror("No mappack found for #{verbatim(mappack)}") if !pack
+  h = parse_highscoreable(event, mappack: pack, msg: name)
   perror("Downloading this replay is disabled, figure it out yourself!") if h.is_protected?
-  rank  = [parse_range(msg).first, h.scores.size - 1].min
-  score = h.scores[rank]
-  event << "Downloading #{score.player.name}'s #{rank.ordinalize} score in #{h.name} (#{"%.3f" % [score.score]}):"
-  send_file(event, score.demo.demo, "#{h.name}_#{rank.ordinalize}_replay", true)
+  perror("Speedrun mode isn't supported for Metanet levels") if !h.is_mappack? && board == 'sr'
+  board ||= 'hs'
+  scores = h.leaderboard(board, truncate: 0, pluck: false)
+  perror("There are no scores for this #{h.class.vanilla.downcase}") if scores.empty?
+  rank ||= parse_range(msg).first
+  perror("The rank must be between 0 and #{scores.size - 1} for this board") if !rank.between?(0, scores.size - 1)
+  score = scores[rank]
+  scale = h.is_mappack? && board == 'hs' ? 60.0 : 1
+  fscore = (board == 'hs' ? '%.3f' : '%df') % [h.is_mappack? ? score["score_#{board}"] / scale : score.score]
+  send_message(
+    event,
+    content: "Downloading #{score.player.name}'s #{rank.ordinalize} score in #{h.name} (#{fscore}):",
+    files: [tmp_file(score.demo.demo, "#{h.name}_#{rank.ordinalize}_replay", binary: true)]
+  )
 rescue => e
   lex(e, "Error downloading demo.", event: event)
 end
 
-def send_download(event)
-  h   = parse_highscoreable(event, mappack: true, map: true)
+def send_download(event, name: nil, mappack: nil, **kwargs)
+  pack = mappack ? parse_mappack(mappack, explicit: true, vanilla: false) : true
+  perror("No mappack found for #{verbatim(mappack)}") if !pack
+  h = parse_highscoreable(event, mappack: pack, msg: name, map: true)
   perror("Only levels can be downloaded") if !h.is_level?
-  event << "Downloading #{h.format_name}:"
-  send_file(event, h.dump_level, h.name, true)
+  send_message(
+    event,
+    content: "Downloading #{h.format_name}:",
+    files: [tmp_file(h.dump_level, h.name, binary: true)]
+  )
 rescue => e
   lex(e, "Error preparing downloading.", event: event)
 end

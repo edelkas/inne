@@ -1233,8 +1233,8 @@ module Highscoreable
   # Format a dual leaderboard for printing
   def format_scores_dual(np: 0, sp: 0, ranks: 20.times.to_a, full: false, cools: true, stars: true, cheated: false, frac: false, dev: true, prec: -1, flags: true, date: nil)
     # Fetch scores
-    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags, date: date)
-    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: flags, date: date)
+    board_hs = format_scores_single('hs', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: false, date: date)
+    board_sr = format_scores_single('sr', np: np, sp: sp, ranks: ranks, full: full, cools: cools, stars: stars, cheated: cheated, frac: frac, dev: dev, prec: prec, flags: false, date: date)
     size = [board_hs.size, board_sr.size].max
     return [] if size == 0
 
