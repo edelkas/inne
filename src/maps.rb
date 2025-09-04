@@ -1895,13 +1895,15 @@ module Map
   # which is more than an N++ palette.
   def self.init_gct(palette_idx)
     # Include all of the palette's colors
+    # Note: Due to a Discord encoding bug, we must keep the transparent color
+    #       at index 0 in the palette.
     palette = PALETTE.row(palette_idx).map{ |c| c >> 8 }
-    table = Gifenc::ColorTable.new(palette.uniq)
+    table = Gifenc::ColorTable.new([TRANSPARENT_COLOR >> 8])
+    table.add(*palette.uniq)
 
-    # Add the inverted ninja colors, and a rare color to use for transparency
-    inverted = palette[OBJECTS[0][:pal], 4].map{ |c| c ^ 0xFFFFFF }
+    # Add the inverted ninja colors
+    inverted = palette[OBJECTS[ID_NINJA][:pal], 4].map{ |c| c ^ 0xFFFFFF }
     table.add(*inverted)
-    table.add(TRANSPARENT_COLOR >> 8)
 
     # Remove duplicates and empty slots from table
     table.simplify
