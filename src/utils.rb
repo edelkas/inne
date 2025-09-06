@@ -385,7 +385,7 @@ def get_data(type, fast: false, **args)
 
   # Try to find a new authenticated player
   Player.where.not(steam_id: nil).where(fast ? { active: true } : nil ).each{ |player|
-    if res = player.send_request(type, args: args, auth: false, silent: true)
+    if res = player.send_request(type, args: args, auth: true, silent: true)
       GlobalProperty.set_current_player(player)
       return res
     end

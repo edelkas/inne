@@ -1035,7 +1035,7 @@ class SteamTicket < ActiveRecord::Base
 
   # Dump ticket in ASCII
   def ascii
-    ticket.unpack('H*')
+    ticket.unpack1('H*').upcase
   end
 
   # Refresh the token of this ticket. If expired, generates a fresh ticket altogether.

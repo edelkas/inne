@@ -2583,7 +2583,7 @@ class Player < ActiveRecord::Base
 
     # Unauthenticated
     if res.body.to_s == METANET_INVALID_RES
-      warn("Player #{name} (#{metanet_id}) is not authenticated") unless silent
+      alert("Player #{name} (#{metanet_id}) is not authenticated") unless silent
       if !auth || !authenticate
         perror("You seem to be unauthenticated, please open N++") if discord
         return false
