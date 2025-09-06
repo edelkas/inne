@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = true  # Switch to the local test bot
+TEST           = false # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = false # Execute all threads
+DO_EVERYTHING  = true  # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -169,8 +169,10 @@ LOG_SHELL       = false # Redirect STDOUT/STDERR to outte when we call the shell
 
 # Log format (can be set on the fly as well)
 LOG_FANCY      = true    # Use rich terminal logs (bold, colors...)
-LOG_LEVEL      = TEST ? :debug : :normal # Default terminal logging level
+LOG_LEVEL_STD  = :normal # Standard log level
+LOG_LEVEL_TEST = :debug  # Log level when testing
 LOG_LEVEL_FILE = :quiet  # Default file logging level (see Log class)
+LOG_LEVEL      = TEST ? LOG_LEVEL_TEST : LOG_LEVEL_STD # Default terminal logging level
 LOG_APPS       = false   # Append source app to log msgs
 LOG_PAD        = 120     # Pad each log line to this many chars
 LOG_BACKTRACES = true    # Log exception backtraces
@@ -891,7 +893,8 @@ HACKERS = {
   336069 => ["Progressively idle"],
   353512 => ["Dragon_V.V"],
   357282 => ["MX_Er3P"],
-  401089 => ["Haidi"]
+  401089 => ["Haidi"],
+  409973 => ["outte++2"]
 }
 
 CHEATERS = {

@@ -257,6 +257,7 @@ module Scheduler extend self
     task = Task.new(name, db: db, log: log, &block)
     job = Job.new(task, force: force, freq: freq, time: time)
     @@jobs << job
+    dbg("Scheduled job [#{name}] with frequency #{freq} and start time [#{time ? time : 'now'}]")
   end
 
   # Getters
