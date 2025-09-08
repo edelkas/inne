@@ -284,8 +284,9 @@ try:
         client.run(USERNAME, PASSWORD)
     else:
         warn("No valid login credentials found, supply them via refresh token or username and password.")
-        raise SystemExit(1)
+        raise SystemExit(ExitCode.NO_CREDENTIALS.value)
 except* steam.gateway.ConnectionClosed:
     pass
 finally:
-    asyncio.run(client.http.close()) # Close HTTP session
+    if not client.is_closed():
+        asyncio.run(client.http.close()) # Close HTTP session

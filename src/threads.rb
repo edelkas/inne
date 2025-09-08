@@ -699,7 +699,7 @@ def send_channel_next(channel, type, ctp: false, save: true)
   date = GlobalProperty.get_saved_scores(type, ctp)
   if last.nil? || date.nil?
     caption2 = "There was no previous #{ctp ? 'CTP ' : ''}#{type_n} of the #{period}."
-  elsif !OFFLINE_STRICT || ctp
+  else
     diff = last.format_difference(date, 'dual')
     caption2 = last.format_difference_message(diff, date, past: true)
   end
