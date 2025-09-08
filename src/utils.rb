@@ -220,7 +220,7 @@ module Log extend self
     log_to_file    = LOG_TO_FILE    && file    && @modes_file.include?(mode)
     log_to_discord = LOG_TO_DISCORD && discord
     return text if !log_to_console && !log_to_file && !log_to_discord && !event
-    text = text.to_s
+    text = text.to_s.scrub('')
 
     # Normalize parameters
     fancy = @fancy if ![true, false].include?(fancy)
@@ -376,21 +376,36 @@ end
 #   :replay => Download raw demo data (binary, zlibbed)
 #   :levels => Download a userlevel page (binary)
 #   :search => Download a page of searched userlevels (idem)
-def get_data(type, fast: false, **args)
-  # Attempt to perform request with currently stored player
-  player = GlobalProperty.get_current_player
-  res = player.send_request(type, args: args, auth: false, silent: true)
-  return res if res
-  attempts = 0
+# Arguments:
+#   fast: Only try players that have been active in the last week
+#   auth: Only try players for whom we have steam auth tickets saved
+def get_data(type, fast: false, auth: true, **args)
+  # Proc to perform request for a specific player
+  request = Proc.new{ |player|
+    res = player.send_request(type, args: args, auth: true, silent: true)
+    next res if !res
+    GlobalProperty.set_current_player(player)
+    return res
+  }
 
-  # Try to find a new authenticated player
-  Player.where.not(steam_id: nil).where(fast ? { active: true } : nil ).each{ |player|
-    if res = player.send_request(type, args: args, auth: true, silent: true)
-      GlobalProperty.set_current_player(player)
-      return res
-    end
+  # Attempt to perform request with:
+  #   1) Last valid player
+  #   2) Default player for requests
+  #   3) Any other player we have auth info for
+  request[player = GlobalProperty.get_current_player]
+  request[Player.find_by(steam_id: DATA_STEAM_ID)] if player.steam_id != DATA_STEAM_ID
+  attempts = 0
+  if auth
+    players = Player.joins("INNER JOIN `steam_tickets` ON `steam_tickets`.`steam_id` = `players`.`steam_id`").order(date: :desc)
+  else
+    players = Player.where.not(steam_id: nil).where(fast ? { active: true } : nil ).order(last_active: :desc)
+  end
+  players.each{ |player|
+    res = request[player]
     (attempts += 1) < RETRIES ? redo : return if res.nil?
   }
+
+  # Request failed
   nil
 rescue => e
   lex(e, "Failed to GET #{type}")

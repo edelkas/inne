@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = false # Switch to the local test bot
+TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = true  # Execute all threads
+DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -575,6 +575,7 @@ OUTTE_ID            = 361131     # outte's N++ player ID
 OUTTE2_ID           = 409973     # outte's secondary N++ player
 OUTTE_STEAM_ID      = '76561199562076498'
 OUTTE2_STEAM_ID     = '76561199880867518'
+DATA_STEAM_ID       = OUTTE2_STEAM_ID # ID we use to perform the server queries
 MIN_REPLAY_ID       = 131072     # Minimum replay ID for the game to perform the HTTP request
 MAGIC_EPISODE_VALUE = 0xffc0038e # First 4 bytes of a decompressed episode replay
 MAGIC_STORY_VALUE   = 0xff3800ce # First 4 bytes of a decompressed story replay

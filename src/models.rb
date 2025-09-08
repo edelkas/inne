@@ -2529,7 +2529,7 @@ class Player < ActiveRecord::Base
       app_id:     APP_ID,
       user_id:    metanet_id,
       steam_id:   steam_id,
-      steam_auth: auth && ticket && !ticket.expired? ? ticket.ascii : ''
+      steam_auth: ticket && !ticket.expired? ? ticket.ascii : ''
     }.merge(args)
     uri = npp_uri(type, steam_id, **args)
 
