@@ -619,7 +619,7 @@ def update_userlevel_data
     prop = GlobalProperty.find_or_create_by(key: "current_page_#{MODES[mode]}")
     page = prop.value.to_i + 1
     more = Userlevel.parse(Userlevel.get_levels(QT_NEWEST, page, mode))
-    prop.update(value: more ? page : 0)
+    prop.update(value: more ? page : more.nil? ? page - 1 : 0)
     dbg("Updated userlevel page #{page} of mode #{mode}")
   }
 end

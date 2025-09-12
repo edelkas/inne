@@ -109,33 +109,38 @@ module Log extend self
     "#{BOLD}#{str}#{RESET}"
   end
 
+  def inf(str)
+    dbg(str)
+    str
+  end
+
   def level(l)
-   return dbg("Logging level #{l} does not exist") if !LEVELS.key?(l)
+   return inf("Logging level #{l} does not exist") if !LEVELS.key?(l)
     @modes = LEVELS[l]
-    dbg("Changed logging level to #{l.to_s}")
+    inf("Changed logging level to #{l.to_s}")
   rescue
-    dbg("Failed to change logging level")
+    inf("Failed to change logging level")
   end
 
   def fancy
     @fancy = !@fancy
-    @fancy ? dbg("Enabled fancy logs") : dbg("Disabled fancy logs")
+    @fancy ? inf("Enabled fancy logs") : inf("Disabled fancy logs")
   rescue
-    dbg("Failed to change logging fanciness")
+    inf("Failed to change logging fanciness")
   end
 
   def socket
     $log[:socket] = !$log[:socket]
-    $log[:socket] ? dbg("Enabled socket logs") : dbg("Disabled socket logs")
+    $log[:socket] ? inf("Enabled socket logs") : inf("Disabled socket logs")
   rescue
-    dbg("Failed to change socket logging")
+    inf("Failed to change socket logging")
   end
 
   def set_modes(modes)
     @modes = modes.select{ |m| MODES.key?(m) }
-    dbg("Set logging modes to #{@modes.join(', ')}.")
+    inf("Set logging modes to #{@modes.join(', ')}.")
   rescue
-    dbg("Failed to set logging modes")
+    inf("Failed to set logging modes")
   end
 
   def change_modes(modes)
@@ -154,9 +159,9 @@ module Log extend self
     ret = []
     ret << "added logging modes #{added.join(', ')}" if !added.empty?
     ret << "removed logging modes #{removed.join(', ')}" if !removed.empty?
-    dbg(ret.join("; ").capitalize)
+    inf(ret.join("; ").capitalize)
   rescue
-    dbg("Failed to change logging modes")
+    inf("Failed to change logging modes")
   end
 
   def modes
@@ -751,7 +756,7 @@ end
 
 # Execute a python script
 def python(cmd, stream: LOG_SHELL, output: false, fast: false)
-  shell("#{fast ? 'pypy3' : 'python3'} #{cmd}", stream: stream, output: output)
+  shell("#{fast ? 'pypy3' : 'python'} #{cmd}", stream: stream, output: output)
 rescue => e
   lex(e, "Failed to run Python script.")
   nil
