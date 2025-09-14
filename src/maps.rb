@@ -2185,7 +2185,7 @@ module Map
     end
 
     return nil if !res
-    file ? tmp_file(res, filename, binary: true) : res
+    file ? tmp_file(res, filename, binary: true, embed: true) : res
   rescue => e
     lex(e, "Failed to generate screenshot")
     nil

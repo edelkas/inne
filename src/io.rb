@@ -1383,12 +1383,13 @@ def format_header(header, close: ':', upcase: true, rich: false)
   header += close if close
 end
 
-def tmp_filename(name)
-  File.join(Dir.tmpdir, name)
+def tmp_filename(name, embed: false)
+  new_name = embed ? sanitize_filename_embed(name) : sanitize_filename(name)
+  File.join(Dir.tmpdir, new_name)
 end
 
-def tmp_file(data, name = 'result.txt', binary: false, file: true)
-  tmpfile = tmp_filename(name)
+def tmp_file(data, name = 'result.txt', binary: false, file: true, embed: false)
+  tmpfile = tmp_filename(name, embed: embed)
   File::open(tmpfile, binary ? 'wb' : 'w', crlf_newline: !binary) do |f|
     f.write(data)
   end
@@ -1398,7 +1399,7 @@ end
 def send_file(event, data, name = 'result.txt', binary = false, spoiler = false)
   return nil if data.nil?
   name.prepend('SPOILER_') if spoiler
-  event.attach_file(tmp_file(data, sanitize_filename(name), binary: binary))
+  event.attach_file(tmp_file(data, name, binary: binary))
 end
 
 # Log the main aspects of a message to the terminal right after sending it to Discord
