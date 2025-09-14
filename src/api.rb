@@ -936,8 +936,9 @@ class SteamTicket < ActiveRecord::Base
     path << " -f #{file}"     if file
     dbg("Requesting new Steam ticket for #{app_id}...")
     stdout, stderr, status = python(path, output: true)
-    err("Steam credentials expired or unavailable", discord: true) if status.exitstatus == EXIT_NO_CREDENTIALS
-    return nil if !status.success? || stdout.blank?
+    return if status.nil?
+    return err("Steam credentials expired or unavailable", discord: true) if status.exitstatus == EXIT_NO_CREDENTIALS
+    return if !status.success? || stdout.blank?
     add_ascii(stdout.strip)
   end
 

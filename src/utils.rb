@@ -756,7 +756,9 @@ end
 
 # Execute a python script
 def python(cmd, stream: LOG_SHELL, output: false, fast: false)
-  shell("#{fast ? 'pypy3' : 'python'} #{cmd}", stream: stream, output: output)
+  interpreter = fast ? $tools[:python_fast] : $tools[:python]
+  return err("No #{fast ? 'fast ' : ''}Python interpreter found") if !interpreter
+  shell("#{interpreter} #{cmd}", stream: stream, output: output)
 rescue => e
   lex(e, "Failed to run Python script.")
   nil

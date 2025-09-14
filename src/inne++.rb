@@ -167,6 +167,7 @@ def initialize_vars
   $c_inne          = !!defined?(C_INNE)
   $mutex           = { trace: Mutex.new, nsim: Mutex.new, tmp_msg: Mutex.new }
   $log             = { socket: SOCKET_LOG }
+  $tools           = { python: nil }
   $threads         = []
   $threads_tmp     = {}
   $main_queue      = Queue.new
@@ -181,6 +182,11 @@ def initialize_vars
     markers: [],
     texts:   []
   }
+
+  # Find Python interpreter
+  $tools[:python] = ['python', 'python3'].find{ |s| system("#{s} --version > /dev/null 2>&1") }
+  alert("No Python interpreter found, some features will not work.") if !$tools[:python]
+  $tools[:python_fast] = ['pypy', 'pypy3'].find{ |s| system("#{s} --version > /dev/null 2>&1") }
 
   # Set environment variables
   ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
