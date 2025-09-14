@@ -606,18 +606,13 @@ module Downloadable
     end
   end
 
+  # Download and save the scores for the highscoreable. Returns nil in case of failure.
   def update_scores(fast: false)
     updated = get_scores(fast: fast)
-
-    if updated.nil?
-      err("Failed to download scores for #{self.class.to_s.downcase} #{self.id}") if LOG_DOWNLOAD_ERRORS
-      return -1
-    end
-
-    save_scores(updated)
+    return save_scores(updated) if updated
+    err("Failed to download scores for #{self.class.to_s.downcase} #{self.id}") if LOG_DOWNLOAD_ERRORS
   rescue => e
     lex(e, "Error updating database with #{self.class.to_s.downcase} #{self.id}: #{e}")
-    return -1
   end
 
   # Update how many completions this highscoreable has, by downloading the scores
