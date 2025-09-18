@@ -1,3 +1,5 @@
+- For average lead rankings, filter players based on number of 0ths, not total scores, otherwise a player with 1 0th can easily top them
+- Change all occurrence of concurrent_edit by TmpMsg
 - Compute stars and cools on the fly when using archives.
 - Add dupe player removal in sanitization function, this requires carefully adjusting the player_id of the removed players in all tables that refer to it.
 - Add color diffs when navigating scores, and ability to specify date when querying scores.
@@ -110,7 +112,17 @@ Perhaps we should look into using acquire_connection (and release_connection) in
 
 \\ ------------------------ speedrun api ------------------------
 
+\\ ------------------------ slash commands ----------------------
 
+- User-specific commands:
+    * Global userlevel summary (both highscoring and mapping). Add some additional features here and format nicely (table, colors, headers, etc).
+    * Stats.
+    * Table.
+    * Separate function for histogram and other kinds of graphs.
+    * Some kind of history function?
+- Message-specific commands:
+    * Re-run command (even if it didn't contain an outte ping).
+    * Delete msg (if the usual conditions are met).
 
 \\ ------------------------ mappacks -----------------------
 
