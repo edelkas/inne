@@ -1508,6 +1508,16 @@ class MappackScore < ActiveRecord::Base
     return
   end
 
+  # Generate an attract file with this map and replay
+  def dump_attract(silent: false)
+    map_data = highscoreable.dump_level(query: true)
+    demo_data = dump_demo
+    [map_data.size, demo_data.size, map_data, demo_data].pack('L<2a*a*')
+  rescue => e
+    lex(e, "Failed to dump attract file with ID #{id}") unless silent
+    return
+  end
+
   # Perform cleanup after destroying a score (delete demo, and update ranks if necessary)
   def cleanup
     # Demo is deleted automatically by the :dependent option

@@ -885,7 +885,7 @@ module Map
     # Header params (the rest are left unset)
     mode      = is_mappack? ? self.mode      : Userlevel.modes[self.mode]
     title     = is_mappack? ? self.longname  : self.title
-    author_id = query       ? self.author_id : -1
+    author_id = is_userlevel? && query ? self.author_id : -1
 
     # Map data (counts are manually computed when hashing, as obj data may change)
     tiles   = self.tiles(version: version)

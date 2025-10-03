@@ -3399,6 +3399,16 @@ class Archive < ActiveRecord::Base
     ret
   end
 
+  # Generate an attract file with this map and replay
+  def dump_attract(silent: false)
+    map_data = highscoreable.map.dump_level(query: true)
+    demo_data = highscoreable.dump_demo(Demo.decode(demo.demo, true))
+    [map_data.size, demo_data.size, map_data, demo_data].pack('L<2a*a*')
+  rescue => e
+    lex(e, "Failed to dump attract file with ID #{id}") unless silent
+    return
+  end
+
   # Calculate the interpolated fractional frame using Sim's tool
   def seed_fraction
     # Map or demo not available, cannot compute
