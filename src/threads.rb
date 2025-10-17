@@ -504,8 +504,8 @@ def generate_summary(date = nil)
          .each{ |h|
                 cur_scores = Archive.scores(h, now)
                 old_scores = Archive.scores(h, time)
-                total[h.class.to_s][0] += cur_scores.first['score'] - old_scores.first['score']
-                total[h.class.to_s][1] += cur_scores.last['score'] - old_scores.last['score']
+                total[h.class.to_s][0] += cur_scores.first['score'] - (old_scores.first || { 'score' => 0 })['score']
+                total[h.class.to_s][1] += cur_scores.last['score'] - (old_scores.last || { 'score' => 0 })['score']
               }
 
   total = total.map{ |klass, n|

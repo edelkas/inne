@@ -188,6 +188,7 @@ DIR_DB            = 'db'
 DIR_MIGRATION     = "#{DIR_DB}/migrate"
 CONFIG            = "#{DIR_DB}/config.yml"
 DIR_MAPPACKS      = "#{DIR_DB}/mappacks"
+DIR_CHALLENGES    = "#{DIR_DB}/challenges"
 PATH_MAPPACK_INFO = "#{DIR_MAPPACKS}/digest"
 
 DIR_IMAGES    = 'img'
@@ -302,16 +303,16 @@ MONKEY_PATCH_CHUNKYPNG     = true # Enable ChunkyPNG monkey patches (optional)
 # <---------------------------------------------------------------------------->
 
 # Highscoreable ID patterns
-LEVEL_PATTERN       = /([SCR][ILU]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([?!]-[ABCDEX]-[0-9][0-9]?)/i
-LEVEL_PATTERN_D     = /([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([?!])-?([ABCDEX])-?([0-9][0-9]?)/i
-LEVEL_PATTERN_M     = /([A-Z0-9]{3}-[SCR][ILU]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([A-Z0-9]{3}-[?!]-[ABCDEX]-[0-9][0-9]?)/i
-LEVEL_PATTERN_M_D   = /([A-Z0-9]{3})-?([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([A-Z0-9]{3})-?([?!])-?([ABCDEX])-?([0-9][0-9]?)/i
-EPISODE_PATTERN     = /([SCR][ILU]?-[ABCDEX]-[0-9][0-9]?)/i
-EPISODE_PATTERN_D   = /([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)/i
-EPISODE_PATTERN_M   = /([A-Z0-9]{3}-[SCR][ILU]?-[ABCDEX]-[0-9][0-9]?)/i
-EPISODE_PATTERN_M_D = /([A-Z0-9]{3})-?([SCR][ILU]?)-?([ABCDEX])-?([0-9][0-9]?)/i
-STORY_PATTERN       = /([SCR][ILU]?)-?([0-9][0-9]?)/i
-STORY_PATTERN_M     = /([A-Z0-9]{3})-?([SCR][ILU]?)-?([0-9][0-9]?)/i
+LEVEL_PATTERN       = /([SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([?!]-[ABCDEX]-[0-9][0-9]?)|([?!]{2}-[A-Z])/i
+LEVEL_PATTERN_D     = /([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([?!])-?([ABCDEX])-?([0-9][0-9]?)|(([?!]{2})-?([A-Z]))/i
+LEVEL_PATTERN_M     = /([A-Z0-9]{3}-[SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([A-Z0-9]{3}-[?!]-[ABCDEX]-[0-9][0-9]?)|([A-Z0-9]{3}-[?!]{2}-[A-Z])/i
+LEVEL_PATTERN_M_D   = /([A-Z0-9]{3})-?([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([A-Z0-9]{3})-?([?!])-?([ABCDEX])-?([0-9][0-9]?)|(([A-Z0-9]{3})-?([?!]{2})-?([A-Z]))/i
+EPISODE_PATTERN     = /([SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?)/i
+EPISODE_PATTERN_D   = /([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)/i
+EPISODE_PATTERN_M   = /([A-Z0-9]{3}-[SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?)/i
+EPISODE_PATTERN_M_D = /([A-Z0-9]{3})-?([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)/i
+STORY_PATTERN       = /([SCR][ILUT]?)-?([0-9][0-9]?)/i
+STORY_PATTERN_M     = /([A-Z0-9]{3})-?([SCR][ILUT]?)-?([0-9][0-9]?)/i
 
 # Organize all possible highscoreable ID patterns into a hash
 # (note dashes are irrelevant for stories, as there can be no ambiguity)
@@ -661,7 +662,8 @@ TABS = {
     :SL  => [ (1200..1799).to_a,  400, 50],
     :SS  => [ (1800..1919).to_a, 2462, 25],
     :SU  => [ (2400..2999).to_a,  530, 50],
-    :SS2 => [ (3000..3119).to_a,  322, 25]
+    :SS2 => [ (3000..3119).to_a,  322, 25],
+    :ST  => [ (3600..3649).to_a,  400, 10]
   },
   "Story" => {
     :SI => [ ( 0..  4).to_a, 1000, 1],
@@ -748,6 +750,18 @@ TABS_NEW = {
     x:      true,
     secret: true
   },
+  ST: {
+    code:   '?!',
+    mode:   MODE_SOLO,
+    tab:    TAB_DLC,
+    index:  6,
+    name:   'TEN++',
+    start:  3600,
+    size:   50,
+    files:  { 'SSS' => 25, 'SSS2' => 25 },
+    x:      false,
+    secret: true
+  },
   CI: {
     code:   'CI',
     mode:   MODE_COOP,
@@ -784,6 +798,18 @@ TABS_NEW = {
     x:      true,
     secret: false
   },
+  CT: {
+    code:   'CT',
+    mode:   MODE_COOP,
+    tab:    TAB_DLC,
+    index:  3,
+    name:   'Coop TEN++',
+    start:  7800,
+    size:   150,
+    files:  { 'CT' => 150 },
+    x:      true,
+    secret: false
+  },
   RI: {
     code:   'RI',
     mode:   MODE_RACE,
@@ -817,6 +843,18 @@ TABS_NEW = {
     start:  9600,
     size:   570,
     files:  { 'RL' => 120, 'RL2' => 450 },
+    x:      true,
+    secret: false
+  },
+  RT: {
+    code:   'RT',
+    mode:   MODE_RACE,
+    tab:    TAB_DLC,
+    index:  3,
+    name:   'Race TEN++',
+    start:  12000,
+    size:   150,
+    files:  { 'RT' => 150 },
     x:      true,
     secret: false
   }

@@ -89,12 +89,12 @@ ensure
 end
 
 # ActionRow builder with a Select menu for the highscorable tabs
-# (All, SI, S, SU, SL, SS, SS2)
+# (All, SI, S, SU, SL, SS, SS2, ST)
 def interaction_add_select_menu_metanet_tab(view = nil, id = '', tab = nil)
   view = Discordrb::Webhooks::View.new if !view
   view.row{ |r|
     r.select_menu(custom_id: "#{id}:tab", placeholder: 'Tab', max_values: 1){ |m|
-      ['all', 'si', 's', 'su', 'sl', 'ss', 'ss2'].each{ |t|
+      ['all', 'si', 's', 'su', 'sl', 'ss', 'ss2', 'st'].each{ |t|
         m.option(
           label:   t == 'all' ? 'All tabs' : format_tab(t.upcase.to_sym) + ' tab',
           value:   t,
@@ -619,7 +619,7 @@ def respond_interaction_menu(event)
     case keys[1]
     when 'rtype'  # Change rankings type (0th rankings, top20 rankings, etc)
       send_rankings(event, rtype: val)
-    when 'tab'    # Change highscoreable tab (all, si, s, su, sl, ss, ss2)
+    when 'tab'    # Change highscoreable tab (all, si, s, su, sl, ss, ss2, st)
       send_rankings(event, tab: val)
     end
   when 'speedrun' # Select Menus for the Speedrun API function

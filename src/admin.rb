@@ -96,9 +96,13 @@ def scan_boards(event = nil, page: nil)
 end
 
 def send_test(event)
-  lvl = Level.find_by(name: 'S-A-00-00')
-  count = lvl.parse_raw_scores("boards/json/S/#{lvl.name}.json")
-  succ("Parsed #{count} raw scores")
+  #lvl = Level.find_by(name: 'S-A-00-00')
+  #count = lvl.parse_raw_scores("boards/json/S/#{lvl.name}.json")
+  #succ("Parsed #{count} raw scores")
+  Level.where(tab: TAB_DLC).each{ |lvl|
+    print("Updating level #{lvl.name}...\r")
+    lvl.update_scores
+  }
 end
 
 def send_dday_stats

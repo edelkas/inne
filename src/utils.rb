@@ -1973,7 +1973,14 @@ def compute_name(id, type)
   tab = tab[1]
 
   # Get stories out of the way
-  return "#{tab[:code]}-#{"%02d" % (id - tab[:start] / 25)}" if type == 2
+  return "#{tab[:code]}-#{"%02d" % (id - tab[:start] / 25)}" if type == TYPE_STORY
+
+  # Get super secret levels out of the way
+  if type == TYPE_LEVEL && tab[:mode] == MODE_SOLO && tab[:tab] == TAB_DLC
+    code = id % 50 < 25 ? '?!' : '!?'
+    letters = ('A'..'Z').to_a.reject{ |letter| letter == 'N' }
+    return code + '-' + letters[id % 25]
+  end
 
   # Compute offset in tab and file
   tab_offset = id - tab[:start] / f
@@ -2015,9 +2022,9 @@ def compute_name(id, type)
 
   # Return name
   case type
-  when 0
+  when TYPE_LEVEL
     "#{tab[:code]}-#{letter}-#{"%02d" % col}-#{"%02d" % lvl}"
-  when 1
+  when TYPE_EPISODE
     "#{tab[:code]}-#{letter}-#{"%02d" % col}"
   end
 end

@@ -158,12 +158,12 @@ def parse_alias_type(msg, type = nil)
   ['level', 'player'].include?(type) ? type : (!!msg[/player/i] ? 'player' : 'level')
 end
 
-# Transform tab into [SI, S, SU, SL, ?, !] format
+# Transform tab into [SI, S, SU, SL, ?, !, ?! & !?] format
 def normalize_tab(tab)
   format_tab(parse_tabs(tab)[0])
 end
 
-# Transform tab into [SI, S, SU, SL, SS, SS2] format
+# Transform tab into [SI, S, SU, SL, SS, SS2, ST] format
 def formalize_tab(tab)
   parse_tabs(tab)[0].to_s
 end
@@ -673,7 +673,7 @@ end
 # include either one tab or none (all)
 def parse_tabs(msg, tab = nil)
   if !tab.nil?
-    if ['si', 's', 'su', 'sl', 'ss', 'ss2'].include?(tab)
+    if ['si', 's', 'su', 'sl', 'ss', 'ss2', 'st'].include?(tab)
       [tab.upcase.to_sym]
     else
       []
@@ -681,12 +681,13 @@ def parse_tabs(msg, tab = nil)
   else
     ret = []
     ret << :SI  if msg =~ /\b(intro|SI)\b/i
-    ret << :S   if msg =~ /(\b|\A|\s)(N++|S|solo)(\b|\Z|\s)/i
+    ret << :S   if msg =~ /(\b|\A|\s)(N\+\+|S|solo)(\b|\Z|\s)/i
     ret << :SU  if msg =~ /\b(SU|UE|ultimate)\b/i
     ret << :SL  if msg =~ /\b(legacy|SL)\b/i
     ret << :SS  if msg =~ /(\A|\s)(secret|\?)(\Z|\s)/i
     ret << :SS2 if msg =~ /(\A|\s)(ultimate secret|!)(\Z|\s)/i
-    ret.size == 6 ? [] : ret
+    ret << :ST  if msg =~ /(\A|\s)(\?!|!\?|ten\+\+)(\Z|\s)/i
+    ret.size == 7 ? [] : ret
   end
 end
 
@@ -1231,7 +1232,7 @@ def format_tied(tied)
 end
 
 def format_tab(tab)
-  (tab == :SS2 ? '!' : (tab == :SS ? '?' : tab.to_s))
+  tab == :ST ? '?! & !?' : (tab == :SS2 ? '!' : (tab == :SS ? '?' : tab.to_s))
 end
 
 def format_tabs(tabs)
