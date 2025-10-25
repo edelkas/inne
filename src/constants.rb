@@ -304,9 +304,9 @@ MONKEY_PATCH_CHUNKYPNG     = true # Enable ChunkyPNG monkey patches (optional)
 
 # Highscoreable ID patterns
 LEVEL_PATTERN       = /([SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([?!]-[ABCDEX]-[0-9][0-9]?)|([?!]{2}-[A-Z])/i
-LEVEL_PATTERN_D     = /([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([?!])-?([ABCDEX])-?([0-9][0-9]?)|(([?!]{2})-?([A-Z]))/i
+LEVEL_PATTERN_D     = /([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([?!])-?([ABCDEX])-?([0-9][0-9]?)|([?!]{2})-?([A-Z])/i
 LEVEL_PATTERN_M     = /([A-Z0-9]{3}-[SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?-[0-9][0-9]?)|([A-Z0-9]{3}-[?!]-[ABCDEX]-[0-9][0-9]?)|([A-Z0-9]{3}-[?!]{2}-[A-Z])/i
-LEVEL_PATTERN_M_D   = /([A-Z0-9]{3})-?([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([A-Z0-9]{3})-?([?!])-?([ABCDEX])-?([0-9][0-9]?)|(([A-Z0-9]{3})-?([?!]{2})-?([A-Z]))/i
+LEVEL_PATTERN_M_D   = /([A-Z0-9]{3})-?([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)-?([0-9][0-9]?)|([A-Z0-9]{3})-?([?!])-?([ABCDEX])-?([0-9][0-9]?)|([A-Z0-9]{3})-?([?!]{2})-?([A-Z])/i
 EPISODE_PATTERN     = /([SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?)/i
 EPISODE_PATTERN_D   = /([SCR][ILUT]?)-?([ABCDEX])-?([0-9][0-9]?)/i
 EPISODE_PATTERN_M   = /([A-Z0-9]{3}-[SCR][ILUT]?-[ABCDEX]-[0-9][0-9]?)/i

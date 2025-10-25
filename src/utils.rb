@@ -921,7 +921,7 @@ end
 # them via the attachment:// pattern. Namely, they must be alphanumeric with
 # underscores, dashes and dots. The former 2 cannot be leading.
 def sanitize_filename_embed(str)
-  str.gsub(/(^[_.]*)|[^A-Za-z0-9_\-.]/, '-')
+  str.gsub(/(^[_.])|[^A-Za-z0-9_\-.]/, '-')
 end
 
 # Sanitize a string so that it is safe within an SQL LIKE statement
