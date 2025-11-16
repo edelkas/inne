@@ -3109,8 +3109,9 @@ class GlobalProperty < ActiveRecord::Base
   # When all have been done, clear the marks to be able to start over
   def self.get_next(type, ctp = false)
     type = type.mappack.where(mappack_id: 1) if ctp
-    type.update_all(completed: nil) if type.where(completed: nil).count <= 0
-    ret = type.where(completed: nil).sample
+    type.where(completed: nil).update_all(completed: false)
+    type.update_all(completed: false) if type.where(completed: false).count <= 0
+    ret = type.where(completed: false).sample
     ret.update(completed: true)
     ret
   end
