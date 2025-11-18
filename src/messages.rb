@@ -1202,16 +1202,18 @@ end
 # Return list of challenges for specified level, ordered and formatted as in the game
 def send_challenges(event)
   allowable_channels = [CHANNEL_SECRETS, CHANNEL_CTP_SECRETS]
-  if !(event.channel.type == 1 || allowable_channels.include?(event.channel.id))
+  if !(event.channel.type == channel_type(:dm) || allowable_channels.include?(event.channel.id))
     mentions = allowable_channels.map{ |c| mention_channel(id: c) }.join(', ')
     perror("No asking for challenges outside of #{mentions} or DMs!")
   end
 
-  lvl = parse_highscoreable(event, mappack: true)
-  perror("Mappacks don't have challenges (yet ¬‿¬)") if lvl.is_mappack?
-  perror("#{lvl.class.to_s.pluralize.capitalize} don't have challenges!") if lvl.class != Level
-  perror("#{lvl.tab.to_s} levels don't have challenges!") if ["SI", "SL"].include?(lvl.tab.to_s)
-  event << "Challenges for #{lvl.longname} (#{lvl.name}):\n#{format_block(lvl.format_challenges)}"
+  h = parse_highscoreable(event, mappack: true)
+  perror("#{h.class.vanilla.to_s.pluralize.capitalize} don't have challenges!") if !h.is_level?
+  perror("#{MODES[h.mode].capitalize} doesn't have challenges!") if h.mode != MODE_SOLO
+  perror("#{h.tab.to_s} don't have challenges!") if ["SI", "SL"].include?(h.tab.to_s)
+  challenges = h.format_challenges
+  perror("This level has no challenges.") if challenges.empty?
+  event << "Challenges for #{h.longname} (#{h.name}):\n#{format_block(challenges)}"
 rescue => e
   lex(e, "Error getting challenges.", event: event)
 end

@@ -352,6 +352,16 @@ rescue => e
   lex(e, "Error reading mappack scores.", event: event)
 end
 
+def send_mappack_challenges(event)
+  flags = parse_flags(event)
+  mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
+  perror("Mappack not found") if !mappack
+  mappack.read_challenges
+  event << "Read #{mappack.code.upcase} mappack challenges."
+rescue => e
+  lex(e, "Error reading mappack challenges.", event: event)
+end
+
 def send_highscore_plot(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
@@ -1276,6 +1286,7 @@ def respond_special(event)
   return send_log_config(event)          if cmd == 'logconf'
   return test_lotd(event)                if cmd == 'lotd'
   return send_mappack_authors(event)     if cmd == 'mappack_authors'
+  return send_mappack_challenges(event)  if cmd == 'mappack_challenges'
   return send_mappack_completions(event) if cmd == 'mappack_completions'
   return send_mappack_digest(event)      if cmd == 'mappack_digest'
   return send_mappack_info(event)        if cmd == 'mappack_info'

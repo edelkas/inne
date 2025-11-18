@@ -405,6 +405,78 @@ class Mappack < ActiveRecord::Base
     lex(e, "Failed to read scores file for mappack #{verbatim(code)}")
   end
 
+  # Read the challengelist and write to the db
+  def read_challenges(v: nil)
+    v = version || 1 if !v
+
+    # Integrity checks
+    dir = folder(v: v)
+    if !dir
+      err("Directory for mappack #{verbatim(code)} not found")
+      return
+    end
+
+    # Logging variables
+    challenge_count_total = 0
+    level_count_total     = 0
+    file_count_total      = 0
+    tab_count_total       = 0
+
+    # Parse challenges
+    TABS_NEW.each{ |_, tab|
+      # Find tabs with all challenge files
+      files = tab[:files].map{ |name, count| [File.join(dir, name + 'codes.txt'), count] }
+      next unless files.all?{ |path, count| File.file?(path) }
+
+      # Logging variables
+      challenge_count = 0
+      level_count     = 0
+      file_count      = 0
+
+      # Parse each challenge file
+      level_id = TYPES['Level'][:slots] * id + tab[:start]
+      files.each{ |path, count|
+        # Ensure count is correct
+        maps = File.read(path).split("\n")
+        if maps.size != count
+          err("File #{File.basename(path)} for tab #{tab[:code]} has #{maps.size} maps instead of the expected #{count}")
+          level_id += count
+          next
+        end
+
+        # Parse each map's challenges
+        maps.each_with_index{ |map, i|
+          dbg("Parsing map #{level_count + 1} / #{tab[:size]} from #{tab[:code]}...", progress: true)
+          map.squish.split(" ").each_with_index{ |c, j|
+            objs = { "G" => 0, "T" => 0, "O" => 0, "C" => 0, "E" => 0 }
+            c.scan(/../).each{ |o|
+              objs[o[1]] = o[0] == "A" ? 1 : o[0] == "N" ? -1 : 2
+            }
+            MappackChallenge.find_or_create_by(level_id: level_id, index: j)
+                            .update(g: objs["G"], t: objs["T"], o: objs["O"], c: objs["C"], e: objs["E"])
+            challenge_count += 1
+          }
+          level_count += 1
+          level_id += 1
+        }
+        file_count += 1
+      }
+
+      # Log
+      dbg("Parsed #{challenge_count} challenges from #{level_count} levels in #{file_count} files for tab #{tab[:code]}")
+      challenge_count_total += challenge_count
+      level_count_total     += level_count
+      file_count_total      += file_count
+      tab_count_total       += 1
+    }
+
+    # Log
+    succ(
+      "Parsed #{challenge_count_total} challenges from #{level_count_total} levels "\
+      "in #{file_count_total} files from #{tab_count_total} tabs for mappack #{code}"
+    )
+  end
+
   # Check additional requirements for scores submitted to this mappack
   # For instance, w's Duality coop pack requires that the replays for both
   # players be identical
@@ -800,14 +872,16 @@ class MappackLevel < ActiveRecord::Base
   include Map
   include MappackHighscoreable
   include Levelish
-  has_many :mappack_scores, as: :highscoreable
-  has_many :mappack_hashes, as: :highscoreable, dependent: :delete_all
+  has_many :mappack_scores,     as: :highscoreable
+  has_many :mappack_hashes,     as: :highscoreable,     dependent: :delete_all
+  has_many :mappack_challenges, foreign_key: :level_id, dependent: :delete_all
   belongs_to :mappack
   belongs_to :mappack_episode, foreign_key: :episode_id
-  alias_method :scores,   :mappack_scores
-  alias_method :episode,  :mappack_episode
-  alias_method :episode=, :mappack_episode=
-  alias_method :hashes,   :mappack_hashes
+  alias_method :scores,     :mappack_scores
+  alias_method :episode,    :mappack_episode
+  alias_method :episode=,   :mappack_episode=
+  alias_method :hashes,     :mappack_hashes
+  alias_method :challenges, :mappack_challenges
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
@@ -1683,4 +1757,11 @@ class MappackHash < ActiveRecord::Base
     types.each{ |t| total += t.mappack.update_hashes(mappack: mappack, pre: true) }
     total
   end
+end
+
+class MappackChallenge < ActiveRecord::Base
+  include Challengish
+  belongs_to :mappack_level, foreign_key: :level_id
+  alias_method :level, :mappack_level
+  alias_method :level=, :mappack_level=
 end

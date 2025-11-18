@@ -3209,8 +3209,8 @@ class Video < ActiveRecord::Base
   end
 end
 
-class Challenge < ActiveRecord::Base
-  belongs_to :level
+# Implemented by Challenge and MappackChallenge
+module Challengish
 
   def objs
     {
@@ -3243,6 +3243,11 @@ class Challenge < ActiveRecord::Base
   def format(pad)
     ANSI.yellow + format_type + " " * [1, pad - count + 1].max + format_objs + ANSI.clear
   end
+end
+
+class Challenge < ActiveRecord::Base
+  include Challengish
+  belongs_to :level
 end
 
 class Archive < ActiveRecord::Base
