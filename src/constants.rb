@@ -905,6 +905,7 @@ RTYPES = [
 #   Cheaters: Their scores are real, but produced illegitimately
 # Keys are the user IDs, values are their known usernames
 HACKERS = {
+   42984 => ["Sirogabober"],
    63944 => ["Kronogenics"],
    72791 => ["Jett Altair"],
    75839 => ["vorcazm", "Treagus", "PROG2"],
@@ -922,18 +923,21 @@ HACKERS = {
   243184 => ["Player"],
   253072 => ["test8378"],
   253161 => ["Chara"],
+  264603 => ["Croko"],
   276273 => ["DBYT3"],
   282291 => ["ill spiritual"],
   298531 => ["Boringfish"],
   307030 => ["The_Mega_Force"],
   325245 => ["Staticwork"],
   326339 => ["Psina"],
+  332348 => ["DE321F-0"],
   333510 => ["dominater01"],
   336069 => ["Progressively idle"],
   353512 => ["Dragon_V.V"],
   357282 => ["MX_Er3P"],
   401089 => ["Haidi"],
-  409973 => ["outte++2"]
+  409973 => ["outte++2"],
+  414614 => ["Λ"]
 }
 
 CHEATERS = {
