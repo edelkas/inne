@@ -1360,7 +1360,8 @@ def format_level_matches(event, msg, page, matches, name)
   # Truncate list
   list = matches[1]
   if list.size > PAGE_SIZE
-    page = parse_page(msg, page, false, event.message.components)
+    components = event.respond_to?(:message) ? event.message.components : nil
+    page = parse_page(msg, page, false, components)
     pag  = compute_pages(list.size, page)
     list = list[pag[:offset]...pag[:offset] + PAGE_SIZE]
   end

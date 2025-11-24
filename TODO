@@ -1,3 +1,4 @@
+- Sanitizing archives will actually remove outte++2 players, leading to server requests failing. Perhaps we should separate it to a different category so that it's blacklisted from score archival but the player itself isn't deleted.
 - For average lead rankings, filter players based on number of 0ths, not total scores, otherwise a player with 1 0th can easily top them
 - Change all occurrence of concurrent_edit by TmpMsg
 - Compute stars and cools on the fly when using archives.
