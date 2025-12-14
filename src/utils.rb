@@ -557,6 +557,13 @@ class Cache
   end
 end
 
+# Helpers for HTML generation
+module HTML extend self
+  def a(content, url, tab: true, title: '')
+    "<a href=\"#{url}\" target=\"_#{tab ? 'blank' : 'self'}\">#{content}</a>"
+  end
+end
+
 # <---------------------------------------------------------------------------->
 # <------                       SYSTEM OPERATIONS                        ------>
 # <---------------------------------------------------------------------------->

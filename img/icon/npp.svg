@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 385 145" width="24" height="24" fill="white">
+    <path d="M85 60H45L27.5 42.5H25L22.5 45v2.5L40 65v70l-10 10H10L0 135V30l10-10h90l30 30v85l-10 10h-20l-10-10V65m0 0-5-5"/>
+    <path d="M177.5 10v25L195 52.5V55l-2.5 2.5H190L172.5 40h-25l-10 10v20l10 10h30v30l10 10h20l10-10V80h30l10-10V50l-10-10h-30V10l-10-10h-20z" id="a"/>
+    <use xlink:href="#a" x="127.5"/>
+</svg>

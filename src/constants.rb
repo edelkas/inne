@@ -184,6 +184,8 @@ LOG_DOWNLOAD_ERRORS = false # Too spammy if no Steam IDs are active
 # <------                        PATH VARIABLES                          ------>
 # <---------------------------------------------------------------------------->
 
+DIR_API = 'api'
+
 DIR_DB            = 'db'
 DIR_MIGRATION     = "#{DIR_DB}/migrate"
 CONFIG            = "#{DIR_DB}/config.yml"
@@ -193,6 +195,8 @@ PATH_MAPPACK_INFO = "#{DIR_MAPPACKS}/digest"
 
 DIR_IMAGES    = 'img'
 PATH_AVATARS  = "#{DIR_IMAGES}/avatars"
+PATH_EMOJI    = "#{DIR_IMAGES}/emoji"
+PATH_ICONS    = "#{DIR_IMAGES}/icon"
 PATH_PALETTES = "#{DIR_IMAGES}/palette.png"
 PATH_OBJECTS  = "#{DIR_IMAGES}/object_layers"
 PATH_TILES    = "#{DIR_IMAGES}/tile_layers"
@@ -558,9 +562,12 @@ DEV_PLAYER_NAME  = '-- DEV TIME --' # Player name to show dev scores
 REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to understand this
 
 # API-specific variables
-API_ON      = false
-API_PORT    = 9119
-API_FAVICON = 'molebruh'
+API_ON       = false
+API_PORT     = 9119
+API_FAVICON  = 'molebruh'
+API_TEMPLATE = 'template.html'
+API_STYLE    = 'style.css'
+API_SCRIPT   = 'script.js'
 
 # <---------------------------------------------------------------------------->
 # <------                        GAME VARIABLES                          ------>

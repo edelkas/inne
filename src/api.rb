@@ -1110,25 +1110,64 @@ module Sock extend self
     false
   end
 
-  # Send raw data as a response
-  def send_data(res, data, type: 'application/octet-stream', name: nil, inline: true, cache: nil)
-    disposition = inline ? 'inline' : 'attachment'
-    res['Content-Type']        = type
-    res['Content-Length']      = data.length
-    res['Content-Disposition'] = "#{disposition}; filename=\"#{name || 'data.bin'}\""
-    res['Cache-Control']       = "public, max-age=#{cache}" unless !cache
-    res.status = 200
-    res.body = data
+  # Return a client error whenever they mess up
+  def client_error(res, msg = 'Unable to parse request', code = 400)
+    res.status = code
+    res.body = msg
+    nil
   end
 
-  # Sends a raw file as a response
-  def send_file(res, file, type: 'application/octet-stream', name: nil, inline: true, cache: nil)
-    if !File.file?(file)
-      res.status = 404
-      res.body = "File not found"
-      return
+  # Return a server error whenever we mess up
+  def server_error(res, msg = 'Unable to process request', code = 500)
+    res.status = code
+    res.body = msg
+    nil
+  end
+
+  # Verifies if a file exists, otherwise returns a 404
+  def check_file(res, path)
+    return true if File.file?(path)
+    client_error(res, 'File not found', 404)
+    false
+  end
+
+  # Get the MIME type of a file given the name
+  def get_mimetype(filename)
+    table = WEBrick::HTTPUtils::DefaultMimeTypes
+    WEBrick::HTTPUtils.mime_type(filename, table)
+  end
+
+  # Send arbitrary data or an arbitrary file as a response
+  def send_data(res, data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true)
+    # Data must be provided either directly or in a file
+    if !data && !file
+      return server_error(res)
+    elsif !data && file
+      return unless check_file(res, file)
+      name ||= file
+      data = binary ? File.binread(file) : File.read(file)
     end
-    send_data(res, File.binread(file), type: type, name: name || File.basename(file), inline: inline, cache: cache)
+
+    # Determine value of headers (cache and content disposition)
+    disposition = inline ? 'inline' : 'attachment'
+    cache = case cache
+    when true
+      'public, max-age=31536000, immutable'
+    when false
+      'no-cache'
+    when Integer
+      cache > 0 ? "public, max-age=#{cache}, immutable" : 'no-cache'
+    else
+      nil
+    end
+
+    # Set HTTP headers, code and body
+    res['Content-Type']        = type || get_mimetype(name)
+    res['Content-Length']      = data.length
+    res['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
+    res['Cache-Control']       = cache if cache
+    res.status = 200
+    res.body = data
   end
 end
 
@@ -1239,16 +1278,20 @@ module APIServer extend self
   def handle(req, res)
     res.status = 403
     res.body = ''
-    route = req.path.split('/').last
+    path = req.path.strip[1..]
+    return if path =~ /(^|\/|\\)\.\.($|\/|\\)/i
+    route = path.split('/').first
     case req.request_method
     when 'GET'
       case route
       when nil
-        res.status = 200
-        res.body = "Welcome to outte's public API!"
+        send_data(res, data: build_page('outte++ API', handle_home()), name: 'index.html')
       when 'favicon.ico'
-        path = File.join(PATH_AVATARS, API_FAVICON + '.png')
-        send_file(res, path, type: 'image/png', cache: 365 * 86400)
+        send_data(res, file: File.join(PATH_AVATARS, API_FAVICON + '.png'), cache: true)
+      when 'api', 'img'
+        send_data(res, file: path, cache: true)
+      when 'test'
+        send_data(res, data: build_page('Test title', 'Test content'), name: API_TEMPLATE)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
@@ -1257,19 +1300,52 @@ module APIServer extend self
       when 'screenshot'
         ret = handle_screenshot(query, req.body)
         if !ret.key?(:file)
-          res.status = 400
-          res.body = ret[:msg] || 'Unknown query error'
+          client_error(res, ret[:msg] || 'Unknown query error')
         elsif !ret[:file]
-          res.status = 500
-          res.body = 'Error generating screenshot'
+          server_error(res, 'Error generating screenshot')
         else
-          send_data(res, ret[:file], type: 'image/png', name: ret[:name])
+          send_data(res, data: ret[:file], name: ret[:name])
         end
       end
     end
   rescue => e
     lex(e, "API socket failed to parse request for: #{req.path}")
     nil
+  end
+
+  # Fetch a file for the API to server
+  def fetch_file(file)
+    File.join(DIR_API, file)
+  end
+
+  # Retrieves a timestamp to use for file versioning (cache busting)
+  def file_timestamp(file)
+    File.mtime(fetch_file(file)).to_i.to_s
+  end
+
+  # Replace a token string in an HTML template with an actual value
+  def replace_token(file, token, value)
+    file.gsub!('TOKEN' + token, value)
+  end
+
+  # Build home page
+  def handle_home
+    body = ['test'].map{ |route|
+      "<a href=\"#{route}\" target=\"_self\">#{route}</a>"
+    }.join("\n")
+    body.prepend('<center>')
+    body << '</center>'
+    body
+  end
+
+  # Template for all public API webpages
+  def build_page(title, content)
+    html = File.read(fetch_file(API_TEMPLATE))
+    replace_token(html, 'CSS',     file_timestamp(API_STYLE))
+    replace_token(html, 'JS',      file_timestamp(API_SCRIPT))
+    replace_token(html, 'TITLE',   title)
+    replace_token(html, 'CONTENT', content)
+    html
   end
 
   def handle_screenshot(params, payload)

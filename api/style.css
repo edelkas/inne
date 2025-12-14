@@ -1,0 +1,108 @@
+body{
+  color: white;
+  background-color: black;
+  font-size:8pt;
+  font-family:Arial;
+  margin:0;
+  height:100vh;
+  overflow:hidden;
+  position:relative;
+}
+.title{
+  margin:auto;
+  font-size:16pt;
+  font-weight:bold;
+}
+TD.catValue {
+  vertical-align:top;
+  padding:1px;
+  font-size:8pt;
+}
+TD.catName {
+  vertical-align:top;
+  padding:1px;
+  font-size:8pt;
+  font-weight:bold;
+}
+TH {
+  text-align:center;
+  vertical-align:center;
+  padding:0px;
+  font-size:8pt;
+  font-weight:bold;
+  color: black;
+  background-color: white;
+  border-bottom: #444 solid 1px;
+  border-left: #ccc solid 1px;
+  border-right: #444 solid 1px;
+  border-top: #ccc solid 1px;
+}
+TR.data {
+  text-align:left;
+  vertical-align:top;
+  background-color:#222;
+  padding:4px;
+  font-size:8pt;
+}
+TR.data:hover {
+  background-color:#444;
+}
+a {
+  font-weight:bold;
+  color: #fd0;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline dotted;
+}
+a::selection {
+  background-color: #fd0;
+  color: #000;
+}
+table {
+  margin: 0px auto;
+}
+img.floater {
+  position: absolute;
+  /*pointer-events: none;*/
+  cursor: pointer;
+  z-index: 0;
+  opacity: 0.5;
+}
+.bar {
+  position: relative;
+  width: 100vw;
+  height: 26px;
+}
+.centered {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+.left {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  text-align: left;
+}
+.right {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  text-align: right;
+}
+::selection {
+  background-color: white;
+  color: #000;
+}
+.spacer {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+}
