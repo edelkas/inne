@@ -2,10 +2,10 @@ body{
   color: white;
   background-color: black;
   font-size:8pt;
-  font-family:Arial;
+  font-family:Consolas, monospace;
   margin:0;
   height:100vh;
-  overflow:hidden;
+  overflow:auto;
   position:relative;
 }
 .title{
@@ -13,21 +13,41 @@ body{
   font-size:16pt;
   font-weight:bold;
 }
+.bold{
+  font-weight: bold;
+}
+th, td {
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
 TD.catValue {
-  vertical-align:top;
-  padding:1px;
-  font-size:8pt;
+  padding:0px;
 }
 TD.catName {
-  vertical-align:top;
-  padding:1px;
-  font-size:8pt;
+  width:120px;
+  padding:0px;
   font-weight:bold;
 }
-TH {
+td.numeric{
+  text-align: right;
+}
+td.text {
+  text-align: left;
+}
+td.normal {
+  text-align: center;
+}
+.on{
+  color: #080;
+}
+.off{
+  color: #800;
+}
+TH, td.decor {
   text-align:center;
   vertical-align:center;
-  padding:0px;
   font-size:8pt;
   font-weight:bold;
   color: black;
@@ -48,7 +68,7 @@ TR.data:hover {
   background-color:#444;
 }
 a {
-  font-weight:bold;
+  font-weight:normal;
   color: #fd0;
   text-decoration: none;
 }
@@ -60,7 +80,11 @@ a::selection {
   color: #000;
 }
 table {
-  margin: 0px auto;
+  margin:0px auto;
+  font-size:8pt;
+}
+table.list {
+  border: 1px solid;
 }
 img.floater {
   position: absolute;

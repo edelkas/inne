@@ -3434,10 +3434,6 @@ class Archive < ActiveRecord::Base
   def find_rank(time)
     Archive.scores(highscoreable, time).index{ |s| s['metanet_id'] == metanet_id } || 20
   end
-
-  def format_score
-    "%.3f" % self.score.to_f / 60.0
-  end
 end
 
 # Implemented by Demo and MappackDemo

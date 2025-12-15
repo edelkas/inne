@@ -1279,6 +1279,7 @@ module APIServer extend self
     res.status = 403
     res.body = ''
     path = req.path.strip[1..]
+    query = req.query.map{ |k, v| [k, v.to_s] }.to_h
     return if path =~ /(^|\/|\\)\.\.($|\/|\\)/i
     route = path.split('/').first
     case req.request_method
@@ -1290,8 +1291,8 @@ module APIServer extend self
         send_data(res, file: File.join(PATH_AVATARS, API_FAVICON + '.png'), cache: true)
       when 'api', 'img'
         send_data(res, file: path, cache: true)
-      when 'test'
-        send_data(res, data: build_page('Test title', 'Test content'), name: API_TEMPLATE)
+      when 'scores'
+        send_data(res, data: build_page('scores', handle_scores(query)), name: API_TEMPLATE)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
@@ -1330,12 +1331,7 @@ module APIServer extend self
 
   # Build home page
   def handle_home
-    body = ['test'].map{ |route|
-      "<a href=\"#{route}\" target=\"_self\">#{route}</a>"
-    }.join("\n")
-    body.prepend('<center>')
-    body << '</center>'
-    body
+    ''
   end
 
   # Template for all public API webpages
@@ -1346,6 +1342,117 @@ module APIServer extend self
     replace_token(html, 'TITLE',   title)
     replace_token(html, 'CONTENT', content)
     html
+  end
+
+  # Builds the mini table at the top
+  def build_minitable(fields)
+    rows = fields.map{ |k, v|
+      "<tr><td class=\"catName\">#{k}:</td><td class=\"catValue\">#{v}</td></tr>"
+    }.join("\n")
+    "<table>\n#{rows}\n</table>"
+  end
+
+  # Fills the minitable fields
+  def create_minitable(name, desc, time)
+    build_minitable({
+      'Function'        => name,
+      'Description'     => desc,
+      'Request time'    => Time.now.strftime('%F %T %Z'),
+      'Processing time' => "%.2f ms" % [1000 * (Time.now - time)]
+    })
+  end
+
+  # Build navigation bar for browsing lists or tables
+  def build_navbar(route, params, pag)
+    query = params.reject{ |k, v| k == 'p' }.map{ |k, v| "#{k}=#{v}" }.join('&')
+    route += '?'
+    route += query + '&' if !query.empty?
+    %{
+      <table><tr>
+        <td><a href="#{route}p=1" title="First"><img src="img/icon/start.svg" alt="Previous"></a></td>
+        <td><a href="#{route}p=#{[pag[:page] - 1, 1].max}" title="Previous"><img src="img/icon/left.svg" alt="Previous"></a></td>
+        <td>#{pag[:page]} / #{pag[:pages]}</td>
+        <td><a href="#{route}p=#{[pag[:page] + 1, pag[:pages]].min}" title="Next"><img src="img/icon/right.svg" alt="Next"></a></td>
+        <td><a href="#{route}p=#{pag[:pages]}" title="Last"><img src="img/icon/end.svg" alt="Last"></a></td>
+      </tr></table>
+    }
+  end
+
+  # Return list of latest highscores
+  def handle_scores(params)
+    time = Time.now
+
+    # Parse query parameters
+    page = params['p'].to_i
+    type = [Level, Episode, Story][params['type'].to_i]
+    typei = [Level, Episode, Story].index(type)
+    tname = type.table_name
+    id = params['id'].to_i if params['id']
+    player = params['player'].to_i if params['player']
+    tab = params['tab'].to_i if params['tab']
+
+    # Table header
+    header = %w{Index ID Player\ ID Player\ name Board\ type Board\ ID Board Rank Score Frames Gold Date Best}.map{ |w|
+      "<th>#{w}</th>"
+    }.join("\n")
+    header.prepend('<tr class="data">')
+    header << '</tr>'
+
+    # Table rows
+    size = 50
+    list = Archive.where(type   ? { highscoreable_type: type     } : nil)
+                  .where(id     ? { highscoreable_id:   id       } : nil)
+                  .where(player ? { metanet_id:         player   } : nil)
+                  .where(tab    ? { tab:                tab      } : nil)
+    pag = compute_pages(list.count, page, size)
+    subquery = list.order(date: :desc)
+                   .offset(pag[:offset])
+                   .limit(size)
+                   .select(:id, :replay_id, :metanet_id, :highscoreable_id, :score, :framecount, :gold, :date, :expired)
+    rows = Archive.from(subquery)
+                  .order(id: :desc)
+                  .joins('LEFT JOIN `scores` ON `scores`.`replay_id` = `subquery`.`replay_id`')
+                  .joins('INNER JOIN `players` ON `players`.`metanet_id` = `subquery`.`metanet_id`')
+                  .joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `subquery`.`highscoreable_id`")
+                  .pluck(
+                    '`subquery`.`id`',  '`subquery`.`replay_id`',        '`subquery`.`metanet_id`',
+                    '`players`.`name`', '`subquery`.`highscoreable_id`', "`#{tname}`.`name`",
+                    '`scores`.`rank`',  '`subquery`.`score`',            '`framecount`',
+                    '`gold`',         '`date`',                      '`expired`'
+                  ).map{ |s|
+      %{
+        <tr class="data">
+        <td class="numeric">#{s[0]}</td>
+        <td class="numeric">#{s[1]}</td>
+        <td class="numeric">#{s[2]}</td>
+        <td class="text"><a href="scores?player=#{s[2]}">#{s[3]}</a></td>
+        <td class="normal">#{type}</td>
+        <td class="numeric">#{s[4]}</td>
+        <td class="normal"><a href="scores?type=#{typei}&id=#{s[4]}">#{s[5]}</a></td>
+        <td class="numeric#{s[6] == 0 ? ' on' : ''}">#{s[6]}</td>
+        <td class="numeric">#{'%.3f' % [s[7] / 60.0]}</td>
+        <td class="numeric">#{s[8]}</td>
+        <td class="numeric">#{s[9]}</td>
+        <td class="normal">#{s[10]}</td>
+        <td class="normal #{s[11] ? 'off' : 'on'}">#{!s[11]}</td>
+        </tr>
+      }
+    }.join("\n")
+    table = %{
+      <table class=\"data\">
+        #{header}
+        #{rows}
+      </table>
+    }
+
+    # Final body
+    minitable = create_minitable('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards', time)
+    %{
+      #{minitable}
+      <br>
+      #{build_navbar('scores', params, pag)}
+      #{table}
+    }
   end
 
   def handle_screenshot(params, payload)
