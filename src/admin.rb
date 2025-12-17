@@ -964,6 +964,10 @@ rescue => e
   lex(e, 'Failed to delete outte message.', event: event)
 end
 
+def report_message(event)
+  event.message.content =~ /<(https:\/\/www.twitch.tv\/(.+?))>$/i ? Twitch::report_stream(event) : delete_message(event)
+end
+
 # Tests ntrace on many runs (e.g. all Metanet 0ths)
 def test_ntrace(event)
   # Parse params

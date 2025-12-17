@@ -201,6 +201,37 @@ module Twitch extend self
   rescue => e
     lex(e, 'Failed to post new Twitch stream')
   end
+
+  # TODO: Allow for positive emoji to counteract negative emoji to prevent snipers
+  def report_stream(event)
+    msg = event.message.content
+    msg =~ /<(https:\/\/www.twitch.tv\/(.+?))>$/i
+    url, user = $1, $2
+    return if !user
+    embed = Discordrb::Webhooks::Embed.new(
+      description: "🚨 Stream by [`#{user}`](<#{url}>) has been reported.",
+      color:       SPEEDRUN_COLOR_NEW,
+      timestamp:   Time.now,
+      footer:      Discordrb::Webhooks::EmbedFooter.new(text: "Reported by #{event.user.name}")
+    )
+    send_message($content_channel, embed: embed)
+  end
+
+  # TODO: Accumulate reports to different streams in db, after a certain amount trigger autoban
+  def ban_stream(event)
+    msg = event.message.content
+    msg =~ /<(https:\/\/www.twitch.tv\/(.+?))>$/i
+    url, user = $1, $2
+    return if !user
+    n = 5
+    embed = Discordrb::Webhooks::Embed.new(
+      description: "🔨 Stream by [`#{user}`](<#{url}>) has been blacklisted.",
+      color:       SPEEDRUN_COLOR_REJ,
+      timestamp:   Time.now,
+      footer:      Discordrb::Webhooks::EmbedFooter.new(text: "After having #{n} streams reported.")
+    )
+    send_message($content_channel, embed: embed)
+  end
 end
 
 # Handle Speedrun.com API

@@ -2414,8 +2414,14 @@ def respond_reaction(event)
   # Only have tasks for reactions to outte messages
   msg = event.message
   return if msg.user.id != $config['discord_client']
+  emoji = event.emoji.to_s
 
-  return delete_message(event) if EMOJIS_TO_DELETE.include?(event.emoji.to_s)
+  # Public reaction commands
+  return report_message(event)     if EMOJIS_TO_DELETE.include?(emoji)
+
+  # Botmaster exclusive reaction commands
+  return if event.user.id != BOTMASTER_ID
+  return Twitch::ban_stream(event) if emoji == EMOJI_TO_BAN
 end
 
 # Main function that coordinates responses to commands issued in Discord
