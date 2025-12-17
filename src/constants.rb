@@ -506,8 +506,9 @@ FRACTION_FREQUENCY          =                 60
 
 TWITCH_ROLE      = "Voyeur"    # Discord role to ping when a new stream happens
 TWITCH_COOLDOWN  = 2 * 60 * 60 # Cooldown to ping stream by the same user
-TWITCH_BLACKLIST = [           # Should probably use IDs instead of usernames here
-  "eblan4ikof"
+TWITCH_BLACKLIST = [           # Don't post stream by these users
+  425806947, # eblan4ikof
+  1055190989 # 3awilson
 ]
 
 # <---------------------------------------------------------------------------->

@@ -148,7 +148,7 @@ module Twitch extend self
       $twitch_streams[game] = [] if !$twitch_streams.key?(game)
 
       # Reject blacklisted streams
-      new_streams.reject!{ |s| TWITCH_BLACKLIST.include?(s['user_name']) }
+      new_streams.reject!{ |s| TWITCH_BLACKLIST.include?(s['user_id'].to_i) }
 
       # Update values of already existing streams
       $twitch_streams[game].each{ |stream|
