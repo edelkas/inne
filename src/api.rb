@@ -1400,10 +1400,10 @@ module APIServer extend self
     route += query + '&' if !query.empty?
     %{
       <table><tr>
-        <td><a href="#{route}" title="First"><img src="img/icon/start.svg" alt="Previous"></a></td>
-        <td><a href="#{route}off=#{first}&rev=1" title="Previous"><img src="img/icon/left.svg" alt="Previous"></a></td>
-        <td><a href="#{route}off=#{last}" title="Next"><img src="img/icon/right.svg" alt="Next"></a></td>
-        <td><a href="#{route}off=0&rev=1" title="Last"><img src="img/icon/end.svg" alt="Last"></a></td>
+        <td><a href="#{route}" tooltip="First"><img src="img/icon/start.svg" alt="Previous"></a></td>
+        <td><a href="#{route}off=#{first}&rev=1" tooltip="Previous"><img src="img/icon/left.svg" alt="Previous"></a></td>
+        <td><a href="#{route}off=#{last}" tooltip="Next"><img src="img/icon/right.svg" alt="Next"></a></td>
+        <td><a href="#{route}off=0&rev=1" tooltip="Last"><img src="img/icon/end.svg" alt="Last"></a></td>
       </tr></table>
     }
   end
@@ -1428,14 +1428,14 @@ module APIServer extend self
         <th tooltip="Score ID in outte's db">Index</th>
         <th tooltip="Score ID in Metanet's db">ID</th>
         <th tooltip="Player ID in Metanet's db">Player ID</th>
-        <th>Player name</th>
-        <th>Board type</th>
-        <th tooltip="In-game ID">Board ID</th>
-        <th>Board</th>
-        <th>Rank</th>
-        <th>Score</th>
-        <th>Frames</th>
-        <th>Gold</th>
+        <th tooltip="Latest recorded name">Player name</th>
+        <th tooltip="Level / Episode / Story / Userlevel">Board type</th>
+        <th tooltip="Internal ID">Board ID</th>
+        <th tooltip="Standard ID">Board</th>
+        <th tooltip="Rank for non-obsolete highscores">Rank</th>
+        <th tooltip="Score in seconds">Score</th>
+        <th tooltip="Run length / framecount">Frames</th>
+        <th tooltip="Pieces of gold collected">Gold</th>
         <th tooltip="Date of archival">Date</th>
         <th tooltip="Obsolete run">O</th>
         <th tooltip="Cheated run">C</th>

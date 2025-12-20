@@ -132,20 +132,30 @@ img.floater {
 }
 [tooltip] {
   position: relative;
+  --tooltip: attr(tooltip);
 }
-[tooltip]:after {
-  content: attr(tooltip);
+[tooltipr] {
+  position: relative;
+  --tooltip: attr(tooltipr);
+}
+[tooltip]:after, [tooltipr]:after {
+  content: var(--tooltip);
   position: absolute;
-  left: 50%;
-  bottom: 100%;
-  color: #fff;
+  bottom: -200%;
+  color: #0cc;
   background-color: #000;
-  border: #fd0 solid 1px;
+  border: #0cc solid 1px;
   width: max-content;
   padding: 1px;
   display: none;
-  z-index: 1;
+  z-index: 2;
 }
-[tooltip]:hover:after {
+[tooltip]:after {
+  left: 0;
+}
+[tooltipr]:after {
+  right: 0;
+}
+[tooltip]:hover:after, [tooltipr]:hover:after {
   display: block;
 }
