@@ -11,8 +11,6 @@ const files = ["moleBruh.png", "moleCool.png", "moleGasm.png", "moleSwole.png"]
 const images = [];
 const floaterEnable = document.getElementById("floaterEnable");
 const floaterRefresh = document.getElementById("floaterRefresh");
-const toggleIcon1 = document.getElementById("toggleIcon1");
-const toggleIcon2 = document.getElementById("toggleIcon2");
 const w = window.innerWidth;
 const h = window.innerHeight;
 

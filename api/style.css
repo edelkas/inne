@@ -22,6 +22,12 @@ th, td {
   padding-top: 1px;
   padding-bottom: 1px;
 }
+th.tight, td.tight {
+  padding-left: 1px;
+  padding-right: 1px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
 TD.catValue {
   padding:0px;
 }
@@ -81,10 +87,18 @@ a::selection {
 }
 table {
   margin:0px auto;
-  font-size:8pt;
+  table-layout: fixed;
 }
 table.list {
   border: 1px solid;
+}
+caption > div {
+  display: flex;
+  align-items: flex-end;
+}
+.separated {
+  display: flex;
+  justify-content: space-between;
 }
 img.floater {
   position: absolute;
@@ -92,6 +106,22 @@ img.floater {
   cursor: pointer;
   z-index: 0;
   opacity: 0.5;
+}
+.icon-yes {
+    width: 12px;
+    height: 12px;
+    background-image: url('../img/icon/yes.svg');
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0.5;
+}
+.icon-no {
+    width: 12px;
+    height: 12px;
+    background-image: url('../img/icon/no.svg');
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0.5;
 }
 .bar {
   position: relative;

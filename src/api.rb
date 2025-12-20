@@ -1317,7 +1317,7 @@ module APIServer extend self
     when 'GET'
       case route
       when nil
-        send_data(res, data: build_page('outte++ API', handle_home()), name: 'index.html')
+        send_data(res, data: build_page('home', handle_home()), name: 'index.html')
       when 'favicon.ico'
         send_data(res, file: File.join(PATH_AVATARS, API_FAVICON + '.png'), cache: true)
       when 'api', 'img'
@@ -1360,6 +1360,21 @@ module APIServer extend self
     file.gsub!('TOKEN' + token, value)
   end
 
+  # Escape plain HTML text
+  def escape_html(str)
+    str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+  end
+
+  # Concatenate path and query properly to form a valid URI route
+  def make_route(path, query = {}, add: {}, remove: [], off: nil, rev: nil)
+    query = query.merge(add.stringify_keys).except('off', 'rev', *remove.map(&:to_s))
+    query['off'] = off.to_i if off
+    query['rev'] = rev ? 1 : 0 if !rev.nil?
+    return path if query.empty?
+    query = query.map{ |k, v| "#{k}=#{v}" }.join('&')
+    "#{path}?#{query}"
+  end
+
   # Build home page
   def handle_home
     ''
@@ -1386,7 +1401,6 @@ module APIServer extend self
   # Fills the minitable fields
   def create_minitable(name, desc, time)
     build_minitable({
-      'Function'        => name,
       'Description'     => desc,
       'Request time'    => Time.now.strftime('%F %T %Z'),
       'Processing time' => "%.2f ms" % [1000 * (Time.now - time)]
@@ -1394,30 +1408,37 @@ module APIServer extend self
   end
 
   # Build navigation bar for browsing lists or tables
-  def build_navbar(route, params, first, last)
-    query = params.reject{ |k, v| k == 'off' || k == 'rev' }.map{ |k, v| "#{k}=#{v}" }.join('&')
-    route += '?'
-    route += query + '&' if !query.empty?
-    %{
-      <table><tr>
-        <td><a href="#{route}" tooltip="First"><img src="img/icon/start.svg" alt="Previous"></a></td>
-        <td><a href="#{route}off=#{first}&rev=1" tooltip="Previous"><img src="img/icon/left.svg" alt="Previous"></a></td>
-        <td><a href="#{route}off=#{last}" tooltip="Next"><img src="img/icon/right.svg" alt="Next"></a></td>
-        <td><a href="#{route}off=0&rev=1" tooltip="Last"><img src="img/icon/end.svg" alt="Last"></a></td>
-      </tr></table>
-    }
+  def build_navbar(route, params, first = nil, last = nil)
+    [
+      %{<a href="#{make_route(route, params)}" tooltip="First"><img src="img/icon/start.svg" alt="Previous"></a>},
+      first ? %{<a href="#{make_route(route, params, off: first, rev: true)}" tooltip="Previous"><img src="img/icon/left.svg" alt="Previous"></a>} : nil,
+      last ? %{<a href="#{make_route(route, params, off: last)}" tooltip="Next"><img src="img/icon/right.svg" alt="Next"></a>} : nil,
+      %{<a href="#{make_route(route, params, off: 0, rev: true)}" tooltip="Last"><img src="img/icon/end.svg" alt="Last"></a>}
+    ].compact.join("\n")
   end
 
   # Return list of latest highscores
   def handle_scores(params)
     time = Time.now
 
+    # Sanitize parameters
+    allowed = ['off', 'rev', 'id', 'player', 'type', 'tab']
+    params.reject!{ |k, v| !allowed.include?(k) }
+    if params['off']
+      if is_num(params['off'])
+        params['off'] = params['off'].to_i.clamp(0, 2 ** 31 - 1).to_s
+      else
+        params.delete('off')
+      end
+    end
+    params.delete('type') if params['type'] && !(0..2).cover?(params['type'].to_i)
+    params.delete('tab') if params['tab'] && !(0..6).cover?(params['tab'].to_i)
+    params.delete('id') if !params['type']
+
     # Parse query parameters
-    off = params['off'].to_i.clamp(0, 2 ** 31 - 1) if params['off']
+    offset = params['off'].to_i if params['off']
     rev = params['rev'] == '1'
-    type = [Level, Episode, Story][params['type'].to_i]
-    typei = [Level, Episode, Story].index(type)
-    tname = type.table_name
+    type = TYPES.find{ |k, v| v[:id] == params['type'].to_i }.last if params['type']
     id = params['id'].to_i if params['id']
     player = params['player'].to_i if params['player']
     tab = params['tab'].to_i if params['tab']
@@ -1437,54 +1458,101 @@ module APIServer extend self
         <th tooltip="Run length / framecount">Frames</th>
         <th tooltip="Pieces of gold collected">Gold</th>
         <th tooltip="Date of archival">Date</th>
-        <th tooltip="Obsolete run">O</th>
-        <th tooltip="Cheated run">C</th>
+        <th class="tight" tooltip="Obsolete run">O</th>
+        <th class="tight" tooltip="Cheated run">C</th>
       </tr>
     }
 
     # Fetch scores
     size = 50
-    list = Archive.where(off ? "id #{rev ? '>' : '<'} #{off}" : '')
-                  .where(type   ? { highscoreable_type: type     } : nil)
-                  .where(id     ? { highscoreable_id:   id       } : nil)
-                  .where(player ? { metanet_id:         player   } : nil)
-                  .where(tab    ? { tab:                tab      } : nil)
+    list = Archive.where(offset ? "id #{rev ? '>' : '<'} #{offset}" : '')
+                  .where(type   ? { highscoreable_type: type[:name] } : nil)
+                  .where(id     ? { highscoreable_id:   id          } : nil)
+                  .where(player ? { metanet_id:         player      } : nil)
+                  .where(tab    ? { tab:                tab         } : nil)
                   .order(date: rev ? :asc : :desc)
                   .limit(size)
-                  .pluck(:id, :replay_id, :metanet_id, :highscoreable_id, :score, :framecount, :gold, :date, :expired, :cheated)
+                  .pluck(
+                    :id,         :replay_id, :metanet_id, :highscoreable_id, :score,
+                    :framecount, :gold,      :date,       :expired,          :cheated,
+                    :highscoreable_type
+                  )
     list.reverse! if rev
     attrs = list.transpose
     pnames = Player.where(metanet_id: attrs[2]).pluck(:metanet_id, :name).to_h
-    lnames = Level.where(id: attrs[3]).pluck(:id, :name).to_h
+    lnames = [
+      Level.where(id: attrs[3]).pluck(:id, :name).to_h,
+      Episode.where(id: attrs[3]).pluck(:id, :name).to_h,
+      Story.where(id: attrs[3]).pluck(:id, :name).to_h
+    ]
     ranks = Score.where(replay_id: attrs[1]).pluck(:replay_id, :rank).to_h
 
     # Format table rows
-    yes = '<img src="img/icon/yes.svg" alt="Metanet Software" width="12" style="opacity:0.5;">'
-    no = '<img src="img/icon/no.svg" alt="Metanet Software" width="12" style="opacity:0.5;">'
+    yes = '<div class="icon-yes"></div>'
+    no = '<div class="icon-no"></div>'
     rows = list.map{ |s|
+      player_uri = make_route('scores', params, add: { player: s[2] })
+      board_uri = make_route('scores', params, add: { type: TYPES[s[10]][:id], id: s[3] })
+      date = s[7] <= Archive::EPOCH ? "Before #{Archive::EPOCH.strftime('%F')}" : s[7].strftime('%F %T')
       %{
         <tr class="data">
         <td class="numeric">#{s[0]}</td>
         <td class="numeric">#{s[1]}</td>
         <td class="numeric">#{s[2]}</td>
-        <td class="text"><a href="scores?player=#{s[2]}">#{pnames[s[2]]}</a></td>
-        <td class="normal">#{type}</td>
+        <td class="text"><a href="#{player_uri}">#{escape_html(pnames[s[2]][0, 16])}</a></td>
+        <td class="normal">#{s[10]}</td>
         <td class="numeric">#{s[3]}</td>
-        <td class="normal"><a href="scores?type=#{typei}&id=#{s[3]}">#{lnames[s[3]][0, 16]}</a></td>
+        <td class="normal"><a href="#{board_uri}">#{lnames[TYPES[s[10]][:id]][s[3]]}</a></td>
         <td class="numeric#{ranks[s[1]] == 0 ? ' on' : ''}">#{ranks[s[1]]}</td>
         <td class="numeric">#{'%.3f' % [s[4] / 60.0]}</td>
         <td class="numeric">#{s[5]}</td>
         <td class="numeric">#{s[6]}</td>
-        <td class="normal">#{s[7].strftime('%F %F')}</td>
-        <td class="normal #{s[8] ? 'off' : 'on'}">#{s[8] ? yes : no}</td>
-        <td class="normal #{s[9] ? 'off' : 'on'}">#{s[9] ? yes : no}</td>
+        <td class="normal">#{date}</td>
+        <td class="normal #{s[8] ? 'off' : 'on'} tight">#{s[8] ? yes : no}</td>
+        <td class="normal #{s[9] ? 'off' : 'on'} tight">#{s[9] ? yes : no}</td>
         </tr>
       }
     }.join("\n")
 
+    # Format table caption with filters
+    if attrs[0]
+      navbar = build_navbar('scores', params, attrs[0].max, attrs[0].min)
+    elsif params['off']
+      navbar = build_navbar('scores', params)
+    end
+    types = TYPES.map{ |name, att|
+      #next att[:name] if type && att[:id] == type[:id]
+      route = make_route('scores', params, add: { type: att[:id] }, remove: [:id])
+      "<a href=\"#{route}\" tooltip=\"#{att[:name].pluralize} scores\">#{att[:name]}</a>"
+    }
+    types.prepend("<a href=\"#{make_route('scores', params, remove: [:type])}\" tooltip=\"All types\">All</a>")
+    types = types.join("\n")
+
+    tabs = TABS_SOLO.sort_by{ |_, v| v[:index] }.map{ |_, att|
+      #next att[:code] if att[:tab] == tab
+      route = make_route('scores', params, add: { tab: att[:tab] }, remove: [:id])
+      "<a href=\"#{route}\" tooltip=\"#{att[:name]} scores\">#{att[:code]}</a>"
+    }
+    tabs.prepend("<a href=\"#{make_route('scores', params, remove: [:tab])}\" tooltip=\"All tabs\">All</a>")
+    tabs = tabs.join("\n")
+    players = "<a href=\"#{make_route('scores', params, remove: [:player])}\" tooltip=\"All players\">All</a>"
+    caption = %{
+      <caption>
+        <div class="separated">
+          <span>
+            <b>Type</b>: #{types} | <b>Tab</b>: #{tabs} | <b>Players</b>: #{players}
+          </span>
+          <span>
+            #{navbar}
+          </span>
+        </div>
+      </caption>
+    }
+
     # Format table
     table = %{
       <table class=\"data\">
+        #{caption}
         #{header}
         #{rows}
       </table>
@@ -1495,7 +1563,6 @@ module APIServer extend self
     %{
       #{minitable}
       <br>
-      #{build_navbar('scores', params, attrs[0].first, attrs[0].last) if attrs[0]}
       #{table}
     }
   end
@@ -1537,7 +1604,7 @@ module APIServer extend self
 
   def handle_error(res, msg, code = 500)
     body = "<div class=\"centered title off\">#{msg}</div>"
-    server_error(res, build_page('Server error', body))
+    server_error(res, build_page('error', body))
   rescue => e
     lex(e, 'Failed to handle API error')
   end

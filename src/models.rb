@@ -1891,7 +1891,7 @@ module Scorish
     klass  = !mappack ? Score : MappackScore.where(mappack: mappack)
     sfield = !mappack ? '`scores`.`score`' : board == 'hs' ? '`score_hs` / 60.0' : '`score_sr`'
     sfield += board == 'hs' ? ' - `fraction` / 60.0' : ' + `fraction`' if frac
-    tabs   = (tabs.empty? ? TABS_SOLO : tabs) - TABS_SECRET if type.include?(Levelish) && !secrets
+    tabs   = (tabs.empty? ? TABS_SOLO.keys : tabs) - TABS_SECRET if type.include?(Levelish) && !secrets
 
     # Ignore X row (assuming it's at the end of the tab)
     size = TYPES[type.vanilla.to_s][:size]

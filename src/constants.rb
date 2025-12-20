@@ -704,7 +704,7 @@ TABS_NEW = {
     mode:   MODE_SOLO,
     tab:    TAB_NPP,
     index:  1,
-    name:   'Solo',
+    name:   'N++',
     start:  600,
     size:   600,
     files:  { 'S' => 600 },
@@ -869,9 +869,9 @@ TABS_NEW = {
   }
 }
 
-TABS_SOLO = TABS_NEW.select{ |k, v| v[:mode] == MODE_SOLO }.keys
-TABS_COOP = TABS_NEW.select{ |k, v| v[:mode] == MODE_COOP }.keys
-TABS_RACE = TABS_NEW.select{ |k, v| v[:mode] == MODE_RACE }.keys
+TABS_SOLO = TABS_NEW.select{ |k, v| v[:mode] == MODE_SOLO }
+TABS_COOP = TABS_NEW.select{ |k, v| v[:mode] == MODE_COOP }
+TABS_RACE = TABS_NEW.select{ |k, v| v[:mode] == MODE_RACE }
 TABS_SECRET = TABS_NEW.select{ |k, v| v[:secret] }.keys
 
 # <---------------------------------------------------------------------------->
