@@ -564,7 +564,7 @@ DEV_PLAYER_NAME  = '-- DEV TIME --' # Player name to show dev scores
 REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to understand this
 
 # API-specific variables
-API_ON       = false
+API_ON       = true
 API_PORT     = 9119
 API_FAVICON  = 'molebruh'
 API_TEMPLATE = 'template.html'
@@ -910,9 +910,9 @@ RTYPES = [
 ]
 
 # Players blacklisted from the leaderboards.
-#   Hackers: Their scores are fake
-#   Cheaters: Their scores are real, but produced illegitimately
-# Keys are the user IDs, values are their known usernames
+#   Hackers: Fake scores. Rejected from database.
+#   Cheaters: Real but illegitimate scores. Archived in database, but hidden.
+# Keys are the user IDs, values are their known usernames during their active period.
 HACKERS = {
    42984 => ["Sirogabober"],
    63944 => ["Kronogenics"],
