@@ -1342,7 +1342,7 @@ module APIServer extend self
     end
   rescue => e
     lex(e, "API socket failed to parse request for: #{req.path}")
-    nil
+    handle_error(res, 'Failed to handle request')
   end
 
   # Fetch a file for the API to server
@@ -1394,17 +1394,16 @@ module APIServer extend self
   end
 
   # Build navigation bar for browsing lists or tables
-  def build_navbar(route, params, pag)
-    query = params.reject{ |k, v| k == 'p' }.map{ |k, v| "#{k}=#{v}" }.join('&')
+  def build_navbar(route, params, first, last)
+    query = params.reject{ |k, v| k == 'off' || k == 'rev' }.map{ |k, v| "#{k}=#{v}" }.join('&')
     route += '?'
     route += query + '&' if !query.empty?
     %{
       <table><tr>
-        <td><a href="#{route}p=1" title="First"><img src="img/icon/start.svg" alt="Previous"></a></td>
-        <td><a href="#{route}p=#{[pag[:page] - 1, 1].max}" title="Previous"><img src="img/icon/left.svg" alt="Previous"></a></td>
-        <td>#{pag[:page]} / #{pag[:pages]}</td>
-        <td><a href="#{route}p=#{[pag[:page] + 1, pag[:pages]].min}" title="Next"><img src="img/icon/right.svg" alt="Next"></a></td>
-        <td><a href="#{route}p=#{pag[:pages]}" title="Last"><img src="img/icon/end.svg" alt="Last"></a></td>
+        <td><a href="#{route}" title="First"><img src="img/icon/start.svg" alt="Previous"></a></td>
+        <td><a href="#{route}off=#{first}&rev=1" title="Previous"><img src="img/icon/left.svg" alt="Previous"></a></td>
+        <td><a href="#{route}off=#{last}" title="Next"><img src="img/icon/right.svg" alt="Next"></a></td>
+        <td><a href="#{route}off=0&rev=1" title="Last"><img src="img/icon/end.svg" alt="Last"></a></td>
       </tr></table>
     }
   end
@@ -1414,7 +1413,8 @@ module APIServer extend self
     time = Time.now
 
     # Parse query parameters
-    page = params['p'].to_i
+    off = params['off'].to_i.clamp(0, 2 ** 31 - 1) if params['off']
+    rev = params['rev'] == '1'
     type = [Level, Episode, Story][params['type'].to_i]
     typei = [Level, Episode, Story].index(type)
     tname = type.table_name
@@ -1422,53 +1422,67 @@ module APIServer extend self
     player = params['player'].to_i if params['player']
     tab = params['tab'].to_i if params['tab']
 
-    # Table header
-    header = %w{Index ID Player\ ID Player\ name Board\ type Board\ ID Board Rank Score Frames Gold Date Best}.map{ |w|
-      "<th>#{w}</th>"
-    }.join("\n")
-    header.prepend('<tr class="data">')
-    header << '</tr>'
+    # Format table header
+    header = %{
+      <tr class="data">
+        <th tooltip="Score ID in outte's db">Index</th>
+        <th tooltip="Score ID in Metanet's db">ID</th>
+        <th tooltip="Player ID in Metanet's db">Player ID</th>
+        <th>Player name</th>
+        <th>Board type</th>
+        <th tooltip="In-game ID">Board ID</th>
+        <th>Board</th>
+        <th>Rank</th>
+        <th>Score</th>
+        <th>Frames</th>
+        <th>Gold</th>
+        <th tooltip="Date of archival">Date</th>
+        <th tooltip="Obsolete run">O</th>
+        <th tooltip="Cheated run">C</th>
+      </tr>
+    }
 
-    # Table rows
+    # Fetch scores
     size = 50
-    list = Archive.where(type   ? { highscoreable_type: type     } : nil)
+    list = Archive.where(off ? "id #{rev ? '>' : '<'} #{off}" : '')
+                  .where(type   ? { highscoreable_type: type     } : nil)
                   .where(id     ? { highscoreable_id:   id       } : nil)
                   .where(player ? { metanet_id:         player   } : nil)
                   .where(tab    ? { tab:                tab      } : nil)
-    pag = compute_pages(list.count, page, size)
-    subquery = list.order(date: :desc)
-                   .offset(pag[:offset])
-                   .limit(size)
-                   .select(:id, :replay_id, :metanet_id, :highscoreable_id, :score, :framecount, :gold, :date, :expired)
-    rows = Archive.from(subquery)
-                  .order(id: :desc)
-                  .joins('LEFT JOIN `scores` ON `scores`.`replay_id` = `subquery`.`replay_id`')
-                  .joins('INNER JOIN `players` ON `players`.`metanet_id` = `subquery`.`metanet_id`')
-                  .joins("INNER JOIN `#{tname}` ON `#{tname}`.`id` = `subquery`.`highscoreable_id`")
-                  .pluck(
-                    '`subquery`.`id`',  '`subquery`.`replay_id`',        '`subquery`.`metanet_id`',
-                    '`players`.`name`', '`subquery`.`highscoreable_id`', "`#{tname}`.`name`",
-                    '`scores`.`rank`',  '`subquery`.`score`',            '`framecount`',
-                    '`gold`',         '`date`',                      '`expired`'
-                  ).map{ |s|
+                  .order(date: rev ? :asc : :desc)
+                  .limit(size)
+                  .pluck(:id, :replay_id, :metanet_id, :highscoreable_id, :score, :framecount, :gold, :date, :expired, :cheated)
+    list.reverse! if rev
+    attrs = list.transpose
+    pnames = Player.where(metanet_id: attrs[2]).pluck(:metanet_id, :name).to_h
+    lnames = Level.where(id: attrs[3]).pluck(:id, :name).to_h
+    ranks = Score.where(replay_id: attrs[1]).pluck(:replay_id, :rank).to_h
+
+    # Format table rows
+    yes = '<img src="img/icon/yes.svg" alt="Metanet Software" width="12" style="opacity:0.5;">'
+    no = '<img src="img/icon/no.svg" alt="Metanet Software" width="12" style="opacity:0.5;">'
+    rows = list.map{ |s|
       %{
         <tr class="data">
         <td class="numeric">#{s[0]}</td>
         <td class="numeric">#{s[1]}</td>
         <td class="numeric">#{s[2]}</td>
-        <td class="text"><a href="scores?player=#{s[2]}">#{s[3]}</a></td>
+        <td class="text"><a href="scores?player=#{s[2]}">#{pnames[s[2]]}</a></td>
         <td class="normal">#{type}</td>
-        <td class="numeric">#{s[4]}</td>
-        <td class="normal"><a href="scores?type=#{typei}&id=#{s[4]}">#{s[5]}</a></td>
-        <td class="numeric#{s[6] == 0 ? ' on' : ''}">#{s[6]}</td>
-        <td class="numeric">#{'%.3f' % [s[7] / 60.0]}</td>
-        <td class="numeric">#{s[8]}</td>
-        <td class="numeric">#{s[9]}</td>
-        <td class="normal">#{s[10]}</td>
-        <td class="normal #{s[11] ? 'off' : 'on'}">#{!s[11]}</td>
+        <td class="numeric">#{s[3]}</td>
+        <td class="normal"><a href="scores?type=#{typei}&id=#{s[3]}">#{lnames[s[3]][0, 16]}</a></td>
+        <td class="numeric#{ranks[s[1]] == 0 ? ' on' : ''}">#{ranks[s[1]]}</td>
+        <td class="numeric">#{'%.3f' % [s[4] / 60.0]}</td>
+        <td class="numeric">#{s[5]}</td>
+        <td class="numeric">#{s[6]}</td>
+        <td class="normal">#{s[7].strftime('%F %F')}</td>
+        <td class="normal #{s[8] ? 'off' : 'on'}">#{s[8] ? yes : no}</td>
+        <td class="normal #{s[9] ? 'off' : 'on'}">#{s[9] ? yes : no}</td>
         </tr>
       }
     }.join("\n")
+
+    # Format table
     table = %{
       <table class=\"data\">
         #{header}
@@ -1481,7 +1495,7 @@ module APIServer extend self
     %{
       #{minitable}
       <br>
-      #{build_navbar('scores', params, pag)}
+      #{build_navbar('scores', params, attrs[0].first, attrs[0].last) if attrs[0]}
       #{table}
     }
   end
@@ -1519,5 +1533,12 @@ module APIServer extend self
   rescue => e
     lex(e, 'Failed to handle API screenshot request')
     { file: nil }
+  end
+
+  def handle_error(res, msg, code = 500)
+    body = "<div class=\"centered title off\">#{msg}</div>"
+    server_error(res, build_page('Server error', body))
+  rescue => e
+    lex(e, 'Failed to handle API error')
   end
 end

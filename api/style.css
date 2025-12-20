@@ -130,3 +130,22 @@ img.floater {
   width: 24px;
   height: 24px;
 }
+[tooltip] {
+  position: relative;
+}
+[tooltip]:after {
+  content: attr(tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  color: #fff;
+  background-color: #000;
+  border: #fd0 solid 1px;
+  width: max-content;
+  padding: 1px;
+  display: none;
+  z-index: 1;
+}
+[tooltip]:hover:after {
+  display: block;
+}
