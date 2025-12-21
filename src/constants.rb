@@ -566,7 +566,7 @@ REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to und
 # API-specific variables
 API_ON       = true
 API_PORT     = 9119
-API_FAVICON  = 'molebruh'
+API_FAVICON  = 'moleHack'
 API_TEMPLATE = 'template.html'
 API_STYLE    = 'style.css'
 API_SCRIPT   = 'script.js'

@@ -1319,7 +1319,7 @@ module APIServer extend self
       when nil
         send_data(res, data: build_page('home', handle_home()), name: 'index.html')
       when 'favicon.ico'
-        send_data(res, file: File.join(PATH_AVATARS, API_FAVICON + '.png'), cache: true)
+        send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
       when 'api', 'img'
         send_data(res, file: path, cache: true)
       when 'scores'
