@@ -3434,6 +3434,11 @@ class Archive < ActiveRecord::Base
   def find_rank(time)
     Archive.scores(highscoreable, time).index{ |s| s['metanet_id'] == metanet_id } || 20
   end
+
+  # Returns the corresponding score, if it's a current highscore
+  def highscore
+    Score.find_by(highscoreable_type: highscoreable_type, replay_id: replay_id)
+  end
 end
 
 # Implemented by Demo and MappackDemo

@@ -1317,13 +1317,15 @@ module APIServer extend self
     when 'GET'
       case route
       when nil
-        send_data(res, data: build_page('home', handle_home()), name: 'index.html')
+        send_data(res, data: build_page('home'){ handle_home() }, name: 'index.html')
       when 'favicon.ico'
         send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
       when 'api', 'img'
         send_data(res, file: path, cache: true)
       when 'scores'
-        send_data(res, data: build_page('scores', handle_scores(query)), name: API_TEMPLATE)
+        send_data(res, data: build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }, name: API_TEMPLATE)
+      when 'run'
+        send_data(res, data: build_page('run', 'Show information about a given run') { handle_run(query) }, name: API_TEMPLATE)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
@@ -1381,7 +1383,13 @@ module APIServer extend self
   end
 
   # Template for all public API webpages
-  def build_page(title, content)
+  def build_page(title, desc = nil, &block)
+    # Build content
+    time = Time.now
+    content = yield
+    content.prepend("#{create_minitable(title, desc, time)}\n<br>\n") if desc
+
+    # Edit tokens into template
     html = File.read(fetch_file(API_TEMPLATE))
     replace_token(html, 'CSS',     file_timestamp(API_STYLE))
     replace_token(html, 'JS',      file_timestamp(API_SCRIPT))
@@ -1493,6 +1501,7 @@ module APIServer extend self
     rows = list.map{ |s|
       player_uri = make_route('scores', params, add: { player: s[2] })
       board_uri = make_route('scores', params, add: { type: TYPES[s[10]][:id], id: s[3] })
+      replay_uri = make_route('run', { type: TYPES[s[10]][:id], id: s[1] })
       date = s[7] <= Archive::EPOCH ? "Before #{Archive::EPOCH.strftime('%F')}" : s[7].strftime('%F %T')
       %{
         <tr class="data">
@@ -1504,7 +1513,7 @@ module APIServer extend self
         <td class="numeric">#{s[3]}</td>
         <td class="normal"><a href="#{board_uri}">#{lnames[TYPES[s[10]][:id]][s[3]]}</a></td>
         <td class="numeric#{ranks[s[1]] == 0 ? ' on' : ''}">#{ranks[s[1]]}</td>
-        <td class="numeric">#{'%.3f' % [s[4] / 60.0]}</td>
+        <td class="numeric"><a href="#{replay_uri}">#{'%.3f' % [s[4] / 60.0]}</a></td>
         <td class="numeric">#{s[5]}</td>
         <td class="numeric">#{s[6]}</td>
         <td class="normal">#{date}</td>
@@ -1550,20 +1559,147 @@ module APIServer extend self
     }
 
     # Format table
-    table = %{
+    %{
       <table class=\"data\">
         #{caption}
         #{header}
         #{rows}
       </table>
     }
+  end
+
+  # Show information about a particular run
+  def handle_run(params)
+    time = Time.now
+    type = TYPES.find{ |k, v| v[:id] == params['type'].to_i }.last
+
+    # Form for manually choosing type and replay ID
+    default_ids = []
+    options = TYPES.map{ |k, v|
+      default = Archive.where(highscoreable_type: v[:name]).last.replay_id
+      default_ids << default
+      selected = params['type'].to_i == v[:id] ? 'selected' : ''
+      "<option value=\"#{v[:id]}\" data-default=\"#{default}\" #{selected}>#{v[:name]}</option>"
+    }.join
+    default_id = params['id'] ? params['id'].to_i : default_ids[type[:id]]
+    form = %{
+      <form class="centerH">
+        <div style="display: grid; grid-template-columns: auto 60px; gap: 4px; align-items: center;">
+          <label for="htype">Type:</label>
+          <select id="htype" name="type" required style="width: 100%%;">
+            #{options}
+          </select>
+        </div>
+        <div style="display: grid; grid-template-columns: auto 60px; gap: 4px; align-items: center;">
+          <label for="hid">ID:</label>
+          <input id="hid" name="id" inputmode="numeric" maxlength="7" value="#{default_id}" required style="width: 100%%;">
+        </div>
+        <button type="submit">Get</button>
+      </form>
+    }
+    err = "#{form}\n<br><br>\n<div class=\"off\" style=\"text-align: center;\">%s</div>"
+
+    # Parse parameters
+    allowed = ['id', 'type', 'view']
+    params.reject!{ |k, v| !allowed.include?(k) }
+    return err % '' if !params['type'] && !params['id']
+    params.delete('type') if !is_num(params['type']) || !(0..2).cover?(params['type'].to_i)
+    params.delete('id') if !is_num(params['id']) || !(0..9999999).cover?(params['id'].to_i)
+    return err % 'Please specify a valid type' if !params['type']
+    return err % 'Please specify a valid ID' if !params['id']
+
+    # Fetch run
+    run = Archive.find_by(highscoreable_type: type[:name], replay_id: params['id'].to_i)
+    return err % "Run not found in database" if !run
+
+    # Run properties
+    h = run.highscoreable
+    s = run.highscore
+    p = run.player
+    board_route   = make_route('scores', { type: run.highscoreable_type, id: run.highscoreable_id })
+    player_route  = make_route('scores', { player: run.metanet_id })
+    replay_route  = ''
+    attract_route = ''
+    board_url   = "<a href=\"#{board_route}\">#{escape_html(h.name[0, 24])}</a>"
+    player_url  = "<a href=\"#{player_route}\">#{escape_html(p.name[0, 24])}</a>"
+    replay_url  = "<a href=\"#{replay_route}\" tooltip=\"Suitable for nclone, N++ server comms...\">Raw replay</a>"
+    attract_url = "<a href=\"#{attract_route}\" tooltip=\"Suitable for N++ main menu, TAS tool...\">Attract file</a>"
+    attrs = [
+      ['outte++ ID',        "", run.id],
+      ['Replay ID',         "", run.replay_id],
+      ['Player ID',         "", run.metanet_id],
+      ['Player name',       "", player_url],
+      ['Board type',        "", run.highscoreable_type],
+      ['Board internal ID', "", run.highscoreable_id],
+      ['Board usual ID',    "", board_url],
+      ['Board name',        "", h.is_level? ? h.longname : nil],
+      ['Rank',              "", s ? s.rank : 'No longer a highscore'],
+      ['Score',             "", '%.3f' % [run.score / 60.0]],
+      ['Frame count',       "", run.framecount],
+      ['Gold count',        "", run.gold],
+      ['Date of archival',  "", run.date],
+      ['Obsolete run',      run.expired ? 'on' : 'off', run.expired.to_s.capitalize],
+      ['Cheated run',       run.cheated ? 'on' : 'off', run.cheated.to_s.capitalize],
+      ['Download',          "", "#{replay_url}, #{attract_url}"]
+    ].reject{ |a, b, c| !c }.map{ |a, b, c|
+      cls = !b.empty? ? " class=\"#{b}\"" : ''
+      "<tr><td><b>#{a}:</b></td><td#{cls}>#{c}</td></tr>"
+    }.join("\n")
+
+    prop_table = %{
+      <table class="bordered">
+        #{attrs}
+      </table>
+    }
+
+    # Demo analysis
+    demo = run.demo
+    if !demo
+      analysis = "<div class=\"off\">Replay not found in database</div>"
+    elsif !h.is_level?
+      analysis = "#{type[:name]} replays can't be analyzed yet."
+    else
+      inputs = demo.decode.map{ |b|
+        [b % 2 == 1, b / 2 % 2 == 1, b / 4 % 2 == 1]
+      }.map{ |f|
+        (f[2] ? 'L' : '') + (f[1] ? 'R' : '') + (f[0] ? 'J' : '')
+      }.join(".")
+
+      views = [
+        'Table (N++ style)', 'Symbolic (N++ style)', 'Literal (v2.0 style)',
+        'Table condensed',   'Symbolic condensed',   'Literal condensed (v1.4 style)'
+      ].map.with_index{ |opt, i|
+        selected = params['view'].to_i == i ? 'selected' : ''
+        "<option value=\"#{i}\" #{selected}>#{opt}</option>"
+      }.join("\n")
+
+      analysis = %{
+        <div>
+          <form style="border:0;display:inline-block;">
+            <div style="display: grid; grid-template-columns: auto auto auto; gap: 4px; align-items: center;">
+              <label for="view">View:</label>
+              <input type="hidden" name="type" value="#{params['type']}">
+              <input type="hidden" name="id" value="#{params['id']}">
+              <select id="view" name="view" required style="width: 100%;">
+                #{views}
+              </select>
+              <button type="submit">Change</button>
+            </div>
+          </form>
+          <div class="text-box" style="max-width: 50vw;">
+            #{inputs}
+          </div>
+        </div>
+      }
+    end
 
     # Final body
-    minitable = create_minitable('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards', time)
     %{
-      #{minitable}
-      <br>
-      #{table}
+      <div style="display: grid; grid-template-columns: max-content max-content max-content; gap: 4px; align-items: start; justify-content: center;">
+        #{form}
+        #{prop_table}
+        #{analysis}
+      </div>
     }
   end
 
@@ -1604,7 +1740,7 @@ module APIServer extend self
 
   def handle_error(res, msg, code = 500)
     body = "<div class=\"centered title off\">#{msg}</div>"
-    server_error(res, build_page('error', body))
+    server_error(res, build_page('error'){ body })
   rescue => e
     lex(e, 'Failed to handle API error')
   end

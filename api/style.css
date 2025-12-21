@@ -16,17 +16,20 @@ body{
 .bold{
   font-weight: bold;
 }
-th, td {
+.list {
+  display: inline-block;
+  margin: 0px auto;
+  padding: 4px;
+  border: 1px solid #fff;
+}
+table.data th, table.data td {
   padding-left: 10px;
   padding-right: 10px;
   padding-top: 1px;
   padding-bottom: 1px;
 }
-th.tight, td.tight {
-  padding-left: 1px;
-  padding-right: 1px;
-  padding-top: 1px;
-  padding-bottom: 1px;
+table th.tight, table td.tight {
+  padding: 1px;
 }
 TD.catValue {
   padding:0px;
@@ -89,8 +92,11 @@ table {
   margin:0px auto;
   table-layout: fixed;
 }
-table.list {
-  border: 1px solid;
+.bordered {
+  gap: 0px;
+  padding: 0px;
+  border: 1px solid #fff;
+  border-radius: 0px;
 }
 caption > div {
   display: flex;
@@ -133,6 +139,13 @@ img.floater {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+.centerH {
+  position: relative;
+  left: 50%;
+  top: 0%;
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 .left {
@@ -188,4 +201,39 @@ img.floater {
 }
 [tooltip]:hover:after, [tooltipr]:hover:after {
   display: block;
+}
+form {
+  font-size:8pt;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #fff;
+  border-radius: 0px;
+}
+button {
+  font-size:8pt;
+  cursor: pointer;
+  color: #fd0;
+  border: 1px solid #fd0;
+  background-color: #000;
+}
+input, select {
+  box-sizing: border-box;
+  font-size:8pt;
+  color: #fff;
+  border: 1px solid #fff;
+  background-color: #000;
+}
+:focus {
+  font-size:8pt;
+  color: #fff;
+  border: 1px solid #fff;
+  background-color: #000;
+}
+.text-box {
+  padding: 4px;
+  border: 1px solid white;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

@@ -1,3 +1,19 @@
+/* Auto-update default highscoreable ID when the user toggles the highscoreable type */
+const htype_select = document.getElementById("htype");
+const hid_input  = document.getElementById("hid");
+let hPristine = true;
+if (htype_select && hid_input) {
+  hid_input.addEventListener("input", () => {
+    hPristine = false;
+  });
+
+  htype_select.addEventListener("change", () => {
+    if (hPristine) {
+      hid_input.value = htype_select.selectedOptions[0].dataset.default;
+    }
+  });
+}
+
 /**
  *                                FLOATING MOLES
  *                                --------------
