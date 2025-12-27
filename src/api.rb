@@ -1611,27 +1611,43 @@ module APIServer extend self
     # Fetch run
     run = Archive.find_by(highscoreable_type: type[:name], replay_id: params['id'].to_i)
     return err % "Run not found in database" if !run
-
-    # Run properties
     h = run.highscoreable
     s = run.highscore
     p = run.player
-    board_route   = make_route('scores', { type: run.highscoreable_type, id: run.highscoreable_id })
-    player_route  = make_route('scores', { player: run.metanet_id })
-    replay_route  = ''
-    attract_route = ''
-    board_url   = "<a href=\"#{board_route}\">#{escape_html(h.name[0, 24])}</a>"
-    player_url  = "<a href=\"#{player_route}\">#{escape_html(p.name[0, 24])}</a>"
-    replay_url  = "<a href=\"#{replay_route}\" tooltip=\"Suitable for nclone, N++ server comms...\">Raw replay</a>"
-    attract_url = "<a href=\"#{attract_route}\" tooltip=\"Suitable for N++ main menu, TAS tool...\">Attract file</a>"
+    d = run.demo
+
+    # Embedded binary data in Base64 (map, replay and attract files)
+    replay_data = d.demo if d
+    if h.is_level?
+      map_data = h.map.dump_level
+      if replay_data
+        demo_data    = h.dump_demo(Demo.decode(replay_data, true))
+        attract_data = [map_data.size - 8, demo_data.size, map_data[8..], demo_data].pack('L<2a*a*')
+      end
+    end
+
+    # Links
+    route_board   = make_route('scores', { type: run.highscoreable_type, id: run.highscoreable_id })
+    route_player  = make_route('scores', { player: run.metanet_id })
+    route_map     = "data:application/octet-stream;base64,#{Base64.encode64(map_data)}"     if map_data
+    route_replay  = "data:application/octet-stream;base64,#{Base64.encode64(replay_data)}"  if replay_data
+    route_attract = "data:application/octet-stream;base64,#{Base64.encode64(attract_data)}" if attract_data
+    url_board   = "<a href=\"#{route_board}\">#{escape_html(h.name[0, 24])}</a>"
+    url_player  = "<a href=\"#{route_player}\">#{escape_html(p.name[0, 24])}</a>"
+    url_map     = "<a href=\"#{route_map}\" download=\"#{sanitize_filename(h.name)}\" tooltip=\"Map file for the editor\">Map</a>" if route_map
+    url_replay  = "<a href=\"#{route_replay}\" download=\"replay\" tooltip=\"Gzipped, suitable for nclone\">Replay</a>" if route_replay
+    url_attract = "<a href=\"#{route_attract}\" download=\"#{h.id % 2 ** 16}\" tooltip=\"Suitable for N++ main menu, TAS tool...\">Attract</a>" if route_attract
+    urls = [url_map, url_replay, url_attract].compact.join(', ')
+
+    # Run properties
     attrs = [
       ['outte++ ID',        "", run.id],
       ['Replay ID',         "", run.replay_id],
       ['Player ID',         "", run.metanet_id],
-      ['Player name',       "", player_url],
+      ['Player name',       "", url_player],
       ['Board type',        "", run.highscoreable_type],
       ['Board internal ID', "", run.highscoreable_id],
-      ['Board usual ID',    "", board_url],
+      ['Board usual ID',    "", url_board],
       ['Board name',        "", h.is_level? ? h.longname : nil],
       ['Rank',              "", s ? s.rank : 'No longer a highscore'],
       ['Score',             "", '%.3f' % [run.score / 60.0]],
@@ -1640,7 +1656,7 @@ module APIServer extend self
       ['Date of archival',  "", run.date],
       ['Obsolete run',      run.expired ? 'on' : 'off', run.expired.to_s.capitalize],
       ['Cheated run',       run.cheated ? 'on' : 'off', run.cheated.to_s.capitalize],
-      ['Download',          "", "#{replay_url}, #{attract_url}"]
+      ['Download',          "", urls]
     ].reject{ |a, b, c| !c }.map{ |a, b, c|
       cls = !b.empty? ? " class=\"#{b}\"" : ''
       "<tr><td><b>#{a}:</b></td><td#{cls}>#{c}</td></tr>"
@@ -1653,13 +1669,12 @@ module APIServer extend self
     }
 
     # Demo analysis
-    demo = run.demo
-    if !demo
+    if !d
       analysis = "<div class=\"off\">Replay not found in database</div>"
     elsif !h.is_level?
       analysis = "#{type[:name]} replays can't be analyzed yet."
     else
-      bytes = demo.decode
+      bytes = d.decode
       inputs = bytes.map{ |b| [b & 4 > 0, b & 1 > 0, b & 2 > 0] } # LJR
       n = bytes.size.to_s.length
       codes = ['←', '↑', '→']

@@ -233,7 +233,6 @@ Others:
 
 \\ ------------------------ Replays ------------------------
 
-- Generate attract files from Metanet level & userlevel replays, as a way to keep demos.
 - Implement demo analysis to attract files.
 - Compare inputs of two runs like github does, also maybe do this comparison by just specifying changes (*read below*)
 
