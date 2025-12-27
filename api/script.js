@@ -27,6 +27,19 @@ if (analysis_select && analysis_views) {
   document.addEventListener("DOMContentLoaded", () => { analysis_select.value = 0; });
 }
 
+/* Kohina chiptune radio stream */
+const partyButton = document.getElementById("partyButton");
+const kohinaAudio = document.getElementById("kohina");
+
+function playRadio() {
+  kohinaAudio.play();
+}
+
+function stopRadio() {
+  kohinaAudio.pause();
+  kohinaAudio.currentTime = 0;
+}
+
 /**
  *                                FLOATING MOLES
  *                                --------------
@@ -35,20 +48,19 @@ if (analysis_select && analysis_views) {
  * Clicking on a floater spawns 3 more in all opposite diagonal directions.
  */
 
+const initialMoles = 16;
 const dim = 16;
 const files = ["moleBruh.png", "moleCool.png", "moleGasm.png", "moleSwole.png"]
 const images = [];
-const floaterEnable = document.getElementById("floaterEnable");
-const floaterRefresh = document.getElementById("floaterRefresh");
 const w = window.innerWidth;
 const h = window.innerHeight;
 
-let running = true;
+let running = false;
 let frame = null;
 
 /* Extract a uniformly random sample from an array */
 function sample(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
 /* Create a new floater on the screen with respect to another reference floater */
@@ -80,47 +92,50 @@ function create(ref, rx = 0, ry = 0) {
 
 /* Start animating floaters */
 function start() {
-    frame = requestAnimationFrame(animate);
+  for(let i = 0; i < initialMoles; i++) create();
+  frame = requestAnimationFrame(animate);
 }
 
 /* Stop animating floaters */
 function stop() {
-    cancelAnimationFrame(frame);
+  cancelAnimationFrame(frame);
+  reset();
 }
 
 /* Show floaters on screen */
 function show() {
-    images.forEach(obj => { obj.el.style.display = "block"; });
+  images.forEach(obj => { obj.el.style.display = "block"; });
 }
 
 /* Hide floaters off screen */
 function hide() {
-    images.forEach(obj => { obj.el.style.display = "none";  });
+  images.forEach(obj => { obj.el.style.display = "none";  });
 }
 
-/* Remove all floaters and create a new random one */
-function reset()     {
+/* Remove all floaters */
+function reset() {
   images.some((obj) => { obj.el.remove() });
   images.length = 0;
-  create();
 }
 
 /* Change the icon of a given floater */
 function change(obj) {
-    obj.el.src = 'img/emoji/' + sample(files);
+  obj.el.src = 'img/emoji/' + sample(files);
 }
 
-/* Enable or disable floaters (stops animation and hides them) */
+/* Toggle floaters and radio */
 function toggle() {
   running = !running;
   if (running) {
-    floaterEnable.setAttribute("src", "img/icon/stop.svg")
+    partyButton.setAttribute("src", "img/icon/stop.svg")
     show();
     start();
+    playRadio();
   } else {
-    floaterEnable.setAttribute("src", "img/icon/play.svg")
+    partyButton.setAttribute("src", "img/icon/play.svg")
     hide();
     stop();
+    stopRadio();
   }
 }
 
@@ -148,11 +163,4 @@ function animate() {
 }
 
 /* Button controls */
-floaterEnable.addEventListener("click", toggle);
-floaterRefresh.addEventListener("click", reset);
-
-/* When the window loads, create a random floater and begin animating */
-window.onload = () => {
-  create();
-  requestAnimationFrame(animate);
-}
+partyButton.addEventListener("click", toggle);
