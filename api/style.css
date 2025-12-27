@@ -31,6 +31,12 @@ table.data th, table.data td {
 table th.tight, table td.tight {
   padding: 1px;
 }
+table.inputs th, table.inputs td {
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-top: 0px;
+  padding-bottom: 0px;
+}
 TD.catValue {
   padding:0px;
 }
@@ -232,8 +238,11 @@ input, select {
   background-color: #000;
 }
 .text-box {
+  line-height: 2ex;
   padding: 4px;
   border: 1px solid white;
   white-space: normal;
+  overflow: auto;
   overflow-wrap: anywhere;
+  box-sizing: border-box;
 }

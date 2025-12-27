@@ -14,6 +14,19 @@ if (htype_select && hid_input) {
   });
 }
 
+/* Change demo analysis view when the user toggles the select menu */
+const analysis_select  = document.getElementById("demo-analysis-view");
+const analysis_views = document.querySelectorAll("#demo-analysis-content [data-view]");
+if (analysis_select && analysis_views) {
+  function updateAnalysisView() {
+    for (const view of analysis_views) {
+      view.hidden = view.dataset.view !== analysis_select.value;
+    }
+  }
+  analysis_select.addEventListener("change", updateAnalysisView);
+  document.addEventListener("DOMContentLoaded", () => { analysis_select.value = 0; });
+}
+
 /**
  *                                FLOATING MOLES
  *                                --------------

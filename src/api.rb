@@ -1194,7 +1194,7 @@ module Sock extend self
 
     # Set HTTP headers, code and body
     res['Content-Type']        = type || get_mimetype(name)
-    res['Content-Length']      = data.length
+    res['Content-Length']      = data.bytesize
     res['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
     res['Cache-Control']       = cache if cache
     res.status = 200
@@ -1517,8 +1517,8 @@ module APIServer extend self
         <td class="numeric">#{s[5]}</td>
         <td class="numeric">#{s[6]}</td>
         <td class="normal">#{date}</td>
-        <td class="normal #{s[8] ? 'off' : 'on'} tight">#{s[8] ? yes : no}</td>
-        <td class="normal #{s[9] ? 'off' : 'on'} tight">#{s[9] ? yes : no}</td>
+        <td class="normal tight">#{s[8] ? yes : no}</td>
+        <td class="normal tight">#{s[9] ? yes : no}</td>
         </tr>
       }
     }.join("\n")
@@ -1600,7 +1600,7 @@ module APIServer extend self
     err = "#{form}\n<br><br>\n<div class=\"off\" style=\"text-align: center;\">%s</div>"
 
     # Parse parameters
-    allowed = ['id', 'type', 'view']
+    allowed = ['id', 'type']
     params.reject!{ |k, v| !allowed.include?(k) }
     return err % '' if !params['type'] && !params['id']
     params.delete('type') if !is_num(params['type']) || !(0..2).cover?(params['type'].to_i)
@@ -1659,35 +1659,86 @@ module APIServer extend self
     elsif !h.is_level?
       analysis = "#{type[:name]} replays can't be analyzed yet."
     else
-      inputs = demo.decode.map{ |b|
-        [b % 2 == 1, b / 2 % 2 == 1, b / 4 % 2 == 1]
-      }.map{ |f|
-        (f[2] ? 'L' : '') + (f[1] ? 'R' : '') + (f[0] ? 'J' : '')
+      bytes = demo.decode
+      inputs = bytes.map{ |b| [b & 4 > 0, b & 1 > 0, b & 2 > 0] } # LJR
+      n = bytes.size.to_s.length
+      codes = ['←', '↑', '→']
+
+      # Condensed format
+      yes = '<div class="icon-yes"></div>'
+      no = '<div class="icon-no"></div>'
+      frame = 0
+      rows = bytes.chunk(&:itself).map{ |b, list|
+        f = [b & 4 > 0, b & 1 > 0, b & 2 > 0]
+        len = list.length
+        frame += len
+        [
+          frame - len,
+          frame - 1,
+          len,
+          (f[0] ? 'L' : '') + (f[2] ? 'R' : '') + (f[1] ? 'J' : ''),
+          f[0] ? yes : no,
+          f[1] ? yes : no,
+          f[2] ? yes : no
+        ].map{ |str| "<td>#{str}</td>" }.join
+      }.map{ |row| "<tr>#{row}</tr>" }.join("\n")
+      analysis0 = %{
+        <table class="inputs">
+        <tr><th>Start</th><th>End</th><th>Length</th><th>Input</th><th>L</th><th>J</th><th>R</th></tr>
+        #{rows}
+        </table>
+      }
+
+      # Table format
+      rows = inputs.map.with_index{ |f, i|
+        [
+          i.to_s.rjust(n, '0'),
+          *f.map.with_index{ |b, j| b ? codes[j] : '' }
+        ].map{ |str| "<td>#{str}</td>" }.join
+      }.map{ |row| "<tr>#{row}</tr>" }.join("\n")
+      analysis1 = %{
+        <table class="inputs">
+        <tr><th>Frame</th><th>L</th><th>J</th><th>R</th></tr>
+        #{rows}
+        </table>
+      }
+
+      # Symbolic format
+      symbols = "·↑→↗←↖←↖"
+      rows = bytes.map{ |b| symbols[b] }.each_slice(60).with_index.map{ |row, i|
+        "<tr><td>#{(60 * i).to_s.rjust(n, '0')}</td><td>#{row.join('</td><td>')}</td></tr>"
+      }.join("\n")
+      analysis2 = %{
+        <table>
+        #{rows}
+        </table>
+      }
+
+      # Literal format
+      analysis3 = inputs.map{ |f|
+        (f[0] ? 'L' : '') + (f[2] ? 'R' : '') + (f[1] ? 'J' : '')
       }.join(".")
 
+      # Select menu
       views = [
-        'Table (N++ style)', 'Symbolic (N++ style)', 'Literal (v2.0 style)',
-        'Table condensed',   'Symbolic condensed',   'Literal condensed (v1.4 style)'
+        'Condensed', 'Table', 'Symbolic', 'Literal'
       ].map.with_index{ |opt, i|
-        selected = params['view'].to_i == i ? 'selected' : ''
-        "<option value=\"#{i}\" #{selected}>#{opt}</option>"
+        selected = i == 0 ? ' selected' : ''
+        "<option value=\"#{i}\"#{selected}>#{opt}</option>"
       }.join("\n")
 
+      # Analysis box
       analysis = %{
-        <div>
-          <form style="border:0;display:inline-block;">
-            <div style="display: grid; grid-template-columns: auto auto auto; gap: 4px; align-items: center;">
-              <label for="view">View:</label>
-              <input type="hidden" name="type" value="#{params['type']}">
-              <input type="hidden" name="id" value="#{params['id']}">
-              <select id="view" name="view" required style="width: 100%;">
-                #{views}
-              </select>
-              <button type="submit">Change</button>
-            </div>
-          </form>
-          <div class="text-box" style="max-width: 50vw;">
-            #{inputs}
+        <div style="gap:4px;">
+          View:
+          <select id="demo-analysis-view">
+            #{views}
+          </select>
+          <div class="text-box" style="max-width:50vw;max-height:40ex" id="demo-analysis-content">
+            <div data-view="0">#{analysis0}</div>
+            <div data-view="1" hidden>#{analysis1}</div>
+            <div data-view="2" hidden>#{analysis2}</div>
+            <div data-view="3" hidden>#{analysis3}</div>
           </div>
         </div>
       }
