@@ -1169,7 +1169,7 @@ module Sock extend self
   end
 
   # Send arbitrary data or an arbitrary file as a response
-  def send_data(res, data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true)
+  def send_data(res, data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true, compress: nil)
     # Data must be provided either directly or in a file
     if !data && !file
       return server_error(res)
@@ -1177,6 +1177,23 @@ module Sock extend self
       return unless check_file(res, file)
       name ||= file
       data = binary ? File.binread(file) : File.read(file)
+    end
+
+    # Optionally compress the body
+    encoding = nil
+    if compress
+      compress.split(',').each{ |method|
+        case method.strip
+        when 'gzip', 'x-gzip'
+          data = Zlib.gzip(data)
+          encoding = 'gzip'
+          break
+        when 'deflate'
+          data = Zlib.deflate(data)
+          encoding = 'deflate'
+          break
+        end
+      }
     end
 
     # Determine value of headers (cache and content disposition)
@@ -1196,6 +1213,7 @@ module Sock extend self
     res['Content-Type']        = type || get_mimetype(name)
     res['Content-Length']      = data.bytesize
     res['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
+    res['Content-Encoding']    = encoding if encoding
     res['Cache-Control']       = cache if cache
     res.status = 200
     res.body = data
@@ -1313,19 +1331,24 @@ module APIServer extend self
     query = req.query.map{ |k, v| [k, v.to_s] }.to_h
     return if path =~ /(^|\/|\\)\.\.($|\/|\\)/i
     route = path.split('/').first
+    compress = req.header['accept-encoding'][0]
     case req.request_method
     when 'GET'
       case route
       when nil
-        send_data(res, data: build_page('home'){ handle_home() }, name: 'index.html')
+        send_data(res, data: build_page('home'){ handle_home() }, name: 'index.html', compress: compress)
       when 'favicon.ico'
         send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
-      when 'api', 'img'
+      when 'api'
+        send_data(res, file: path, cache: true, compress: compress)
+      when 'img'
         send_data(res, file: path, cache: true)
       when 'scores'
-        send_data(res, data: build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }, name: API_TEMPLATE)
+        body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }
+        send_data(res, data: body, name: 'scores.html', compress: compress)
       when 'run'
-        send_data(res, data: build_page('run', 'Show information about a given run') { handle_run(query) }, name: API_TEMPLATE)
+        body = build_page('run', 'Show information about a given run') { handle_run(query) }
+        send_data(res, data: body, name: 'run.html', compress: compress, cache: true)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
