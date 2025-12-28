@@ -19,6 +19,7 @@ source 'https://rubygems.org' do
     gem 'matplotlib'
     gem 'rexml'
     gem 'svg-graph'
+    gem 'octicons'
   end
 
   group :development do

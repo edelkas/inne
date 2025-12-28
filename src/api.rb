@@ -9,6 +9,7 @@
 
 require 'json'
 require 'net/http'
+require 'octicons'
 require 'socket'
 require 'webrick'
 
@@ -1343,6 +1344,10 @@ module APIServer extend self
         send_data(res, file: path, cache: true, compress: compress)
       when 'img'
         send_data(res, file: path, cache: true)
+      when 'octicon'
+        file = path.split('/').last
+        name, size, color = file.remove('.svg').split('_')
+        send_data(res, data: build_octicon(name, size, color), name: file, cache: true)
       when 'scores'
         body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }
         send_data(res, data: body, name: 'scores.html', compress: compress)
@@ -1441,10 +1446,10 @@ module APIServer extend self
   # Build navigation bar for browsing lists or tables
   def build_navbar(route, params, first = nil, last = nil)
     [
-      %{<a href="#{make_route(route, params)}" tooltip="First"><img src="img/icon/start.svg" alt="Previous"></a>},
-      first ? %{<a href="#{make_route(route, params, off: first, rev: true)}" tooltip="Previous"><img src="img/icon/left.svg" alt="Previous"></a>} : nil,
-      last ? %{<a href="#{make_route(route, params, off: last)}" tooltip="Next"><img src="img/icon/right.svg" alt="Next"></a>} : nil,
-      %{<a href="#{make_route(route, params, off: 0, rev: true)}" tooltip="Last"><img src="img/icon/end.svg" alt="Last"></a>}
+      %{<a href="#{make_route(route, params)}" tooltip="First"><img src="octicon/move-to-start_16.svg" alt="Previous"></a>},
+      first ? %{<a href="#{make_route(route, params, off: first, rev: true)}" tooltip="Previous"><img src="octicon/arrow-left_16.svg" alt="Previous"></a>} : nil,
+      last ? %{<a href="#{make_route(route, params, off: last)}" tooltip="Next"><img src="octicon/arrow-right_16.svg" alt="Next"></a>} : nil,
+      %{<a href="#{make_route(route, params, off: 0, rev: true)}" tooltip="Last"><img src="octicon/move-to-end_16.svg" alt="Last"></a>}
     ].compact.join("\n")
   end
 

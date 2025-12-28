@@ -127,12 +127,12 @@ function change(obj) {
 function toggle() {
   running = !running;
   if (running) {
-    partyButton.setAttribute("src", "img/icon/stop.svg")
+    partyButton.setAttribute("src", "octicon/square-circle.svg")
     show();
     start();
     playRadio();
   } else {
-    partyButton.setAttribute("src", "img/icon/play.svg")
+    partyButton.setAttribute("src", "octicon/play.svg")
     hide();
     stop();
     stopRadio();

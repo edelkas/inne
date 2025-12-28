@@ -2857,6 +2857,23 @@ def strlen(str, font, pad_x: 0)
   length
 end
 
+# Convert a raw octicon to a valid SVG file
+def build_octicon(name, size = 24, color = 'white')
+  # Ensure defaults are used even if nil is explicitly sent
+  size  ||= 24
+  color ||= 'white'
+  icon = Octicons::Octicon.new(name, width: size) rescue Octicons::Octicon.new('question', width: size)
+  w = icon.options[:width]
+  h = icon.options[:height]
+  box = icon.options[:viewBox]
+  color.prepend('#') if (color.length == 3 || color.length == 6) && color == color[/\h+/i]
+  %{
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="#{box}" width="#{w}" height="#{h}" fill="#{color}">
+    #{icon.path}
+    </svg>
+  }
+end
+
 # <---------------------------------------------------------------------------->
 # <------                        BOT MANAGEMENT                          ------>
 # <---------------------------------------------------------------------------->

@@ -122,7 +122,7 @@ img.floater {
 .icon-yes {
     width: 12px;
     height: 12px;
-    background-image: url('../img/icon/yes.svg');
+    background-image: url('../octicon/check-circle-fill_12_080.svg');
     background-size: contain;
     background-repeat: no-repeat;
     opacity: 0.5;
@@ -130,7 +130,7 @@ img.floater {
 .icon-no {
     width: 12px;
     height: 12px;
-    background-image: url('../img/icon/no.svg');
+    background-image: url('../octicon/x-circle-fill_12_800.svg');
     background-size: contain;
     background-repeat: no-repeat;
     opacity: 0.5;
