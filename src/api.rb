@@ -10,6 +10,7 @@
 require 'json'
 require 'net/http'
 require 'octicons'
+require 'octokit'
 require 'socket'
 require 'webrick'
 
@@ -1342,6 +1343,9 @@ module APIServer extend self
         send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
       when 'api'
         send_data(res, file: path, cache: true, compress: compress)
+      when 'git'
+        body = build_page('git', 'Latest changes to the outte++ project in GitHub') { handle_git(query) }
+        send_data(res, data: body, name: 'git.html', compress: compress, cache: true)
       when 'img'
         send_data(res, file: path, cache: true)
       when 'octicon'
@@ -1794,6 +1798,34 @@ module APIServer extend self
         #{prop_table}
         #{analysis}
       </div>
+    }
+  end
+
+  # Latest changes to the project using GitHub's API
+  def handle_git(params)
+    client = Octokit::Client.new(access_token: ENV["PASS"])
+
+    # Header
+    header = ['Hash', 'Description', 'Author', 'Date'].map{ |th| "<th>#{th}</th>" }.join("\n")
+
+    # Rows
+    rows = client.commits(GITHUB_USER + '/' + GITHUB_REPO, per_page: 10).map{ |commit|
+      %{
+        <tr>
+          <td><a href="#{commit.html_url}" tooltip="#{commit.sha}">#{commit.sha[0, 7]}</a></td>
+          <td>#{commit.commit.message.lines.first.chomp[0, 128]}</td>
+          <td><a href="#{commit.author.html_url}">#{commit.author.login}</a></td>
+          <td>#{commit.commit.committer.date}</td>
+        </tr>
+      }
+    }.join("\n")
+
+    # Format table
+    %{
+      <table class=\"data\">
+        #{header}
+        #{rows}
+      </table>
     }
   end
 
