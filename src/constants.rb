@@ -547,7 +547,7 @@ SPEEDRUN_COLOR_INFO = 0x93a5a6 # Embed bar color for informational notices
 
 SOCKET      = false # Whether to open sockets or not
 SOCKET_PORT = 8126  # Port for CLE's TCP server
-SOCKET_LOG  = TEST  # Log request and response details
+SOCKET_LOG  = true  # Log request and response details
 
 # CUSE-specific variables
 QUERY_LIMIT_SOFT = 25   # Number of queried userlevels per page
@@ -944,9 +944,11 @@ HACKERS = {
   336069 => ["Progressively idle"],
   353512 => ["Dragon_V.V"],
   357282 => ["MX_Er3P"],
+  379163 => ["ジャイロ"],
   401089 => ["Haidi"],
   409973 => ["outte++2"],
-  414614 => ["Λ"]
+  414614 => ["Λ"],
+  424914 => [">:("]
 }
 
 CHEATERS = {

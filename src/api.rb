@@ -1330,7 +1330,7 @@ module APIServer extend self
     res.body = ''
     path = req.path.strip[1..]
     query = req.query.map{ |k, v| [k, v.to_s] }.to_h
-    return if path =~ /(^|\/|\\)\.\.($|\/|\\)/i
+    return if path =~ /\.\./i
     route = path.split('/').first
     compress = req.header['accept-encoding'][0]
     case req.request_method
