@@ -10,7 +10,6 @@
 require 'json'
 require 'net/http'
 require 'octicons'
-require 'octokit'
 require 'socket'
 require 'webrick'
 
@@ -1344,7 +1343,8 @@ module APIServer extend self
       when 'api'
         send_data(res, file: path, cache: true, compress: compress)
       when 'git'
-        body = build_page('git', 'Latest changes to the outte++ project in GitHub') { handle_git(query) }
+        link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
+        body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) }
         send_data(res, data: body, name: 'git.html', compress: compress, cache: true)
       when 'img'
         send_data(res, file: path, cache: true)
@@ -1400,8 +1400,9 @@ module APIServer extend self
   end
 
   # Concatenate path and query properly to form a valid URI route
-  def make_route(path, query = {}, add: {}, remove: [], off: nil, rev: nil)
-    query = query.merge(add.stringify_keys).except('off', 'rev', *remove.map(&:to_s))
+  def make_route(path, query = {}, add: {}, remove: [], off: nil, rev: nil, page: nil)
+    query = query.merge(add.stringify_keys).except('off', 'rev', 'p', *remove.map(&:to_s))
+    query['p']   = page.to_i if page
     query['off'] = off.to_i if off
     query['rev'] = rev ? 1 : 0 if !rev.nil?
     return path if query.empty?
@@ -1448,13 +1449,23 @@ module APIServer extend self
   end
 
   # Build navigation bar for browsing lists or tables
-  def build_navbar(route, params, first = nil, last = nil)
-    [
-      %{<a href="#{make_route(route, params)}" tooltip="First"><img src="octicon/move-to-start_16.svg" alt="Previous"></a>},
-      first ? %{<a href="#{make_route(route, params, off: first, rev: true)}" tooltip="Previous"><img src="octicon/arrow-left_16.svg" alt="Previous"></a>} : nil,
-      last ? %{<a href="#{make_route(route, params, off: last)}" tooltip="Next"><img src="octicon/arrow-right_16.svg" alt="Next"></a>} : nil,
-      %{<a href="#{make_route(route, params, off: 0, rev: true)}" tooltip="Last"><img src="octicon/move-to-end_16.svg" alt="Last"></a>}
-    ].compact.join("\n")
+  def build_navbar(route, params, first: nil, last: nil, page: nil, pages: nil, size: nil)
+    if page          # Page-based navigation
+      [
+        page > 1 ? %{<a href="#{make_route(route, params, page: 1)}" tooltip="First"><img src="octicon/move-to-start_16.svg" alt="Previous"></a>} : nil,
+        page > 1 ? %{<a href="#{make_route(route, params, page: page - 1)}" tooltip="Previous"><img src="octicon/arrow-left_16.svg" alt="Previous"></a>} : nil,
+        size ? "#{(page - 1) * size + 1} - #{page * size}" : "#{page} / #{pages}",
+        page < pages ? %{<a href="#{make_route(route, params, page: page + 1)}" tooltip="Next"><img src="octicon/arrow-right_16.svg" alt="Next"></a>} : nil,
+        page < pages ? %{<a href="#{make_route(route, params, page: pages)}" tooltip="Last"><img src="octicon/move-to-end_16.svg" alt="Last"></a>} : nil
+      ].compact.join("\n")
+    else             # Offset-based navigation
+      [
+        %{<a href="#{make_route(route, params)}" tooltip="First"><img src="octicon/move-to-start_16.svg" alt="Previous"></a>},
+        first ? %{<a href="#{make_route(route, params, off: first, rev: true)}" tooltip="Previous"><img src="octicon/arrow-left_16.svg" alt="Previous"></a>} : nil,
+        last ? %{<a href="#{make_route(route, params, off: last)}" tooltip="Next"><img src="octicon/arrow-right_16.svg" alt="Next"></a>} : nil,
+        %{<a href="#{make_route(route, params, off: 0, rev: true)}" tooltip="Last"><img src="octicon/move-to-end_16.svg" alt="Last"></a>}
+      ].compact.join("\n")
+    end
   end
 
   # Return list of latest highscores
@@ -1557,7 +1568,7 @@ module APIServer extend self
 
     # Format table caption with filters
     if attrs[0]
-      navbar = build_navbar('scores', params, attrs[0].max, attrs[0].min)
+      navbar = build_navbar('scores', params, first: attrs[0].max, last: attrs[0].min)
     elsif params['off']
       navbar = build_navbar('scores', params)
     end
@@ -1803,19 +1814,92 @@ module APIServer extend self
 
   # Latest changes to the project using GitHub's API
   def handle_git(params)
-    client = Octokit::Client.new(access_token: ENV["PASS"])
+    # Pagination
+    count = 25
+    page = [params['p'].to_i, 1].max
+    total = `git rev-list --count --all`.to_i
+    pag = compute_pages(total, page, count)
 
     # Header
-    header = ['Hash', 'Description', 'Author', 'Date'].map{ |th| "<th>#{th}</th>" }.join("\n")
+    header = ['Commit', 'Description', 'Author', 'Branch', 'Changes', 'Date'].map{ |th| "<th>#{th}</th>" }.join("\n")
+
+    # Parse commits
+    raw = `git log -n #{count} --skip=#{pag[:offset]} --decorate=full --date=iso-strict --numstat --format='@@@%H|%D|%cI|%an|%ae|%cn|%ce|%s%n%B'`
+    commits = []
+    current = nil
+
+    raw.each_line do |line|
+      if line.start_with?("@@@")             # New commit
+        commits << current if current
+
+        # First line after sentinel (@@@) contains basic commit fields
+        hash, refs, date, aname, amail, cname, cmail, msg = line[3..].split("|")
+
+        # Parse refs (branches and tags)
+        branches = []
+        tags = []
+        refs.split(",").each do |ref|
+          next if ref =~ /remotes/i
+          ref.sub!(/HEAD ->/, '')
+          ref.strip!
+          case ref
+          when /^refs\/heads\//
+            branches << ref.sub('refs/heads/', '')
+          when /^refs\/tags\//
+            tags << ref.sub('refs/tags/', '')
+          end
+        end
+
+        # New commit block
+        current = {
+          hash: hash,
+          date: date,
+          author: {
+            name:  aname,
+            email: amail
+          },
+          committer: {
+            name:  cname,
+            email: cmail
+          },
+          description: msg,
+          extended: '',
+          files: {},
+          changes: 0,
+          additions: 0,
+          deletions: 0,
+          branches: branches,
+          tags: tags
+        }
+      elsif line =~ /^(\d+)\s+(\d+)\s+(.+)$/ # File changes
+        add, del, name = $1.to_i, $2.to_i, $3
+        current[:changes] += 1
+        current[:additions] += add
+        current[:deletions] += del
+        current[:files][name] = [add, del]
+      elsif line.strip.empty?                # Empty line
+        # Ignore
+      else                                   # Remainder of description
+        current[:extended] << line
+      end
+    end
+
+    # Add final commit
+    commits << current if current
 
     # Rows
-    rows = client.commits(GITHUB_USER + '/' + GITHUB_REPO, per_page: 10).map{ |commit|
+    rows = commits.map{ |comm|
+      commit = "<a href=\"#{GITHUB_LINK}/commit/#{comm[:hash]}\" tooltip=\"#{comm[:hash]}\">#{comm[:hash][0, 7]}</a>"
+      author = "<a href=\"https://github.com/#{comm[:author][:name]}?tab=repositories/\">#{comm[:author][:name]}</a>"
+      branches = "<a href=\"#{GITHUB_LINK}/tree/#{comm[:hash]}\">master</a>"
       %{
         <tr>
-          <td><a href="#{commit.html_url}" tooltip="#{commit.sha}">#{commit.sha[0, 7]}</a></td>
-          <td>#{commit.commit.message.lines.first.chomp[0, 128]}</td>
-          <td><a href="#{commit.author.html_url}">#{commit.author.login}</a></td>
-          <td>#{commit.commit.committer.date}</td>
+          <td><img src="octicon/git-commit_12.svg"> #{commit}</td>
+          <td>#{comm[:description][0, 128]}</td>
+          <td><img src="octicon/person_12.svg"> #{author}</td>
+          <td><img src="octicon/git-branch_12.svg"> #{branches}</td>
+          <td>#{comm[:changes]} (<span class="on">+#{comm[:additions]}</span>, <span class="off">-#{comm[:deletions]}</span>)</td>
+          <td>#{comm[:date]}</td>
         </tr>
       }
     }.join("\n")
@@ -1823,6 +1907,9 @@ module APIServer extend self
     # Format table
     %{
       <table class=\"data\">
+        <caption>
+          #{build_navbar('git', params, page: pag[:page], pages: pag[:pages], size: count)}
+        </caption>
         #{header}
         #{rows}
       </table>

@@ -9,7 +9,6 @@ source 'https://rubygems.org' do
   gem 'rubyzip'
   gem 'unicode-emoji'
   gem 'webrick'
-  gem 'octokit'
 
   group :imaging do
     gem 'rmagick'
