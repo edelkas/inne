@@ -44,6 +44,8 @@
 #       Operations (e.g. weighted averages), geometry (e.g. intersection and
 #       areas of rectangles), hashing (SHA1, MD5), etc.
 
+$load_time = Time.now
+
 require 'active_record'
 require 'damerau-levenshtein'
 require 'digest'
@@ -458,14 +460,19 @@ end
 # TODO: Make thread-safe
 class Cache
 
+  attr_reader :capacity, :entries, :adds, :taps, :name
+
   # For web content the key is the URL
-  Entry = Struct.new(:key, :size, :content, :expiry)
+  Entry = Struct.new(:key, :size, :raw_size, :content, :duration, :expiry, :added, :accessed, :taps, :compressed)
 
   # Capacity in MB, duration in minutes
-  def initialize(capacity: 10, duration: 5)
+  def initialize(capacity: 10, duration: 5, name: 'cache')
     @capacity = 1024 ** 2 * capacity
     @duration = 60 * duration
     @entries  = {}
+    @name     = name
+    @adds     = 0
+    @taps     = 0
     start
   end
 
@@ -475,21 +482,31 @@ class Cache
   end
 
   # Get the content of an entry
-  def get(key)
-    check(key) ? @entries[key].content : nil
+  def get(key, decompress: true)
+    return if !check(key)
+    content = @entries[key].content
+    content = Zlib.inflate(content) if decompress && @entries[key].compressed
+    content
   end
 
   # Update the expiry of an entry
   def tap(key)
     return if !check(key)
-    @entries[key].expiry = Time.now + @duration
+    @entries[key].accessed = Time.now
+    @entries[key].expiry = @entries[key].accessed + @entries[key].duration
+    @entries[key].taps += 1
+    @taps += 1
   end
 
   # Add or overwrite an entry
-  def add(key, content)
+  def add(key, content, duration = @duration / 60, compress: false)
     remove(key) if check(key)
+    size = content.size
+    content = Zlib.deflate(content) if compress
     return if !guarantee(content.size)
-    @entries[key] = Entry.new(key, content.size, content, Time.now + @duration)
+    now = Time.now
+    @entries[key] = Entry.new(key, content.size, size, content, 60 * duration, now + 60 * duration, now, now, 0, compress)
+    @adds += 1
   end
 
   # Remove an entry from the cache
@@ -502,6 +519,21 @@ class Cache
     @entries = {}
   end
 
+  # Compute the total storage of the cache
+  def size
+    @entries.map{ |key, entry| entry.size }.sum
+  end
+
+  # Compute the raw (uncompressed) storage of the cache
+  def raw_size
+    @entries.map{ |key, entry| entry.raw_size }.sum
+  end
+
+  # Number of entries in the cache
+  def length
+    @entries.size
+  end
+
   private
 
   # Prune expired entries
@@ -512,6 +544,7 @@ class Cache
   # Start monitoring expired entries
   def start
     @thread = Thread.new do
+      Thread.current.name = @name.gsub(/\s+/, '_').downcase
       loop do
         sleep(60)
         prune
@@ -523,11 +556,6 @@ class Cache
   def stop
     @thread.kill
     @thread = nil
-  end
-
-  # Compute the total storage of the cache
-  def size
-    @entries.map{ |key, entry| entry.size }.sum
   end
 
   # Return the available space remaining in the cache
@@ -601,8 +629,9 @@ end
 
 # Light wrapper to execute code block in thread
 # Release db connection at the end if specified, also rescue errors
-def _thread(release: false)
+def _thread(release: false, name: 'thread')
   Thread.new do
+    Thread.current.name = name.gsub(/\s+/, '_').downcase
     yield
   rescue => e
     lex(e, 'Error in thread')
@@ -617,8 +646,8 @@ end
 
 # Togglable threads are keyed by name so that we can dynamically work with them
 # from other threads, even from Discord commands.
-def toggle_thread_get(name) $threads_tmp[name] end
-def toggle_thread_set(name, &block) $threads_tmp[name] = Thread.new(&block) end
+def toggle_thread_get(name) $threads[name] end
+def toggle_thread_set(name, &block) $threads[name] = Thread.new(&block) end
 
 # Simple class to parallelize tasks with a pool of threads
 class ThreadPool
@@ -3205,3 +3234,6 @@ rescue => e
   lex(e, 'Failed to compute MD5 hash')
   nil
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

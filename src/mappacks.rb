@@ -3,6 +3,8 @@
 # it handles all CLE server communications (score submission, leaderboards, replay
 # downloading, etc).
 
+$load_time = Time.now
+
 class Mappack < ActiveRecord::Base
   has_many :mappack_scores
   has_many :mappack_levels
@@ -1765,3 +1767,6 @@ class MappackChallenge < ActiveRecord::Base
   alias_method :level, :mappack_level
   alias_method :level=, :mappack_level=
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

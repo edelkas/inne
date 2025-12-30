@@ -91,6 +91,7 @@
 ################################################################################
 
 $boot_time = Time.now
+$load_time = Time.now # Reset on each file load
 
 # We use some gems directly from Github repositories. This is supported by
 # Bundler but not by RubyGems directly. The next two lines makes these gems
@@ -112,8 +113,11 @@ require 'stringio'
 require 'time'
 require 'yaml'
 require 'zlib'
+now = Time.now
+puts("[%s] i Loaded libraries (%.2fs)" % [now.strftime("%Y/%m/%d %H:%M:%S.%L"), now - $boot_time])
 
 # Import all other source files (the order matters!)
+t = Time.now
 require_relative 'constants.rb'
 require_relative 'utils.rb'
 require_relative 'io.rb'
@@ -133,6 +137,8 @@ begin
 rescue LoadError
   err("Failed to load C-inne, is it built?")
 end
+log("Loaded source files (%.2fs)" % [Time.now - t])
+$load_time = Time.now
 
 # We monkey patch a few core classes (Enumerable, Array, boolean classes...)
 # and several of the gems (ActiveRecord, Discordrb, Webrick...)
@@ -147,6 +153,8 @@ end
 # Initialize the global variables used by the bot
 # Also set some environment variables and ensure some folders are created
 def initialize_vars
+  t = Time.now
+
   # Initialize global variables
   $config          = nil
   $channel         = nil
@@ -168,8 +176,8 @@ def initialize_vars
   $mutex           = { trace: Mutex.new, nsim: Mutex.new, tmp_msg: Mutex.new }
   $log             = { socket: SOCKET_LOG }
   $tools           = { python: nil }
-  $threads         = []
-  $threads_tmp     = {}
+  $threads         = {}
+  $servers         = {}
   $main_queue      = Queue.new
   $sql_vars        = {}
   $sql_status      = {}
@@ -194,7 +202,7 @@ def initialize_vars
   # Create additional needed folders
   [DIR_LOGS].each{ |d| Dir.mkdir(d) unless Dir.exist?(d) }
 
-  log("Initialized global variables")
+  log("Initialized global variables (%.2fs)" % [Time.now - t])
 rescue => e
   fatal("Failed to initialize global variables: #{e}")
 end
@@ -213,10 +221,11 @@ end
 
 # Connect to the database
 def connect_db
+  t = Time.now
   Time.zone = 'UTC'
   ActiveRecord::Base.establish_connection($config)
   GlobalProperty.status_init
-  log("Connected to database")
+  log("Connected to database (%.2fs)" % [Time.now - t])
 rescue => e
   fatal("Failed to connect to the database: #{e}")
 end
@@ -412,14 +421,18 @@ end
 
 # Start running the bot, and set up an interrupt trigger to shut it down
 def run_bot
+  t = Time.now
   $bot.run(true)
-  trap("INT") {
-    shutdown(trap: true, force: true)
-    exit
+  ['INT', 'TERM'].each { |signal|
+    trap(signal) {
+      alert("SIG#{signal} received, shutting down...")
+      shutdown(trap: true, force: true)
+      exit
+    }
   }
   leave_unknown_servers
   register_commands
-  log("Bot connected to servers: #{$bot.servers.map{ |id, s| s.name }.join(', ')}.")
+  succ("Bot connected to servers: #{$bot.servers.map{ |id, s| s.name }.join(', ')} (%.2fs)." % [Time.now - t])
 rescue => e
   fatal("Failed to execute bot: #{e}")
 end
@@ -434,11 +447,7 @@ end
 
 # Routine to shutdown the program (exit should be called afterwards)
 def shutdown(trap: false, force: false)
-  log("Running shutdown tasks...")
-
   # Stop all background tasks gracefully, unless forcefully killing outte
-  # We use a thread to ensure that this one is already listening by the time
-  # the clear takes place.
   if !force && !Scheduler.free?
     names = Scheduler.list_blocking.map{ |job| job.task.name }.join(", ")
     names = 'blocking threads' if names.empty?
@@ -447,7 +456,7 @@ def shutdown(trap: false, force: false)
     sleep(0.1) while !Scheduler.free?
   end
 
-  # Stop bot and CLE server, disconnect from DB
+  # Stop bot, shutdown servers, disconnect from DB
   stop_bot
   Sock.off
   #disconnect_db unless trap
@@ -457,7 +466,6 @@ rescue => e
 end
 
 # Bot initialization sequence
-log("Loading outte...")
 initialize_vars
 monkey_patch
 load_config
@@ -471,6 +479,9 @@ _thread do
   set_channels
   start_discord_tasks
 end unless DAEMON
+
+# Done loading
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])
 succ("Loaded outte (%.2fs)" % [Time.now - $boot_time])
 binding.pry if DEBUG
 

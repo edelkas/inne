@@ -2,6 +2,8 @@
 # the responses to all commands sent via Discord pings or DMs. See the "respond"
 # method at the end to start to understand the flow.
 
+$load_time = Time.now
+
 require 'ascii_charts'
 require 'rmagick'
 require 'svggraph'
@@ -2513,3 +2515,6 @@ def respond(event)
   action_dec('commands')
   event << "Sorry, I didn't understand your command."
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

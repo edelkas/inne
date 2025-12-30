@@ -6,6 +6,8 @@
 # (e.g. Highscoreable, Downloadable, Level, Episode, Story, Archive, Demo...).
 # Including the modifications to 3rd party stuff (monkey patches).
 
+$load_time = Time.now
+
 require 'active_record'
 require 'json'
 require 'net/http'
@@ -3614,3 +3616,6 @@ class Message < ActiveRecord::Base
     where("date < ?", Time.now - DELETE_TIMELIMIT).delete_all
   end
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

@@ -7,6 +7,8 @@
 #   - Custom API:   Our custom API (APIServer) to request stats on command
 # We also have a general socket module (Sock) which is the base for both servers
 
+$load_time = Time.now
+
 require 'json'
 require 'net/http'
 require 'octicons'
@@ -287,7 +289,7 @@ module Speedrun extend self
   # Cache to store HTTP requests to the API for a few minutes, specially useful when
   # navigating paginated lists (e.g. leaderboards). The API limit is 100 requets
   # per minute, so it's hard to reach, but this way we save time anyway.
-  @@cache = Cache.new
+  @@cache = Cache.new(name: 'speedrun-cache')
 
   def get_game(game)
     @@games[game]
@@ -1093,17 +1095,16 @@ end
 
 # See "Socket Variables" in constants.rb for docs
 module Sock extend self
-  @@servers = {}
 
   # Stops all servers
   def self.off
-    @@servers.keys.each{ |s| Sock.stop(s) }
+    $servers.keys.each{ |s| Sock.stop(s) }
   end
 
   # Start a basic HTTP server at the specified port
   def start(port, name)
     # Create WEBrick HTTP server
-    @@servers[name] = WEBrick::HTTPServer.new(
+    $servers[name] = WEBrick::HTTPServer.new(
       Port: port,
       AccessLog: [
         [$stdout, "#{name} %h %m %U"],
@@ -1111,7 +1112,7 @@ module Sock extend self
       ]
     )
     # Setup callback for requests (ensuring we are connected to SQL)
-    @@servers[name].mount_proc '/' do |req, res|
+    $servers[name].mount_proc '/' do |req, res|
       action_inc('http_requests')
       acquire_connection
       handle(req, res)
@@ -1119,14 +1120,14 @@ module Sock extend self
     end
     # Start server (blocks thread)
     log("Started #{name} server")
-    @@servers[name].start
+    $servers[name].start
   rescue => e
     lex(e, "Failed to start #{name} server")
   end
 
   # Stops server, needs to be summoned from another thread
   def stop(name)
-    @@servers[name].shutdown
+    $servers[name].shutdown
     log("Stopped #{name} server")
   rescue => e
     lex(e, "Failed to stop #{name} server")
@@ -1317,6 +1318,9 @@ end
 module APIServer extend self
   extend Sock
 
+  # In-memory cache for API pages: 100MB and 1 day (by default)
+  @@cache = Cache.new(capacity: 100, duration: 24 * 60, name: 'api-cache')
+
   def on
     start(API_PORT, 'API')
   end
@@ -1326,41 +1330,55 @@ module APIServer extend self
   end
 
   def handle(req, res)
+    # Default response for unknown resources is Forbidden
     res.status = 403
     res.body = ''
+
+    # Sanity check to prevent path traversal, shouldn't reach here anyway
     path = req.path.strip[1..]
-    query = req.query.map{ |k, v| [k, v.to_s] }.to_h
     return if path =~ /\.\./i
+
+    # Check if we hit the cache
+    key = req.unparsed_uri
+    body = @@cache.get(key)
+    hit_cache = !!body
+    cache_time = 24 * 60
+
+    query = req.query.map{ |k, v| [k, v.to_s] }.to_h
     route = path.split('/').first
     compress = req.header['accept-encoding'][0]
     case req.request_method
     when 'GET'
       case route
-      when nil
+      when nil             # Home page
         send_data(res, data: build_page('home'){ handle_home() }, name: 'index.html', compress: compress)
-      when 'favicon.ico'
+      when 'favicon.ico'   # Favicon
         send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
-      when 'api'
+      when 'api'           # API files (HTML, JS, CSS)
         send_data(res, file: path, cache: true, compress: compress)
-      when 'git'
+      when 'cache'
+        content = build_page('run', 'API cache status') { handle_cache(query) }
+        send_data(res, data: content, name: 'cache.html', compress: compress)
+      when 'git'           # FUNCTION: git
         link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
-        body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) }
+        body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) } unless hit_cache
         send_data(res, data: body, name: 'git.html', compress: compress, cache: true)
-      when 'img'
+      when 'img'           # Image assets (ICO, PNG, SVG)
         send_data(res, file: path, cache: true)
-      when 'octicon'
+      when 'octicon'       # Generate octicons on the fly
         file = path.split('/').last
         name, size, color = file.remove('.svg').split('_')
         send_data(res, data: build_octicon(name, size, color), name: file, cache: true)
-      when 'scores'
-        body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }
+      when 'scores'        # FUNCTION: scores
+        body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) } unless hit_cache
         send_data(res, data: body, name: 'scores.html', compress: compress)
-      when 'run'
-        body = build_page('run', 'Show information about a given run') { handle_run(query) }
+        cache_time = 5
+      when 'run'           # FUNCTION: run
+        body = build_page('run', 'Show information about a given run') { handle_run(query) } unless hit_cache
         send_data(res, data: body, name: 'run.html', compress: compress, cache: true)
+        cache_time = 60
       end
     when 'POST'
-      req.continue # Respond to "Expect: 100-continue"
       query = req.query_string.split('&').map{ |s| s.split('=') }.to_h
       case route
       when 'screenshot'
@@ -1374,6 +1392,9 @@ module APIServer extend self
         end
       end
     end
+
+    # Add to cache
+    hit_cache ? @@cache.tap(key) : @@cache.add(key, body, cache_time, compress: true) if body
   rescue => e
     lex(e, "API socket failed to parse request for: #{req.path}")
     handle_error(res, 'Failed to handle request')
@@ -1910,7 +1931,64 @@ module APIServer extend self
         <caption>
           #{build_navbar('git', params, page: pag[:page], pages: pag[:pages], size: count)}
         </caption>
-        #{header}
+        <tr>#{header}</tr>
+        #{rows}
+      </table>
+    }
+  end
+
+  # Show current API cache status
+  def handle_cache(params)
+    # Pagination
+    count = 25
+    page = [params['p'].to_i, 1].max
+    total = @@cache.length
+    pag = compute_pages(total, page, count)
+    now = Time.now
+
+    # Header
+    header = ['Index', 'Key', 'Size', 'Raw', 'Duration', 'Left', 'Hits', 'Added', 'Accessed', 'Expires'].map{ |h| "<th>#{h}</th>" }.join
+
+    # Rows
+    rows = @@cache.entries.sort_by{ |key, entry| entry.expiry.to_f }[pag[:offset], count]
+                  .map.with_index{ |(key, entry), i|
+      %{
+        <tr>
+          <td style="text-align:right;">#{pag[:offset] + i}</td>
+          <td><a href="#{key}">#{key}</a></td>
+          <td style="text-align:right;">#{entry.size}</td>
+          <td style="text-align:right;">#{entry.raw_size}</td>
+          <td style="text-align:right;">#{entry.duration}</td>
+          <td style="text-align:right;">#{(entry.expiry - now).to_i}</td>
+          <td style="text-align:right;">#{entry.taps}</td>
+          <td>#{entry.added.strftime('%F %T')}</td>
+          <td>#{entry.accessed.strftime('%F %T')}</td>
+          <td>#{entry.expiry.strftime('%F %T')}</td>
+        </tr>
+      }
+    }.join("\n")
+
+    # Format table
+    size       = '%.1fKiB' % [      @@cache.size.to_f     / 1024]
+    raw_size   = '%.1fKiB' % [      @@cache.raw_size.to_f / 1024]
+    capacity   = '%.1fMiB' % [      @@cache.capacity.to_f / 1024 ** 2]
+    ratio      = '%.1f%%'  % [100 * @@cache.size.to_f     / @@cache.capacity]
+    comp_ratio = '%.1f%%'  % [100 * @@cache.size          / @@cache.raw_size] unless @@cache.raw_size == 0
+    %{
+      <table class=\"data\">
+        <caption>
+          <div class="separated">
+            <span>
+              #{@@cache.name} (#{total} cur, #{@@cache.adds} tot, #{@@cache.taps} hits) |
+              #{size} / #{capacity} (#{ratio}) |
+              #{raw_size} -> #{size} (#{comp_ratio || 'NaN'})
+            </span>
+            <span>
+              #{build_navbar('cache', params, page: pag[:page], pages: pag[:pages], size: count)}
+            </span>
+          </div>
+        </caption>
+        <tr>#{header}</tr>
         #{rows}
       </table>
     }
@@ -1958,3 +2036,6 @@ module APIServer extend self
     lex(e, 'Failed to handle API error')
   end
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

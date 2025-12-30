@@ -9,6 +9,8 @@
 # time consuming) project for the future could be to integrate this file into
 # the ones above, as it was done for mappacks from the beginning more recently.
 
+$load_time = Time.now
+
 require 'time'
 require 'zlib'
 
@@ -1736,3 +1738,6 @@ def respond_userlevels(event)
   action_dec('commands')
   event << "Sorry, I didn't understand your userlevel command."
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

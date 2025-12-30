@@ -11,6 +11,7 @@
 # See also the TASK VARIABLES in src/constants.rb for configuration. See the end
 # of the file for the list of tasks.
 
+$load_time = Time.now
 
 # Light wrapper that represents an abstract task whose execution is controlled.
 # We have graceful exception handling, we know when the task is active, etc.
@@ -153,6 +154,7 @@ class Job
     @should_stop = false
     @date_started = Time.now
     @thread = Thread.new do
+      Thread.current.name = @task.name.gsub(/\s+/, '_').downcase
       while true
         sleep(WAIT)
 
@@ -835,10 +837,10 @@ def start_general_tasks
   Scheduler.add("Compute fractions", freq: FRACTION_FREQUENCY, force: false, log: false) { compute_new_fractions } if DO_EVERYTHING || COMPUTE_FRACTIONS
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
-  $threads << Thread.new { NPPServer::on } if (DO_EVERYTHING || SOCKET) && !DO_NOTHING
+  _thread(name: 'npp-server'){ NPPServer::on } if (DO_EVERYTHING || SOCKET) && !DO_NOTHING
 
   # Start API to provide external outte functionality
-  $threads << Thread.new { APIServer::on } if (DO_EVERYTHING || API_ON) && !DO_NOTHING
+  _thread(name: 'api-server'){ APIServer::on } if (DO_EVERYTHING || API_ON) && !DO_NOTHING
 end
 
 # These tasks perform periodic operations querying Metanet's database (e.g. to
@@ -901,3 +903,6 @@ def start_discord_tasks
   # Regularly stun nv2 users with a fruit emoji
   Scheduler.add("Potato", db: false, log: false) { potato } if POTATO
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

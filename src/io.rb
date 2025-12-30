@@ -2,6 +2,8 @@
 # like parsing (player names, level names...) and formatting (level names,
 # sending files...)
 
+$load_time = Time.now
+
 require 'active_support/core_ext/integer/inflections' # ordinalize
 require 'active_support/core_ext/numeric/time'        # 1.hour, 3.minutes.ago, etc
 
@@ -1531,3 +1533,6 @@ rescue => e
   lex(e, 'Failed to send message to Discord')
   nil
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

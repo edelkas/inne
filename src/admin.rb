@@ -3,6 +3,8 @@
 # sensitive tasks such as giving system info, sanitizing the database, etc.
 # See the method "respond_special" at the end to understand the flow.
 
+$load_time = Time.now
+
 require 'gruff'
 
 # Clean database (remove cheated archives, duplicates, orphaned demos, etc)
@@ -1333,3 +1335,6 @@ def respond_special(event)
   action_dec('special_commands')
   event << "Unsupported special command."
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

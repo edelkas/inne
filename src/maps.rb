@@ -3,6 +3,8 @@
 # trace and animation generation, etc). Three classes implement this module:
 # Level, Userlevel, and MappackLevel (the former by first calling .map).
 
+$load_time = Time.now
+
 #require 'chunky_png'
 require 'oily_png'    # C wrapper for ChunkyPNG
 require 'gifenc'      # Own gem to encode and decode GIFs
@@ -2526,3 +2528,6 @@ module Map
     nil
   end
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])

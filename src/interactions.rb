@@ -7,6 +7,8 @@
 #       * Text inputs
 # Currently, only buttons and select menus are being used.
 
+$load_time = Time.now
+
 def initialize_components
   $components = Discordrb::Webhooks::View.new
 end
@@ -674,3 +676,6 @@ def respond_application_command(event)
     perror("Unrecognized application command.")
   end
 end
+
+# Done loading file
+dbg("Loaded #{File.basename(__FILE__)} in %dms" % [(Time.now - $load_time) * 1000.0])
