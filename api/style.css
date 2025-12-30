@@ -190,14 +190,16 @@ img.floater {
 [tooltip]:after, [tooltipr]:after {
   content: var(--tooltip);
   position: absolute;
-  bottom: -200%;
+  top: 200%;
   color: #0cc;
   background-color: #000;
   border: #0cc solid 1px;
   width: max-content;
+  white-space: pre-line;
+  overflow-wrap: break-word;
   padding: 1px;
   display: none;
-  z-index: 2;
+  z-index: 9999;
 }
 [tooltip]:after {
   left: 0;

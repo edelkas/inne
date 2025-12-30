@@ -1874,7 +1874,7 @@ module APIServer extend self
         # New commit block
         current = {
           hash: hash,
-          date: date,
+          date: Time.parse(date),
           author: {
             name:  aname,
             email: amail
@@ -1892,7 +1892,7 @@ module APIServer extend self
           branches: branches,
           tags: tags
         }
-      elsif line =~ /^(\d+)\s+(\d+)\s+(.+)$/ # File changes
+      elsif line =~ /^(\d+|-)\s+(\d+|-)\s+(.+)$/ # File changes
         add, del, name = $1.to_i, $2.to_i, $3
         current[:changes] += 1
         current[:additions] += add
@@ -1913,14 +1913,17 @@ module APIServer extend self
       commit = "<a href=\"#{GITHUB_LINK}/commit/#{comm[:hash]}\" tooltip=\"#{comm[:hash]}\">#{comm[:hash][0, 7]}</a>"
       author = "<a href=\"https://github.com/#{comm[:author][:name]}?tab=repositories/\">#{comm[:author][:name]}</a>"
       branches = "<a href=\"#{GITHUB_LINK}/tree/#{comm[:hash]}\">master</a>"
+      extended = comm[:extended].split("\n")[1..].join("\n")
+      extended = 'No additional info' if extended.squish.empty?
+      files = comm[:files].map{ |name, (add, del)| "#{name} (+#{add}, -#{del})" }.join("\n")
       %{
         <tr>
           <td><img src="octicon/git-commit_12.svg"> #{commit}</td>
-          <td>#{comm[:description][0, 128]}</td>
+          <td tooltip="#{wrap_text(extended, 60)}">#{comm[:description][0, 128]}</td>
           <td><img src="octicon/person_12.svg"> #{author}</td>
           <td><img src="octicon/git-branch_12.svg"> #{branches}</td>
-          <td>#{comm[:changes]} (<span class="on">+#{comm[:additions]}</span>, <span class="off">-#{comm[:deletions]}</span>)</td>
-          <td>#{comm[:date]}</td>
+          <td tooltip="#{files}">#{comm[:changes]} (<span class="on">+#{comm[:additions]}</span>, <span class="off">-#{comm[:deletions]}</span>)</td>
+          <td tooltip="#{comm[:date]}">#{format_timespan(Time.now - comm[:date], 2)} ago</td>
         </tr>
       }
     }.join("\n")

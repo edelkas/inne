@@ -976,6 +976,18 @@ def pad_truncate_ellipsis(str, pad = DEFAULT_PADDING, max_pad = MAX_PAD_GEN)
   truncate_ellipsis(format_string(str, pad, max_pad, false))
 end
 
+# Automatic text wrapping
+def wrap_text(str, width, word: true)
+  if word
+    str.gsub(/(.{1,#{width}})(?:\s+|$)/, "\\1\n")
+  else
+    last = str.length / width * width
+    str_new = str.dup
+    last.step(width, -width){ |i| str_new.insert(i, "\n") }
+    str_new.strip
+  end
+end
+
 # Conditionally pluralize word
 # If 'pad' we pad string to longest between singular and plural, for alignment
 def cplural(word, n, pad = false)
