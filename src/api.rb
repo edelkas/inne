@@ -1113,13 +1113,12 @@ module Sock extend self
     )
     # Setup callback for requests (ensuring we are connected to SQL)
     $servers[name].mount_proc '/' do |req, res|
-      action_inc('http_requests')
       acquire_connection
       handle(req, res)
       release_connection
     end
     # Start server (blocks thread)
-    log("Started #{name} server")
+    log("Started #{name} server on port #{$servers[name].config[:Port]}")
     $servers[name].start
   rescue => e
     lex(e, "Failed to start #{name} server")
@@ -1128,7 +1127,7 @@ module Sock extend self
   # Stops server, needs to be summoned from another thread
   def stop(name)
     $servers[name].shutdown
-    log("Stopped #{name} server")
+    log("Stopped #{name} server on port #{$servers[name].config[:Port]}")
   rescue => e
     lex(e, "Failed to stop #{name} server")
   end
@@ -1152,6 +1151,7 @@ module Sock extend self
 
   # Return a server error whenever we mess up
   def server_error(res, msg = 'Unable to process request', code = 500)
+    action_inc('api_error')
     res.status = code
     res.body = msg
     nil
@@ -1235,6 +1235,7 @@ module NPPServer extend self
 
   def handle(req, res)
     # Ignore empty requests
+    action_inc('http_requests')
     return respond(res) if req.path.strip == '/'
 
     # Parse request parameters
@@ -1331,6 +1332,7 @@ module APIServer extend self
 
   def handle(req, res)
     # Default response for unknown resources is Forbidden
+    action_inc('api')
     res.status = 403
     res.body = ''
 
@@ -1351,6 +1353,7 @@ module APIServer extend self
     when 'GET'
       case route
       when nil             # Home page
+        action_inc('api_home')
         send_data(res, data: build_page('home'){ handle_home() }, name: 'index.html', compress: compress)
       when 'favicon.ico'   # Favicon
         send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
@@ -1360,6 +1363,7 @@ module APIServer extend self
         content = build_page('run', 'API cache status') { handle_cache(query) }
         send_data(res, data: content, name: 'cache.html', compress: compress)
       when 'git'           # FUNCTION: git
+        action_inc('api_git')
         link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
         body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) } unless hit_cache
         send_data(res, data: body, name: 'git.html', compress: compress, cache: true)
@@ -1370,10 +1374,12 @@ module APIServer extend self
         name, size, color = file.remove('.svg').split('_')
         send_data(res, data: build_octicon(name, size, color), name: file, cache: true)
       when 'scores'        # FUNCTION: scores
+        action_inc('api_scores')
         body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) } unless hit_cache
         send_data(res, data: body, name: 'scores.html', compress: compress)
         cache_time = 5
       when 'run'           # FUNCTION: run
+        action_inc('api_run')
         body = build_page('run', 'Show information about a given run') { handle_run(query) } unless hit_cache
         send_data(res, data: body, name: 'run.html', compress: compress, cache: true)
         cache_time = 60

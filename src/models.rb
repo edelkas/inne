@@ -3087,7 +3087,9 @@ class GlobalProperty < ActiveRecord::Base
     'edits',         'pings',         'dms',              'interactions',
     'logs',          'errors',        'warnings',         'exceptions',
     'http_requests', 'http_errors',   'http_forwards',    'http_scores',
-    'http_replay',   'http_submit',   'http_login',       'http_levels'
+    'http_replay',   'http_submit',   'http_login',       'http_levels',
+    'api',           'api_cached',    'api_error',        'api_home',
+    'api_scores',    'api_run',       'api_git'
   ]
 
   @@status = STATUS_ENTRIES.map{ |k| [k, 0] }.to_h

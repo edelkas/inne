@@ -1149,7 +1149,8 @@ def send_status(event)
   str << "Sent:     #{status['messages']} messages, #{status['edits']} edits\n"
   str << "Logged:   #{status['logs']} lines, #{status['errors']} errors, #{status['warnings']} warnings, #{status['exceptions']} exceptions\n"
   str << "Network:  #{status['http_requests']} requests, #{status['http_errors']} errors, #{status['http_forwards']} forwards\n"
-  str << "CLE:      #{status['http_scores']} leaderboards, #{status['http_replay']} replays, #{status['http_submit']} submissions, #{status['http_login']} logins, #{status['http_levels']} userlevel queries"
+  str << "CLE:      #{status['http_scores']} leaderboards, #{status['http_replay']} replays, #{status['http_submit']} submissions, #{status['http_login']} logins, #{status['http_levels']} userlevel queries\n"
+  str << "API:      #{status['api']} requests (#{status['api_cached']} cached, #{status['api_error']} errors), #{status['api_home']} home, #{status['api_scores']} scores, #{status['api_run']} run, #{status['api_git']} git"
   send_message(
     event,
     content: "Status #{format_time}:\n" + format_block(str),
