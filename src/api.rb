@@ -1509,102 +1509,130 @@ module APIServer extend self
         params.delete('off')
       end
     end
-    params.delete('type') if params['type'] && !(0..2).cover?(params['type'].to_i)
+    params.delete('type') if params['type'] && !(0..3).cover?(params['type'].to_i)
     params.delete('tab') if params['tab'] && !(0..6).cover?(params['tab'].to_i)
     params.delete('id') if !params['type']
 
     # Parse query parameters
     offset = params['off'].to_i if params['off']
     rev = params['rev'] == '1'
-    type = TYPES.find{ |k, v| v[:id] == params['type'].to_i }.last if params['type']
+    type = TYPES.find{ |k, v| v[:id] == params['type'].to_i }.last if params['type'] && params['type'].to_i != 3
+    ul = params['type'].to_i == 3
     id = params['id'].to_i if params['id']
     player = params['player'].to_i if params['player']
     tab = params['tab'].to_i if params['tab']
 
-    # Format table header
-    header = %{
-      <tr class="data">
-        <th tooltip="Score ID in outte's db">Index</th>
-        <th tooltip="Score ID in Metanet's db">ID</th>
-        <th tooltip="Player ID in Metanet's db">Player ID</th>
-        <th tooltip="Latest recorded name">Player name</th>
-        <th tooltip="Level / Episode / Story / Userlevel">Board type</th>
-        <th tooltip="Internal ID">Board ID</th>
-        <th tooltip="Standard ID">Board</th>
-        <th tooltip="Rank for non-obsolete highscores">Rank</th>
-        <th tooltip="Score in seconds">Score</th>
-        <th tooltip="Run length / framecount">Frames</th>
-        <th tooltip="Pieces of gold collected">Gold</th>
-        <th tooltip="Date of archival">Date</th>
-        <th class="tight" tooltip="Obsolete run">O</th>
-        <th class="tight" tooltip="Cheated run">C</th>
-      </tr>
+    # Table fields
+    f_includeVanilla = 0b0001
+    f_pluckVanilla   = 0b0010
+    f_includeUser    = 0b0100
+    f_pluckUser      = 0b1000
+    fields = {
+      id:                 { flags: 0b1111, th: 'Index',       tt: 'Score ID in outte\'s db' },
+      replay_id:          { flags: 0b1111, th: 'ID',          tt: 'Score ID in Metanet\'s db' },
+      metanet_id:         { flags: 0b1111, th: 'Player ID',   tt: 'Player ID in Metanet\'s db' },
+      player_name:        { flags: 0b0101, th: 'Player name', tt: 'Latest recorded name' },
+      highscoreable_type: { flags: 0b0111, th: 'Board type',  tt: 'Level / Episode / Story / Userlevel' },
+      highscoreable_id:   { flags: 0b0011, th: 'Board ID',    tt: 'Internal ID' },
+      userlevel_id:       { flags: 0b1100, th: 'Board ID',    tt: 'Userlevel ID' },
+      level_name:         { flags: 0b0101, th: 'Board',       tt: 'Standard ID' },
+      rank:               { flags: 0b1101, th: 'Rank',        tt: 'Rank for non-obsolete highscores' },
+      score:              { flags: 0b1111, th: 'Score',       tt: 'Score in seconds' },
+      framecount:         { flags: 0b0011, th: 'Frames',      tt: 'Run length / framecount' },
+      gold:               { flags: 0b0011, th: 'Gold',        tt: 'Pieces of gold collected' },
+      date:               { flags: 0b0011, th: 'Date',        tt: 'Date of archival' },
+      expired:            { flags: 0b0011, th: 'O',           tt: 'Obsolete run' },
+      cheated:            { flags: 0b0011, th: 'C',           tt: 'Cheated run' }
     }
+    header = fields.select{ |k, v| v[:flags] & (ul ? f_includeUser : f_includeVanilla) > 0 }
+                   .map{ |k, v| "<th tooltip=\"#{v[:tt]}\">#{v[:th]}</th>" }
+                   .join("\n")
+    header = "<tr class=\"data\">#{header}</tr>"
 
     # Fetch scores
     size = 50
-    list = Archive.where(offset ? "id #{rev ? '>' : '<'} #{offset}" : '')
-                  .where(type   ? { highscoreable_type: type[:name] } : nil)
-                  .where(id     ? { highscoreable_id:   id          } : nil)
-                  .where(player ? { metanet_id:         player      } : nil)
-                  .where(tab    ? { tab:                tab         } : nil)
-                  .order(date: rev ? :asc : :desc)
-                  .limit(size)
-                  .pluck(
-                    :id,         :replay_id, :metanet_id, :highscoreable_id, :score,
-                    :framecount, :gold,      :date,       :expired,          :cheated,
-                    :highscoreable_type
-                  )
+    if !ul
+      list = Archive.where(offset ? "id #{rev ? '>' : '<'} #{offset}"   : '' )
+                    .where(type   ? { highscoreable_type: type[:name] } : nil)
+                    .where(id     ? { highscoreable_id:   id          } : nil)
+                    .where(player ? { metanet_id:         player      } : nil)
+                    .where(tab    ? { tab:                tab         } : nil)
+    else
+      list = UserlevelScore.where(offset ? "replay_id #{rev ? '>' : '<'} #{offset}" : '' )
+                           .where(id     ? { userlevel_id: id     }                 : nil)
+                           .where(player ? { metanet_id:   player }                 : nil)
+    end
+    to_pluck = fields.select{ |k, v| v[:flags] & (ul ? f_pluckUser : f_pluckVanilla) > 0 }.keys
+    list = list.order(ul ? { replay_id: rev ? :asc : :desc } : { date: rev ? :asc : :desc }).limit(size).pluck(*to_pluck)
     list.reverse! if rev
-    attrs = list.transpose
-    pnames = Player.where(metanet_id: attrs[2]).pluck(:metanet_id, :name).to_h
-    lnames = [
-      Level.where(id: attrs[3]).pluck(:id, :name).to_h,
-      Episode.where(id: attrs[3]).pluck(:id, :name).to_h,
-      Story.where(id: attrs[3]).pluck(:id, :name).to_h
-    ]
-    ranks = Score.where(replay_id: attrs[1]).pluck(:replay_id, :rank).to_h
+    list = list.map{ |s| to_pluck.zip(s).to_h }
+
+    # Fetch fields from other tables (player names, level names...)
+    id_key = ul ? :userlevel_id : :highscoreable_id
+    ids         = list.map{ |s| s[:id] }
+    metanet_ids = list.map{ |s| s[:metanet_id] }
+    replay_ids  = list.map{ |s| s[:replay_id] }
+    level_ids   = list.map{ |s| s[id_key] }
+    if !ul
+      pnames = Player.where(metanet_id: metanet_ids).pluck(:metanet_id, :name).to_h
+      lnames = [
+        Level.where(id: level_ids).pluck(:id, :name).to_h,
+        Episode.where(id: level_ids).pluck(:id, :name).to_h,
+        Story.where(id: level_ids).pluck(:id, :name).to_h
+      ]
+      ranks = Score.where(replay_id: replay_ids).pluck(:replay_id, :rank).to_h
+    else
+      pnames = UserlevelPlayer.where(metanet_id: metanet_ids).pluck(:metanet_id, :name).to_h
+      lnames = Userlevel.where(id: level_ids).pluck(:id, :title).to_h
+    end
 
     # Format table rows
     yes = '<div class="icon-yes"></div>'
     no = '<div class="icon-no"></div>'
     rows = list.map{ |s|
-      player_uri = make_route('scores', params, add: { player: s[2] })
-      board_uri = make_route('scores', params, add: { type: TYPES[s[10]][:id], id: s[3] })
-      replay_uri = make_route('run', { type: TYPES[s[10]][:id], id: s[1] })
-      date = s[7] <= Archive::EPOCH ? "Before #{Archive::EPOCH.strftime('%F')}" : s[7].strftime('%F %T')
-      %{
-        <tr class="data">
-        <td class="numeric">#{s[0]}</td>
-        <td class="numeric">#{s[1]}</td>
-        <td class="numeric">#{s[2]}</td>
-        <td class="text"><a href="#{player_uri}">#{escape_html(pnames[s[2]][0, 16])}</a></td>
-        <td class="normal">#{s[10]}</td>
-        <td class="numeric">#{s[3]}</td>
-        <td class="normal"><a href="#{board_uri}">#{lnames[TYPES[s[10]][:id]][s[3]]}</a></td>
-        <td class="numeric#{ranks[s[1]] == 0 ? ' on' : ''}">#{ranks[s[1]]}</td>
-        <td class="numeric"><a href="#{replay_uri}">#{'%.3f' % [s[4] / 60.0]}</a></td>
-        <td class="numeric">#{s[5]}</td>
-        <td class="numeric">#{s[6]}</td>
-        <td class="normal">#{date}</td>
-        <td class="normal tight">#{s[8] ? yes : no}</td>
-        <td class="normal tight">#{s[9] ? yes : no}</td>
-        </tr>
+      type_id = ul ? 3 : TYPES[s[:highscoreable_type]][:id]
+      player_uri = make_route('scores', params, add: { player: s[:metanet_id] })
+      board_uri = make_route('scores', params, add: { type: type_id, id: s[id_key] })
+      replay_uri = make_route('run', { type: type_id, id: s[:replay_id] })
+      date = s[:date] <= Archive::EPOCH ? "Before #{Archive::EPOCH.strftime('%F')}" : s[:date].strftime('%F %T') if !ul
+      lname = ul ? lnames[s[id_key]] : lnames[type_id][s[id_key]]
+      rank = ul ? s[:rank] : ranks[s[:replay_id]]
+      score = '%.3f' % [s[:score] / 60.0]
+      score_link = ul ? score : "<a href=\"#{replay_uri}\">#{score}</a>"
+      block = %{
+        <td class="numeric">#{s[:id]}</td>
+        <td class="numeric">#{s[:replay_id]}</td>
+        <td class="numeric">#{s[:metanet_id]}</td>
+        <td class="text"><a href="#{player_uri}">#{escape_html(pnames[s[:metanet_id]][0, 16])}</a></td>
+        <td class="normal">#{ul ? 'Userlevel' : s[:highscoreable_type]}</td>
+        <td class="numeric">#{s[id_key]}</td>
+        <td class="normal"><a href="#{board_uri}">#{lname[0, 32]}</a></td>
+        <td class="numeric#{rank == 0 ? ' on' : ''}">#{rank}</td>
+        <td class="numeric">#{score_link}</td>
       }
+      block += %{
+        <td class="numeric">#{s[:framecount]}</td>
+        <td class="numeric">#{s[:gold]}</td>
+        <td class="normal">#{date}</td>
+        <td class="normal">#{s[:expired] ? yes : no}</td>
+        <td class="normal">#{s[:cheated] ? yes : no}</td>
+      } if !ul
+      "<tr class=\"data\">#{block}</tr>"
     }.join("\n")
 
     # Format table caption with filters
-    if attrs[0]
-      navbar = build_navbar('scores', params, first: attrs[0].max, last: attrs[0].min)
+    if !list.empty?
+      navbar = build_navbar('scores', params, first: ul ? replay_ids.max : ids.max, last: ul ? replay_ids.min : ids.min)
     elsif params['off']
       navbar = build_navbar('scores', params)
     end
     types = TYPES.map{ |name, att|
       #next att[:name] if type && att[:id] == type[:id]
       route = make_route('scores', params, add: { type: att[:id] }, remove: [:id])
-      "<a href=\"#{route}\" tooltip=\"#{att[:name].pluralize} scores\">#{att[:name]}</a>"
+      "<a href=\"#{route}\" tooltip=\"#{att[:name]} scores\">#{att[:name]}</a>"
     }
-    types.prepend("<a href=\"#{make_route('scores', params, remove: [:type])}\" tooltip=\"All types\">All</a>")
+    types.prepend("<a href=\"#{make_route('scores', params, remove: [:type])}\" tooltip=\"Level + Episode + Story\">All</a>")
+    types << "<a href=\"#{route = make_route('scores', params, add: { type: 3 }, remove: [:id, :tab])}\" tooltip=\"Userlevel scores\">Userlevel</a>"
     types = types.join("\n")
 
     tabs = TABS_SOLO.sort_by{ |_, v| v[:index] }.map{ |_, att|

@@ -532,6 +532,8 @@ module Downloadable
     boards
   end
 
+  # TODO: Only update scores if replay_id is new, at least for userlevel scores, to prevent overwriting
+  # the fields that we compute manually, such as date or fractional score.
   def save_scores(updated)
     ActiveRecord::Base.transaction do
       # Save stars so we can reassign them again later
@@ -551,12 +553,15 @@ module Downloadable
         scoretime = (scoretime * 60.0).round if self.class == Userlevel
 
         # Update common values
-        scores.find_or_create_by(rank: i).update(
-          score:     scoretime,
-          replay_id: score['replay_id'].to_i,
-          player:    player,
-          tied_rank: updated.reject{ |s| s['cheated'] }.find_index { |s| s['score'] == score['score'] }
-        ) unless score['cheated']
+        fields = {
+          score:      scoretime,
+          metanet_id: score['user_id'].to_i,
+          replay_id:  score['replay_id'].to_i,
+          player:     player,
+          tied_rank:  updated.reject{ |s| s['cheated'] }.find_index { |s| s['score'] == score['score'] }
+        }
+        fields.delete(:metanet_id) unless self.class == Userlevel
+        scores.find_or_create_by(rank: i).update(fields) unless score['cheated']
 
         # Non-userlevel updates (tab, archive, demos)
         next if self.class == Userlevel
