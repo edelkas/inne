@@ -8,7 +8,7 @@ source 'https://rubygems.org' do
   gem 'damerau-levenshtein'
   gem 'rubyzip'
   gem 'unicode-emoji'
-  gem 'webrick'
+  gem 'puma'
 
   group :imaging do
     gem 'rmagick'

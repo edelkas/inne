@@ -1097,7 +1097,7 @@ def send_userlevel_individual(event, msg = nil, userlevel = nil, name: nil, auth
   # we craft a regular command string and use that parse the userlevel from it.
   # A bit hacky, but that way we can reuse what we already had.
   if name || author
-    level_id  = name.to_i   if is_num(name)   && name.to_i   >= 22715
+    level_id  = name.to_i   if is_num(name)   && name.to_i   >= MIN_ID
     author_id = author.to_i if is_num(author) && author.to_i >=  1000
     msg =  (level_id  ? "for #{level_id}"  : name   ? "for \"#{name.tr('"', '')}\""   : '')
     msg << (author_id ? " by #{author_id}" : author ? " by \"#{author.tr('"', '')}\"" : '')

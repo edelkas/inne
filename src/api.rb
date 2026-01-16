@@ -1093,6 +1093,92 @@ class SteamTicket < ActiveRecord::Base
   end
 end
 
+# Generic wrapper around a Puma server. Used for both the N++ proxy and the API.
+class Server
+  DEFAULT_HOST = '0.0.0.0'
+
+  # Wrapper for a Rack environment
+  class Request
+    attr_reader :env
+
+    def initialize(env)
+      @env = env
+    end
+
+    def method() env['REQUEST_METHOD'] end
+    def path()   env['PATH_INFO']      end
+    def query()  env['QUERY_STRING']   end
+    def ip()     env['REMOTE_ADDR']    end
+
+    def headers
+      env.select { |k, _| k.start_with?('HTTP_') }
+         .transform_keys { |k| k.sub(/^HTTP_/, '').downcase }
+    end
+
+    def body
+      @body ||= begin
+        io = env['rack.input']
+        io.rewind
+        io.read
+      end
+    end
+  end
+
+
+  def initialize(port, host: DEFAULT_HOST, min_threads: 1, max_threads: 5)
+    @host = host
+    @port = port
+    @routes = Hash.new { |h, k| h[k] = {} }
+    @running = false
+
+    @puma = Puma::Server.new(self)
+    @puma.min_threads = min_threads
+    @puma.max_threads = max_threads
+    @puma.add_tcp_listener(@host, @port)
+  end
+
+  def start
+    return if @running
+    @puma.run
+    @running = true
+    log("Started server on TCP port #{@port}")
+  end
+
+  def stop(graceful = true)
+    return unless @running
+    @puma.stop(graceful)
+    @running = false
+    log("Stopped server on TCP port #{@port}")
+  end
+
+  # Dynamic method dispatcher
+  %i[get post put delete patch].each do |method|
+    define_method(method) do |path, &block|
+      @routes[method.to_s.upcase][path] = block
+    end
+  end
+
+  # Rack entry point
+  def call(env)
+    request = Request.new(env)
+    handler = @routes[request.method][request.path]
+    return response(404, 'Not Found') unless handler
+    status, headers, body = handler.call(request)
+    response(status, body, headers)
+  rescue => e
+    response(500, { error: e.message }.to_json, 'Content-Type' => 'application/json')
+  end
+
+  # Dispatch response. Rack expects [status, headers, body_enumerator]
+  def response(status, body, headers = {})
+    body = body.to_json if body.is_a?(Hash)
+    headers['Content-Length'] = body.bytesize.to_s
+    headers['Content-Type'] ||= 'text/plain'
+    [status, headers, [body]]
+  end
+
+end
+
 # See "Socket Variables" in constants.rb for docs
 module Sock extend self
 

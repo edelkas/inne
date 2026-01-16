@@ -458,7 +458,7 @@ def shutdown(trap: false, force: false)
 
   # Stop bot, shutdown servers, disconnect from DB
   stop_bot
-  Sock.off
+  $servers.each{ |svr| svr.stop(!force) }
   #disconnect_db unless trap
   err("Shut down outte")
 rescue => e
