@@ -1094,10 +1094,11 @@ class SteamTicket < ActiveRecord::Base
 end
 
 # Generic wrapper around a Puma server. Used for both the N++ proxy and the API.
+# See "Socket Variables" in constants.rb for docs
 class Server
   DEFAULT_HOST = '0.0.0.0'
 
-  # Wrapper for a Rack environment
+  # Wrapper for a request (Rack environment)
   class Request
     attr_reader :env
 
@@ -1124,12 +1125,113 @@ class Server
     end
   end
 
+  # Wrapper for a response
+  class Response
+    attr_accessor :status
+    attr_reader :body, :headers
 
-  def initialize(port, host: DEFAULT_HOST, min_threads: 1, max_threads: 5)
+    def initialize(status, body = '', headers = {})
+      @status  = status
+      @headers = headers
+      @body    = body
+    end
+
+    def []=(name, value)
+      @headers[name.to_s] = value.to_s
+    end
+
+    def body=(value)
+      @body = value
+      @body = @body.to_json if @body.is_a?(Hash)
+      @headers['Content-Length'] = @body.bytesize.to_s
+    end
+
+    def cache=(value)
+      cache = case value
+      when true
+        365 * 24 * 60 * 60
+      when false
+        0
+      when Integer
+        cache
+      when Float
+        cache.round
+      else
+        nil
+      end
+
+      if cache
+        @headers['Cache-Control'] = cache > 0 ? "public, max-age=#{cache}, immutable" : 'no-cache'
+      else
+        @headers.delete('Cache-Control')
+      end
+    end
+
+    def encode(accepted)
+      return if @headers.key?('Content-Encoding')
+      accepted.split(',').each{ |method|
+        case method.split(';')[0].strip
+        when 'gzip', 'x-gzip'
+          self.body = Zlib.gzip(@body)
+          @headers['Content-Encoding'] = 'gzip'
+          return
+        when 'deflate'
+          self.body = Zlib.deflate(@body)
+          @headers['Content-Encoding'] = 'deflate'
+          return
+        end
+      }
+    end
+
+    def error_client(msg = 'Unable to parse request', code = 400)
+      @status = code
+      self.body = msg
+    end
+
+    def error_server(msg = 'Unable to process request', code = 500)
+      action_inc('api_error')
+      @status = code
+      self.body = msg
+    end
+
+    # Dispatch response in Rack's expected format
+    def dispatch(status, body = '', headers = {})
+      [@status, @headers, [@body]]
+    end
+
+    # Fill body with arbitrary data or an arbitrary file as a response
+    def set_body(data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true, compress: nil)
+      # Data must be provided either directly or in a file
+      if !data && !file
+        return error_server()
+      elsif !data && file
+        return error_client('File not found', 404) if !File.file?(file)
+        name ||= file
+        data = binary ? File.binread(file) : File.read(file)
+      end
+      disposition = inline ? 'inline' : 'attachment'
+
+      # Set HTTP status, headers, and body
+      @status = 200
+      self.body = data
+      self.cache = cache
+      @headers['Content-Type'] = type || Server::mimetype(name)
+      @headers['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
+      encode(compress) if compress
+    end
+  end
+
+  def self.mimetype(filename)
+    Rack::Mime.mime_type(File.extname(filename))
+  end
+
+  def initialize(name, port, host: DEFAULT_HOST, min_threads: 1, max_threads: 5, cache: 0)
+    @name = name
     @host = host
     @port = port
     @routes = Hash.new { |h, k| h[k] = {} }
     @running = false
+    @cache = Cache.new(capacity: cache, duration: 24 * 60, name: "#{name}-cache") if cache > 0
 
     @puma = Puma::Server.new(self)
     @puma.min_threads = min_threads
@@ -1141,14 +1243,14 @@ class Server
     return if @running
     @puma.run
     @running = true
-    log("Started server on TCP port #{@port}")
+    log("Started #{@name} server on TCP port #{@port}")
   end
 
   def stop(graceful = true)
     return unless @running
     @puma.stop(graceful)
     @running = false
-    log("Stopped server on TCP port #{@port}")
+    log("Stopped #{@name} server on TCP port #{@port}")
   end
 
   # Dynamic method dispatcher
@@ -1161,162 +1263,25 @@ class Server
   # Rack entry point
   def call(env)
     request = Request.new(env)
+    response = Response.new(404)
     handler = @routes[request.method][request.path]
-    return response(404, 'Not Found') unless handler
-    status, headers, body = handler.call(request)
-    response(status, body, headers)
+    return unless handler
+    with_connection() { handler.call(request, response) }
   rescue => e
-    response(500, { error: e.message }.to_json, 'Content-Type' => 'application/json')
-  end
-
-  # Dispatch response. Rack expects [status, headers, body_enumerator]
-  def response(status, body, headers = {})
-    body = body.to_json if body.is_a?(Hash)
-    headers['Content-Length'] = body.bytesize.to_s
-    headers['Content-Type'] ||= 'text/plain'
-    [status, headers, [body]]
+    lex(e, 'Failed to handle server request')
+    response.status = 500
+    response.body = ''
+  ensure
+    return response.dispatch
   end
 
 end
 
-# See "Socket Variables" in constants.rb for docs
-module Sock extend self
+# Implement the N++ proxy server that handles custom leaderboards for mappacks, CUSE, etc.
+class NPPServer < Server
 
-  # Stops all servers
-  def self.off
-    $servers.keys.each{ |s| Sock.stop(s) }
-  end
-
-  # Start a basic HTTP server at the specified port
-  def start(port, name)
-    # Create WEBrick HTTP server
-    $servers[name] = WEBrick::HTTPServer.new(
-      Port: port,
-      AccessLog: [
-        [$stdout, "#{name} %h %m %U"],
-        [$stdout, "#{name} %s %b bytes %T"]
-      ]
-    )
-    # Setup callback for requests (ensuring we are connected to SQL)
-    $servers[name].mount_proc '/' do |req, res|
-      acquire_connection
-      handle(req, res)
-      release_connection
-    end
-    # Start server (blocks thread)
-    log("Started #{name} server on port #{$servers[name].config[:Port]}")
-    $servers[name].start
-  rescue => e
-    lex(e, "Failed to start #{name} server")
-  end
-
-  # Stops server, needs to be summoned from another thread
-  def stop(name)
-    $servers[name].shutdown
-    log("Stopped #{name} server on port #{$servers[name].config[:Port]}")
-  rescue => e
-    lex(e, "Failed to stop #{name} server")
-  end
-
-  # Ensure certain required parameters are present in the URL query (works for GET, not POST)
-  def enforce_params(req, res, params)
-    missing = params - req.query.keys
-    return true if missing.empty?
-    missing = missing.map{ |par| '"' + par + '"' }.join(', ')
-    res.status = 400
-    res.body = "Parameters #{missing} missing."
-    false
-  end
-
-  # Return a client error whenever they mess up
-  def client_error(res, msg = 'Unable to parse request', code = 400)
-    res.status = code
-    res.body = msg
-    nil
-  end
-
-  # Return a server error whenever we mess up
-  def server_error(res, msg = 'Unable to process request', code = 500)
-    action_inc('api_error')
-    res.status = code
-    res.body = msg
-    nil
-  end
-
-  # Verifies if a file exists, otherwise returns a 404
-  def check_file(res, path)
-    return true if File.file?(path)
-    client_error(res, 'File not found', 404)
-    false
-  end
-
-  # Get the MIME type of a file given the name
-  def get_mimetype(filename)
-    table = WEBrick::HTTPUtils::DefaultMimeTypes
-    WEBrick::HTTPUtils.mime_type(filename, table)
-  end
-
-  # Send arbitrary data or an arbitrary file as a response
-  def send_data(res, data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true, compress: nil)
-    # Data must be provided either directly or in a file
-    if !data && !file
-      return server_error(res)
-    elsif !data && file
-      return unless check_file(res, file)
-      name ||= file
-      data = binary ? File.binread(file) : File.read(file)
-    end
-
-    # Optionally compress the body
-    encoding = nil
-    if compress
-      compress.split(',').each{ |method|
-        case method.strip
-        when 'gzip', 'x-gzip'
-          data = Zlib.gzip(data)
-          encoding = 'gzip'
-          break
-        when 'deflate'
-          data = Zlib.deflate(data)
-          encoding = 'deflate'
-          break
-        end
-      }
-    end
-
-    # Determine value of headers (cache and content disposition)
-    disposition = inline ? 'inline' : 'attachment'
-    cache = case cache
-    when true
-      'public, max-age=31536000, immutable'
-    when false
-      'no-cache'
-    when Integer
-      cache > 0 ? "public, max-age=#{cache}, immutable" : 'no-cache'
-    else
-      nil
-    end
-
-    # Set HTTP headers, code and body
-    res['Content-Type']        = type || get_mimetype(name)
-    res['Content-Length']      = data.bytesize
-    res['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
-    res['Content-Encoding']    = encoding if encoding
-    res['Cache-Control']       = cache if cache
-    res.status = 200
-    res.body = data
-  end
-end
-
-module NPPServer extend self
-  extend Sock
-
-  def on
-    start(SOCKET_PORT, 'CLE')
-  end
-
-  def off
-    stop('CLE')
+  def initialize
+    super('CLE', SOCKET_PORT)
   end
 
   def handle(req, res)
@@ -1402,24 +1367,17 @@ module NPPServer extend self
   end
 end
 
-module APIServer extend self
-  extend Sock
+# Custom API for browser access to specific outte functions
+class APIServer < Server
 
-  # In-memory cache for API pages: 100MB and 1 day (by default)
-  @@cache = Cache.new(capacity: 100, duration: 24 * 60, name: 'api-cache')
-
-  def on
-    start(API_PORT, 'API')
-  end
-
-  def off
-    stop('API')
+  def initialize
+    super('API', API_PORT, cache: 100)
   end
 
   def handle(req, res)
-    # Default response for unknown resources is Forbidden
+    # Default response for unknown resources
     action_inc('api')
-    res.status = 403
+    res.status = 404
     res.body = ''
 
     # Sanity check to prevent path traversal, shouldn't reach here anyway
@@ -1432,55 +1390,58 @@ module APIServer extend self
     hit_cache = !!body
     cache_time = 24 * 60
 
-    query = req.query.map{ |k, v| [k, v.to_s] }.to_h
+    # Respond to "Expect: 100-continue" immediately
+    req.continue
+
     route = path.split('/').first
     compress = req.header['accept-encoding'][0]
     case req.request_method
     when 'GET'
+      query = req.query.map{ |k, v| [k, v.to_s] }.to_h
       case route
       when nil             # Home page
         action_inc('api_home')
-        send_data(res, data: build_page('home'){ handle_home() }, name: 'index.html', compress: compress)
+        set_body(res, data: build_page('home'){ handle_home() }, name: 'index.html', compress: compress)
       when 'favicon.ico'   # Favicon
-        send_data(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
+        set_body(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
       when 'api'           # API files (HTML, JS, CSS)
-        send_data(res, file: path, cache: true, compress: compress)
+        set_body(res, file: path, cache: true, compress: compress)
       when 'cache'
         content = build_page('run', 'API cache status') { handle_cache(query) }
-        send_data(res, data: content, name: 'cache.html', compress: compress)
+        set_body(res, data: content, name: 'cache.html', compress: compress)
       when 'git'           # FUNCTION: git
         action_inc('api_git')
         link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
         body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) } unless hit_cache
-        send_data(res, data: body, name: 'git.html', compress: compress, cache: true)
+        set_body(res, data: body, name: 'git.html', compress: compress, cache: true)
       when 'img'           # Image assets (ICO, PNG, SVG)
-        send_data(res, file: path, cache: true)
+        set_body(res, file: path, cache: true)
       when 'octicon'       # Generate octicons on the fly
         file = path.split('/').last
         name, size, color = file.remove('.svg').split('_')
-        send_data(res, data: build_octicon(name, size, color), name: file, cache: true)
+        set_body(res, data: build_octicon(name, size, color), name: file, cache: true)
       when 'scores'        # FUNCTION: scores
         action_inc('api_scores')
         body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) } unless hit_cache
-        send_data(res, data: body, name: 'scores.html', compress: compress)
+        set_body(res, data: body, name: 'scores.html', compress: compress)
         cache_time = 5
       when 'run'           # FUNCTION: run
         action_inc('api_run')
         body = build_page('run', 'Show information about a given run') { handle_run(query) } unless hit_cache
-        send_data(res, data: body, name: 'run.html', compress: compress, cache: true)
+        set_body(res, data: body, name: 'run.html', compress: compress, cache: true)
         cache_time = 60
       end
     when 'POST'
-      query = req.query_string.split('&').map{ |s| s.split('=') }.to_h
+      query = req.query_string.to_s.split('&').map{ |s| s.split('=') }.to_h
       case route
       when 'screenshot'
         ret = handle_screenshot(query, req.body)
         if !ret.key?(:file)
-          client_error(res, ret[:msg] || 'Unknown query error')
+          res.error_client(ret[:msg] || 'Unknown query error')
         elsif !ret[:file]
-          server_error(res, 'Error generating screenshot')
+          res.error_server('Error generating screenshot')
         else
-          send_data(res, data: ret[:file], name: ret[:name])
+          set_body(res, data: ret[:file], name: ret[:name])
         end
       end
     end
@@ -2154,7 +2115,7 @@ module APIServer extend self
 
   def handle_error(res, msg, code = 500)
     body = "<div class=\"centered title off\">#{msg}</div>"
-    server_error(res, build_page('error'){ body })
+    res.error_server(build_page('error'){ body })
   rescue => e
     lex(e, 'Failed to handle API error')
   end

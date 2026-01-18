@@ -466,11 +466,11 @@ class Cache
   Entry = Struct.new(:key, :size, :raw_size, :content, :duration, :expiry, :added, :accessed, :taps, :compressed)
 
   # Capacity in MB, duration in minutes
-  def initialize(capacity: 10, duration: 5, name: 'cache')
+  def initialize(capacity: 10, duration: 5, name: 'generic')
     @capacity = 1024 ** 2 * capacity
     @duration = 60 * duration
     @entries  = {}
-    @name     = name
+    @name     = "#{name}-cache"
     @adds     = 0
     @taps     = 0
     start
@@ -3066,8 +3066,6 @@ def with_connection(&block)
   res = yield
   release_connection
   res
-rescue
-  nil
 end
 
 # Perform arbitrary raw SQL commands
