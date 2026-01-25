@@ -6,6 +6,7 @@ include Magick
 FONT_PATH   = "fonts/sys/Sys.otf"
 INPUT_PATH  = "../img/palette.png"
 OUTPUT_PATH = "palette_grid.png"
+MASK_PATH   = "../img/object_layers/00-0_0.png"
 
 # Palette info
 THEMES = [
@@ -66,10 +67,20 @@ PADDING       = 20
 BORDER_WIDTH         = 2
 BORDER_COLOR         = 'black'
 BORDER_RADIUS        = 16
+
+# Swatch with ninja colors
+SWATCH_RENDER        = false
 SWATCH_SIZE          = 8
 SWATCH_COLOR_INDICES = [6, 7, 8, 9]
 
+# Actual ninja sprites
+MASK_RENDER          = true
+MASK_COLOR_INDICES   = [6]
+MASK_POSITIONS       = [220]
+
 palettes_img = Image.read(INPUT_PATH).first
+mask_base = Image.read(MASK_PATH).first
+#mask_base = mask_base.adaptive_resize(0.5)
 
 # Generate tiles
 tiles = THEMES.map.with_index do |name, i|
@@ -79,6 +90,7 @@ tiles = THEMES.map.with_index do |name, i|
   text_pixel    = palettes_img.pixel_color(TEXT_COLOR_INDEX, i)
   outline_pixel = palettes_img.pixel_color(OUTLINE_COLOR_INDEX, i)
   swatch_pixels = SWATCH_COLOR_INDICES.map{ |idx|  palettes_img.pixel_color(idx, i) }
+  mask_pixels   = MASK_COLOR_INDICES.map{ |idx|  palettes_img.pixel_color(idx, i) }
   tile = Image.new(TILE_WIDTH, TILE_HEIGHT) { |opts| opts.background_color = 'transparent' }
 
   # Render rectangle
@@ -97,17 +109,31 @@ tiles = THEMES.map.with_index do |name, i|
   draw_bg.draw(tile)
 
   # Render swatch
-  base_x = TILE_WIDTH  - 2 * SWATCH_SIZE - 8
-  base_y = TILE_HEIGHT / 2 - SWATCH_SIZE
-  swatch_pixels.each_with_index do |pix, k|
-    x = base_x + (k % 2) * (SWATCH_SIZE + 2)
-    y = base_y + (k / 2) * (SWATCH_SIZE + 2)
-    swatch_draw = Draw.new
-    swatch_draw.stroke = 'none'
-    swatch_draw.stroke_width = 1
-    swatch_draw.fill = pix.to_color
-    swatch_draw.rectangle(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE)
-    swatch_draw.draw(tile)
+  if SWATCH_RENDER
+    base_x = TILE_WIDTH  - 2 * SWATCH_SIZE - 8
+    base_y = TILE_HEIGHT / 2 - SWATCH_SIZE
+    swatch_pixels.each_with_index do |pix, k|
+      x = base_x + (k % 2) * (SWATCH_SIZE + 2)
+      y = base_y + (k / 2) * (SWATCH_SIZE + 2)
+      swatch_draw = Draw.new
+      swatch_draw.stroke = 'none'
+      swatch_draw.stroke_width = 1
+      swatch_draw.fill = pix.to_color
+      swatch_draw.rectangle(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE)
+      swatch_draw.draw(tile)
+    end
+  end
+
+  # Render ninja
+  if MASK_RENDER
+    mask_pixels.each_with_index do |pix, k|
+      mask = mask_base.copy
+      mask = mask.quantize(2, GRAYColorspace)
+      mask = mask.negate
+      colored = Image.new(mask.columns, mask.rows) { |opts| opts.background_color = pix.to_color }
+      colored.composite!(mask, 0, 0, CopyAlphaCompositeOp)
+      tile.composite!(colored, MASK_POSITIONS[k], TILE_HEIGHT - mask.rows - BORDER_WIDTH, OverCompositeOp)
+    end
   end
 
   # Configure text
