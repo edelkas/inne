@@ -141,7 +141,7 @@ log("Loaded source files (%.2fs)" % [Time.now - t])
 $load_time = Time.now
 
 # We monkey patch a few core classes (Enumerable, Array, boolean classes...)
-# and several of the gems (ActiveRecord, Discordrb, Webrick...)
+# and several of the gems (ActiveRecord, Discordrb...)
 # See the MonkeyPatch module in models.rb for the details
 def monkey_patch
   MonkeyPatches.apply
@@ -458,7 +458,7 @@ def shutdown(trap: false, force: false)
 
   # Stop bot, shutdown servers, disconnect from DB
   stop_bot
-  $servers.each{ |svr| svr.stop(!force) }
+  $servers.each{ |name, svr| svr.stop(!force) }
   #disconnect_db unless trap
   err("Shut down outte")
 rescue => e

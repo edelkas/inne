@@ -12,8 +12,9 @@ $load_time = Time.now
 require 'json'
 require 'net/http'
 require 'octicons'
+require 'puma'
+require 'rack'
 require 'socket'
-require 'webrick'
 
 module Twitch extend self
 
@@ -1104,39 +1105,43 @@ class Server
 
     def initialize(env)
       @env = env
-      @headers = env.select{ |k, _| k.start_with?('HTTP_') }.transform_keys{ |k| k.sub(/^HTTP_/, '').downcase }
-      @headers['content-type'] = env['CONTENT_TYPE']
-      @headers['content-length'] = env['CONTENT_LENGTH']
+      @headers = env.select{ |k, _| k.start_with?('HTTP_') }
+                    .transform_keys{ |k| k.sub(/^HTTP_/, '').tr('_', '-').downcase }
+      @headers['content-type'] = env['CONTENT_TYPE'] if env['CONTENT_TYPE']
+      @headers['content-length'] = env['CONTENT_LENGTH'] if env['CONTENT_LENGTH']
       env['rack.input'].rewind
       @body = env['rack.input'].read
     end
 
     def [](name)
-      @headers[name.downcase]
+      @headers[name.tr('_', '-').downcase]
     end
 
-    def method() env['REQUEST_METHOD'] end
-    def script() env['SCRIPT_NAME']    end
-    def path()   env['PATH_INFO']      end
-    def query()  env['QUERY_STRING']   end
-    def ip()     env['REMOTE_ADDR']    end
+    def method() @env['REQUEST_METHOD']           end
+    def path()   @env['PATH_INFO']                end
+    def query()  @env['QUERY_STRING']             end
+    def ip()     @env['REMOTE_ADDR']              end
+    def route()  path.split('/').reject(&:empty?) end
+    def root()   route.first.to_s                 end
 
     def key
-      script + path + '?' + query
+      path + '?' + query
     end
 
     def log
       lin("%s %s %dB %s" % [ip, method, @body.bytesize, key])
       return if !$log[:socket]
-      filename = "req_#{sanitize_filename(script)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
+      filename = "req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
       File.binwrite(File.join(DIR_LOGS, filename), @body)
     end
 
     def clear
-      @headers.each{ |k, v| v.clear }
       @headers.clear
       @body.clear
       @env.clear
+    rescue => e
+      # We must handle exceptions here to prevent them from leaking to Puma
+      lex(e, 'Failed to clear HTTP request')
     end
   end
 
@@ -1212,7 +1217,7 @@ class Server
     end
 
     # Dispatch response in Rack's expected format
-    def dispatch(status, body = '', headers = {})
+    def dispatch
       [@status, @headers, [@body]]
     end
 
@@ -1239,13 +1244,16 @@ class Server
     def log(time, cache = false)
       delta = Time.now - time
       lout("%d %dB %dms %s" % [@status, @body.bytesize, 1000 * delta, cache ? '(cached)' : ''])
-      return if !$log[:socket] || @body.empty
+      return if !$log[:socket] || @body.empty?
       if @body.encoding.name == 'UTF-8'
         dbg('Response body: ' + @body)
       else
         filename = "res_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
         File.binwrite(File.join(DIR_LOGS, filename), body)
       end
+    rescue => e
+      # We must handle exceptions here to prevent them from leaking to Puma
+      lex(e, 'Failed to log HTTP response')
     end
   end
 
@@ -1260,25 +1268,22 @@ class Server
     @routes = Hash.new { |h, k| h[k] = {} }
     @running = false
     @cache = Cache.new(capacity: cache, duration: 24 * 60, name: "#{name}-cache") if cache > 0
-
-    @puma = Puma::Server.new(self)
-    @puma.min_threads = min_threads
-    @puma.max_threads = max_threads
+    @puma = Puma::Server.new(self, nil, min_threads: min_threads, max_threads: max_threads, Silent: true)
     @puma.add_tcp_listener(@host, @port)
   end
 
   def start
-    return if @running
+    return if !SOCKETS || @running
     @puma.run
     @running = true
-    log("Started #{@name} server on TCP port #{@port}")
+    succ("Started #{@name} server on TCP port #{@port}")
   end
 
   def stop(graceful = true)
     return unless @running
     @puma.stop(graceful)
     @running = false
-    log("Stopped #{@name} server on TCP port #{@port}")
+    err("Stopped #{@name} server on TCP port #{@port}")
   end
 
   # Dynamic method dispatcher
@@ -1290,6 +1295,8 @@ class Server
 
   # Rack entry point
   # TODO: Handle Expect: 100-continue
+  # TODO: Monkey-patch Rack's logging
+  # TODO: We might want to exclude some things (e.g. images) from being cached
   def call(env)
     time = Time.now
     hit_cache = false
@@ -1301,23 +1308,23 @@ class Server
     return if request.path =~ /\.\./i
 
     # Fetch request handler
-    handler = @routes[request.method][request.script]
+    handler = @routes[request.method][request.root]
     return unless handler
 
-    # Hit cache
+    # Fetch response
     cached = @cache.get(request.key)
-    if !!cached
+    if !!cached   # Hit cache
       hit_cache = true
       response = Marshal.load(cached)
       @cache.tap(request.key)
-      return
+    else          # Not cached
+      with_connection() { handler.call(request, response) }
+      @cache.add(request.key, Marshal.dump(response), response.cache, compress: true) if response.cache > 0
     end
 
-    # Generate response and cache
-    with_connection() { handler.call(request, response) }
+    # Encode body if suitable
     encoding = request['accept-encoding']
     encoded = response.encode(encoding) if encoding
-    @cache.add(request.key, Marshal.dump(response), response.cache, compress: !encoded)
   rescue => e
     lex(e, 'Failed to handle server request')
     response.error_server
@@ -1333,7 +1340,7 @@ end
 class NPPServer < Server
 
   def initialize
-    super('CLE', SOCKET_PORT)
+    super('CLE', CLE_PORT)
   end
 
   def handle(req, res)

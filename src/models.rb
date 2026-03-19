@@ -12,11 +12,10 @@ require 'active_record'
 require 'json'
 require 'net/http'
 require 'socket'
-require 'webrick'
 require 'zlib'
 
 # Monkey patches to get some custom behaviour from a few core classes,
-# as well as ActiveRecord, Discordrb and WEBrick
+# as well as ActiveRecord, Discordrb
 module MonkeyPatches
   def self.patch_core
     # Add justification to arrays, like for strings
@@ -118,42 +117,6 @@ module MonkeyPatches
                   emoji.to_h
                 end
         @options << { label: label, value: value, description: description, emoji: emoji, default: default }
-      end
-    end
-  end
-
-  # Customize WEBRick's log format
-  def self.patch_webrick
-    ::WEBrick::BasicLog.class_eval do
-      def initialize(log_file = nil, level = nil)
-        @level = 3
-        @log = $stderr
-      end
-
-      def log(level, data)
-        return if level > @level
-        data.gsub!(/^(?:FATAL|ERROR|WARN |INFO |DEBUG) /, '')
-        mode = [:fatal, :error, :warn, :info, :debug][level - 1] || :info
-        Log.write(data, mode, 'WBR')
-      end
-    end
-
-    ::WEBrick::Log.class_eval do
-      def log(level, data)
-        super(level, data)
-      end
-    end
-
-    ::WEBrick::HTTPServer.class_eval do
-      def access_log(config, req, res)
-        param = ::WEBrick::AccessLog::setup_params(config, req, res)
-        #param['U'] = param['U'].split('?')[0].split('/')[-1] rescue '' # Uncomment to show only last component
-        @config[:AccessLog].each{ |logger, fmt|
-          str = ::WEBrick::AccessLog::format(fmt.gsub('%T', ''), param)
-          str += " #{"%.3fms" % (1000 * param['T'])}" if fmt.include?('%T') rescue ''
-          str.squish!
-          fmt.include?('%s') ? lout(str) : lin(str) if $log[:socket]
-        }
       end
     end
   end
@@ -320,7 +283,6 @@ module MonkeyPatches
     patch_core         if MONKEY_PATCH_CORE
     patch_activerecord if MONKEY_PATCH_ACTIVE_RECORD
     patch_discordrb    if MONKEY_PATCH_DISCORDRB
-    patch_webrick      if MONKEY_PATCH_WEBRICK
     patch_chunkypng    if MONKEY_PATCH_CHUNKYPNG
   end
 end

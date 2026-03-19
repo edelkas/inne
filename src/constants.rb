@@ -300,7 +300,6 @@ MONKEY_PATCH               = true # Enable monkey patches globally
 MONKEY_PATCH_CORE          = true # Enable Kernel patches (must!)
 MONKEY_PATCH_ACTIVE_RECORD = true # Enable ActiveRecord monkey patches (must!)
 MONKEY_PATCH_DISCORDRB     = true # Enable Discordrb monkey patches (optional)
-MONKEY_PATCH_WEBRICK       = true # Enable WEBrick monkey patches (optional)
 MONKEY_PATCH_CHUNKYPNG     = true # Enable ChunkyPNG monkey patches (optional)
 
 # <---------------------------------------------------------------------------->
@@ -545,15 +544,16 @@ SPEEDRUN_COLOR_INFO = 0x93a5a6 # Embed bar color for informational notices
 #    Provides certain outte functionality that can be called externally (e.g.
 #    from a browser) as opposed to from Discord or N++.
 
-SOCKET      = true  # Whether to open sockets or not
-SOCKET_PORT = 8126  # Port for CLE's TCP server
-SOCKET_LOG  = true  # Log request and response details
+SOCKETS    = true  # Allow open sockets
+SOCKET_LOG = true  # Log request and response details
 
 # CUSE-specific variables
 QUERY_LIMIT_SOFT = 25   # Number of queried userlevels per page
 QUERY_LIMIT_HARD = 500  # Maximum number of queried userlevels per page
 
 # CLE-specific variables
+CLE_ON           = false
+CLE_PORT         = 8126
 PWD              = ENV['NPP_HASH']
 CLE_FORWARD      = true             # Forward unrelated requests to Metanet
 INTEGRITY_CHECKS = true             # Verity replay security hashes
@@ -564,7 +564,7 @@ DEV_PLAYER_NAME  = '-- DEV TIME --' # Player name to show dev scores
 REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to understand this
 
 # API-specific variables
-API_ON       = false
+API_ON       = true
 API_PORT     = TEST ? 9119 : 80
 API_FAVICON  = 'moleHack'
 API_TEMPLATE = 'template.html'

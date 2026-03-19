@@ -211,7 +211,7 @@ module Log extend self
   def write(
     text,            # The text to log
     mode,            # The type of log (info, error, debug, etc)
-    app = 'BOT',     # The origin of the log (outte, discordrb, webrick, etc)
+    app = 'BOT',     # The origin of the log (outte, discordrb, etc)
     newline:  true,  # Add a newline at the end or not
     pad:      false, # Pad each line of the text to a fixed width
     progress: false, # Progress log line (pad + no newline)
