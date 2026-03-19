@@ -489,13 +489,18 @@ class Cache
     content
   end
 
-  # Update the expiry of an entry
+  # Mark an access to the entry
   def tap(key)
     return if !check(key)
     @entries[key].accessed = Time.now
-    @entries[key].expiry = @entries[key].accessed + @entries[key].duration
     @entries[key].taps += 1
     @taps += 1
+  end
+
+  # Update the expiry of an entry
+  def touch(key)
+    return if !tap(key)
+    @entries[key].expiry = @entries[key].accessed + @entries[key].duration
   end
 
   # Add or overwrite an entry

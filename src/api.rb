@@ -1096,44 +1096,60 @@ end
 # Generic wrapper around a Puma server. Used for both the N++ proxy and the API.
 # See "Socket Variables" in constants.rb for docs
 class Server
-  DEFAULT_HOST = '0.0.0.0'
+  DEFAULT_HOST  = '0.0.0.0'
+  DEFAULT_CACHE = 24 * 60 # Minutes
 
   # Wrapper for a request (Rack environment)
   class Request
-    attr_reader :env
 
     def initialize(env)
       @env = env
+      @headers = env.select{ |k, _| k.start_with?('HTTP_') }.transform_keys{ |k| k.sub(/^HTTP_/, '').downcase }
+      @headers['content-type'] = env['CONTENT_TYPE']
+      @headers['content-length'] = env['CONTENT_LENGTH']
+      env['rack.input'].rewind
+      @body = env['rack.input'].read
+    end
+
+    def [](name)
+      @headers[name.downcase]
     end
 
     def method() env['REQUEST_METHOD'] end
+    def script() env['SCRIPT_NAME']    end
     def path()   env['PATH_INFO']      end
     def query()  env['QUERY_STRING']   end
     def ip()     env['REMOTE_ADDR']    end
 
-    def headers
-      env.select { |k, _| k.start_with?('HTTP_') }
-         .transform_keys { |k| k.sub(/^HTTP_/, '').downcase }
+    def key
+      script + path + '?' + query
     end
 
-    def body
-      @body ||= begin
-        io = env['rack.input']
-        io.rewind
-        io.read
-      end
+    def log
+      lin("%s %s %dB %s" % [ip, method, @body.bytesize, key])
+      return if !$log[:socket]
+      filename = "req_#{sanitize_filename(script)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
+      File.binwrite(File.join(DIR_LOGS, filename), @body)
+    end
+
+    def clear
+      @headers.each{ |k, v| v.clear }
+      @headers.clear
+      @body.clear
+      @env.clear
     end
   end
 
   # Wrapper for a response
   class Response
     attr_accessor :status
-    attr_reader :body, :headers
+    attr_reader :body, :headers, :cache
 
-    def initialize(status, body = '', headers = {})
+    def initialize(status, body = '', headers = {}, cache: DEFAULT_CACHE)
       @status  = status
       @headers = headers
       @body    = body
+      @cache   = cache
     end
 
     def []=(name, value)
@@ -1174,13 +1190,14 @@ class Server
         when 'gzip', 'x-gzip'
           self.body = Zlib.gzip(@body)
           @headers['Content-Encoding'] = 'gzip'
-          return
+          return true
         when 'deflate'
           self.body = Zlib.deflate(@body)
           @headers['Content-Encoding'] = 'deflate'
-          return
+          return true
         end
       }
+      false
     end
 
     def error_client(msg = 'Unable to parse request', code = 400)
@@ -1200,7 +1217,7 @@ class Server
     end
 
     # Fill body with arbitrary data or an arbitrary file as a response
-    def set_body(data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true, compress: nil)
+    def set_body(data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true)
       # Data must be provided either directly or in a file
       if !data && !file
         return error_server()
@@ -1217,7 +1234,18 @@ class Server
       self.cache = cache
       @headers['Content-Type'] = type || Server::mimetype(name)
       @headers['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
-      encode(compress) if compress
+    end
+
+    def log(time, cache = false)
+      delta = Time.now - time
+      lout("%d %dB %dms %s" % [@status, @body.bytesize, 1000 * delta, cache ? '(cached)' : ''])
+      return if !$log[:socket] || @body.empty
+      if @body.encoding.name == 'UTF-8'
+        dbg('Response body: ' + @body)
+      else
+        filename = "res_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
+        File.binwrite(File.join(DIR_LOGS, filename), body)
+      end
     end
   end
 
@@ -1261,17 +1289,41 @@ class Server
   end
 
   # Rack entry point
+  # TODO: Handle Expect: 100-continue
   def call(env)
+    time = Time.now
+    hit_cache = false
+
+    # Parse request
     request = Request.new(env)
     response = Response.new(404)
-    handler = @routes[request.method][request.path]
+    request.log
+    return if request.path =~ /\.\./i
+
+    # Fetch request handler
+    handler = @routes[request.method][request.script]
     return unless handler
+
+    # Hit cache
+    cached = @cache.get(request.key)
+    if !!cached
+      hit_cache = true
+      response = Marshal.load(cached)
+      @cache.tap(request.key)
+      return
+    end
+
+    # Generate response and cache
     with_connection() { handler.call(request, response) }
+    encoding = request['accept-encoding']
+    encoded = response.encode(encoding) if encoding
+    @cache.add(request.key, Marshal.dump(response), response.cache, compress: !encoded)
   rescue => e
     lex(e, 'Failed to handle server request')
-    response.status = 500
-    response.body = ''
+    response.error_server
   ensure
+    request.clear
+    response.log(time, hit_cache)
     return response.dispatch
   end
 
@@ -1293,12 +1345,6 @@ class NPPServer < Server
     mappack = req.path.split('/')[1][/\w+/i]
     method  = req.request_method
     query   = req.path.sub(METANET_PATH, '').split('/')[2..-1].join('/')
-
-    # Log POST bodies
-    if $log[:socket] && method == 'POST'
-      timestamp = Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')
-      File.binwrite(File.join(DIR_LOGS, sanitize_filename(query) + '_' + timestamp), req.body)
-    end
 
     # Always log players in, regardless of mappack
     return respond(res, Player.login(mappack, req)) if method == 'POST' && query == METANET_POST_LOGIN
@@ -1351,15 +1397,6 @@ class NPPServer < Server
       res.status = 200
       res.body = body
     end
-
-    # Log response body in terminal (plain text) or file (binary)
-    return if !$log[:socket]
-    if !body || body.encoding.name == 'UTF-8'
-      dbg('CLE Response: ' + (body || 'No body'))
-    else
-      timestamp = Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')
-      File.binwrite(File.join(DIR_LOGS, 'res_' + timestamp), body)
-    end
   end
 
   def fwd(req, res)
@@ -1372,63 +1409,60 @@ class APIServer < Server
 
   def initialize
     super('API', API_PORT, cache: 100)
+
+    # Home page
+    get(''){ |req, res|
+      action_inc('api_home')
+      res.set_body(data: build_page('home'){ handle_home() }, name: 'index.html')
+    }
+
+    # Dispatch favicon
+    get('/favicon.ico'){ |req, res|
+      res.set_body(file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
+    }
   end
 
+  # TODO:
+  #   - Move 100-continue to main Server class
+  #   - Call set_body only once, at the end. The case switch should only compute the body.
   def handle(req, res)
-    # Default response for unknown resources
     action_inc('api')
-    res.status = 404
-    res.body = ''
-
-    # Sanity check to prevent path traversal, shouldn't reach here anyway
-    path = req.path.strip[1..]
-    return if path =~ /\.\./i
-
-    # Check if we hit the cache
-    key = req.unparsed_uri
-    body = @@cache.get(key)
-    hit_cache = !!body
-    cache_time = 24 * 60
-
-    # Respond to "Expect: 100-continue" immediately
-    req.continue
 
     route = path.split('/').first
-    compress = req.header['accept-encoding'][0]
     case req.request_method
     when 'GET'
       query = req.query.map{ |k, v| [k, v.to_s] }.to_h
       case route
       when nil             # Home page
         action_inc('api_home')
-        set_body(res, data: build_page('home'){ handle_home() }, name: 'index.html', compress: compress)
+        res.set_body(data: build_page('home'){ handle_home() }, name: 'index.html')
       when 'favicon.ico'   # Favicon
-        set_body(res, file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
+        res.set_body(file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
       when 'api'           # API files (HTML, JS, CSS)
-        set_body(res, file: path, cache: true, compress: compress)
+        res.set_body(file: path, cache: true)
       when 'cache'
         content = build_page('run', 'API cache status') { handle_cache(query) }
-        set_body(res, data: content, name: 'cache.html', compress: compress)
+        res.set_body(data: content, name: 'cache.html')
       when 'git'           # FUNCTION: git
         action_inc('api_git')
         link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
-        body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) } unless hit_cache
-        set_body(res, data: body, name: 'git.html', compress: compress, cache: true)
+        body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) }
+        res.set_body(data: body, name: 'git.html', cache: true)
       when 'img'           # Image assets (ICO, PNG, SVG)
-        set_body(res, file: path, cache: true)
+        res.set_body(file: path, cache: true)
       when 'octicon'       # Generate octicons on the fly
         file = path.split('/').last
         name, size, color = file.remove('.svg').split('_')
-        set_body(res, data: build_octicon(name, size, color), name: file, cache: true)
+        res.set_body(data: build_octicon(name, size, color), name: file, cache: true)
       when 'scores'        # FUNCTION: scores
         action_inc('api_scores')
-        body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) } unless hit_cache
-        set_body(res, data: body, name: 'scores.html', compress: compress)
+        body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }
+        res.set_body(data: body, name: 'scores.html')
         cache_time = 5
       when 'run'           # FUNCTION: run
         action_inc('api_run')
-        body = build_page('run', 'Show information about a given run') { handle_run(query) } unless hit_cache
-        set_body(res, data: body, name: 'run.html', compress: compress, cache: true)
+        body = build_page('run', 'Show information about a given run') { handle_run(query) }
+        res.set_body(data: body, name: 'run.html', cache: true)
         cache_time = 60
       end
     when 'POST'
@@ -1441,13 +1475,10 @@ class APIServer < Server
         elsif !ret[:file]
           res.error_server('Error generating screenshot')
         else
-          set_body(res, data: ret[:file], name: ret[:name])
+          res.set_body(data: ret[:file], name: ret[:name])
         end
       end
     end
-
-    # Add to cache
-    hit_cache ? @@cache.tap(key) : @@cache.add(key, body, cache_time, compress: true) if body
   rescue => e
     lex(e, "API socket failed to parse request for: #{req.path}")
     handle_error(res, 'Failed to handle request')

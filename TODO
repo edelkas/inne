@@ -1,3 +1,5 @@
+- Add reminder for Steam refresh token expiration a few days prior
+- Use Player.send_request with outte++ for update_completions, and other related methods.
 - Parse RSS feeds.
   * Steam: https://store.steampowered.com/feeds/news/app/230270/
   * SteamDB: https://steamdb.info/api/PatchnotesRSS/?appid=230270
