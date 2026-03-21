@@ -290,7 +290,7 @@ module Speedrun extend self
   # Cache to store HTTP requests to the API for a few minutes, specially useful when
   # navigating paginated lists (e.g. leaderboards). The API limit is 100 requets
   # per minute, so it's hard to reach, but this way we save time anyway.
-  @@cache = Cache.new(name: 'speedrun-cache')
+  @@cache = Cache.new(name: 'speedrun')
 
   def get_game(game)
     @@games[game]
@@ -1098,10 +1098,12 @@ end
 # See "Socket Variables" in constants.rb for docs
 class Server
   DEFAULT_HOST  = '0.0.0.0'
-  DEFAULT_CACHE = 24 * 60 # Minutes
+  DEFAULT_CACHE = 24 * 60 * 60
 
   # Wrapper for a request (Rack environment)
   class Request
+
+    attr_reader :body, :query
 
     def initialize(env)
       @env = env
@@ -1111,21 +1113,26 @@ class Server
       @headers['content-length'] = env['CONTENT_LENGTH'] if env['CONTENT_LENGTH']
       env['rack.input'].rewind
       @body = env['rack.input'].read
+      @query = env['QUERY_STRING'].split('&').map{ |s| s.split('=').ljust(2, nil)[0, 2] }.to_h.compact
     end
 
     def [](name)
       @headers[name.tr('_', '-').downcase]
     end
 
-    def method() @env['REQUEST_METHOD']           end
-    def path()   @env['PATH_INFO']                end
-    def query()  @env['QUERY_STRING']             end
-    def ip()     @env['REMOTE_ADDR']              end
-    def route()  path.split('/').reject(&:empty?) end
-    def root()   route.first.to_s                 end
+    def method()    @env['REQUEST_METHOD']           end
+    def path()      @env['PATH_INFO']                end
+    def raw_query() @env['QUERY_STRING']             end
+    def ip()        @env['REMOTE_ADDR']              end
+    def route()     path.split('/').reject(&:empty?) end
+    def root()      route.first.to_s                 end
+
+    def parts
+      @body.to_s.split('&').map{ |s| s.split('=') }.to_h
+    end
 
     def key
-      path + '?' + query
+      path + (!raw_query.empty? ? '?' + raw_query : '')
     end
 
     def log
@@ -1167,8 +1174,8 @@ class Server
       @headers['Content-Length'] = @body.bytesize.to_s
     end
 
-    def cache=(value)
-      cache = case value
+    def cache=(cache)
+      cache = case cache
       when true
         365 * 24 * 60 * 60
       when false
@@ -1183,8 +1190,10 @@ class Server
 
       if cache
         @headers['Cache-Control'] = cache > 0 ? "public, max-age=#{cache}, immutable" : 'no-cache'
+        @cache = [cache, 0].max
       else
         @headers.delete('Cache-Control')
+        @cache = 0
       end
     end
 
@@ -1227,6 +1236,7 @@ class Server
       if !data && !file
         return error_server()
       elsif !data && file
+        file = File.join(Dir.pwd, file)
         return error_client('File not found', 404) if !File.file?(file)
         name ||= file
         data = binary ? File.binread(file) : File.read(file)
@@ -1236,14 +1246,14 @@ class Server
       # Set HTTP status, headers, and body
       @status = 200
       self.body = data
-      self.cache = cache
+      self.cache = cache.nil? ? @cache : cache
       @headers['Content-Type'] = type || Server::mimetype(name)
       @headers['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
     end
 
-    def log(time, cache = false)
+    def log(time, cached = false)
       delta = Time.now - time
-      lout("%d %dB %dms %s" % [@status, @body.bytesize, 1000 * delta, cache ? '(cached)' : ''])
+      lout("%d %dB %dms %s" % [@status, @body.bytesize, 1000 * delta, cached ? '(cached)' : ''])
       return if !$log[:socket] || @body.empty?
       if @body.encoding.name == 'UTF-8'
         dbg('Response body: ' + @body)
@@ -1267,7 +1277,7 @@ class Server
     @port = port
     @routes = Hash.new { |h, k| h[k] = {} }
     @running = false
-    @cache = Cache.new(capacity: cache, duration: 24 * 60, name: "#{name}-cache") if cache > 0
+    @cache = Cache.new(capacity: cache, duration: DEFAULT_CACHE / 60, name: name) if cache > 0
     @puma = Puma::Server.new(self, nil, min_threads: min_threads, max_threads: max_threads, Silent: true)
     @puma.add_tcp_listener(@host, @port)
   end
@@ -1319,14 +1329,14 @@ class Server
       @cache.tap(request.key)
     else          # Not cached
       with_connection() { handler.call(request, response) }
-      @cache.add(request.key, Marshal.dump(response), response.cache, compress: true) if response.cache > 0
+      @cache.add(request.key, Marshal.dump(response), response.cache / 60, compress: true) if response.cache > 0
     end
 
     # Encode body if suitable
     encoding = request['accept-encoding']
     encoded = response.encode(encoding) if encoding
   rescue => e
-    lex(e, 'Failed to handle server request')
+    lex(e, "#{@name} server: Failed to handle request")
     response.error_server
   ensure
     request.clear
@@ -1414,6 +1424,7 @@ end
 # Custom API for browser access to specific outte functions
 class APIServer < Server
 
+  # TODO: Call handle_error on errors, properly log
   def initialize
     super('API', API_PORT, cache: 100)
 
@@ -1424,71 +1435,66 @@ class APIServer < Server
     }
 
     # Dispatch favicon
-    get('/favicon.ico'){ |req, res|
+    get('favicon.ico'){ |req, res|
       res.set_body(file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
     }
-  end
 
-  # TODO:
-  #   - Move 100-continue to main Server class
-  #   - Call set_body only once, at the end. The case switch should only compute the body.
-  def handle(req, res)
-    action_inc('api')
+    # Complementary API files (HTML, CSS, JS)
+    get('api') { |req, res|
+      res.set_body(file: req.path, cache: true)
+    }
 
-    route = path.split('/').first
-    case req.request_method
-    when 'GET'
-      query = req.query.map{ |k, v| [k, v.to_s] }.to_h
-      case route
-      when nil             # Home page
-        action_inc('api_home')
-        res.set_body(data: build_page('home'){ handle_home() }, name: 'index.html')
-      when 'favicon.ico'   # Favicon
-        res.set_body(file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
-      when 'api'           # API files (HTML, JS, CSS)
-        res.set_body(file: path, cache: true)
-      when 'cache'
-        content = build_page('run', 'API cache status') { handle_cache(query) }
-        res.set_body(data: content, name: 'cache.html')
-      when 'git'           # FUNCTION: git
-        action_inc('api_git')
-        link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
-        body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(query) }
-        res.set_body(data: body, name: 'git.html', cache: true)
-      when 'img'           # Image assets (ICO, PNG, SVG)
-        res.set_body(file: path, cache: true)
-      when 'octicon'       # Generate octicons on the fly
-        file = path.split('/').last
-        name, size, color = file.remove('.svg').split('_')
-        res.set_body(data: build_octicon(name, size, color), name: file, cache: true)
-      when 'scores'        # FUNCTION: scores
-        action_inc('api_scores')
-        body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(query) }
-        res.set_body(data: body, name: 'scores.html')
-        cache_time = 5
-      when 'run'           # FUNCTION: run
-        action_inc('api_run')
-        body = build_page('run', 'Show information about a given run') { handle_run(query) }
-        res.set_body(data: body, name: 'run.html', cache: true)
-        cache_time = 60
+    # Image resouces
+    get('img') { |req, res|
+      res.set_body(file: req.path, cache: true)
+    }
+
+    # Generate octicons on the fly
+    get('octicon') { |req, res|
+      file = req.route.last
+      name, size, color = file.remove('.svg').split('_')
+      res.set_body(data: build_octicon(name, size, color), name: file, cache: true)
+    }
+
+    # Show current contents of the cache
+    get('cache') { |req, res|
+      content = build_page('run', 'API cache status') { handle_cache(req.query) }
+      res.set_body(data: content, name: 'cache.html', cache: false)
+    }
+
+    # Show inne repo status
+    get('git') { |req, res|
+      action_inc('api_git')
+      link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
+      body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(req.query) }
+      res.set_body(data: body, name: 'git.html')
+    }
+
+    # Show submitted scores
+    get('scores') { |req, res|
+      action_inc('api_scores')
+      body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(req.query) }
+      res.set_body(data: body, name: 'scores.html', cache: 5 * 60)
+    }
+
+    # Show detailed info about runs
+    get('run') { |req, res|
+      action_inc('api_run')
+      body = build_page('run', 'Show information about a given run') { handle_run(req.query) }
+      res.set_body(data: body, name: 'run.html', cache: 60 * 60)
+    }
+
+    # Generate a screenshot with a user-supplied palette
+    post('screenshot'){ |req, res|
+      ret = handle_screenshot(req.query, req.body)
+      if !ret.key?(:file)
+        res.error_client(ret[:msg] || 'Unknown query error')
+      elsif !ret[:file]
+        res.error_server('Error generating screenshot')
+      else
+        res.set_body(data: ret[:file], name: ret[:name], cache: 0)
       end
-    when 'POST'
-      query = req.query_string.to_s.split('&').map{ |s| s.split('=') }.to_h
-      case route
-      when 'screenshot'
-        ret = handle_screenshot(query, req.body)
-        if !ret.key?(:file)
-          res.error_client(ret[:msg] || 'Unknown query error')
-        elsif !ret[:file]
-          res.error_server('Error generating screenshot')
-        else
-          res.set_body(data: ret[:file], name: ret[:name])
-        end
-      end
-    end
-  rescue => e
-    lex(e, "API socket failed to parse request for: #{req.path}")
-    handle_error(res, 'Failed to handle request')
+    }
   end
 
   # Fetch a file for the API to server
@@ -2064,7 +2070,7 @@ class APIServer < Server
     # Pagination
     count = 25
     page = [params['p'].to_i, 1].max
-    total = @@cache.length
+    total = @cache.length
     pag = compute_pages(total, page, count)
     now = Time.now
 
@@ -2072,7 +2078,7 @@ class APIServer < Server
     header = ['Index', 'Key', 'Size', 'Raw', 'Duration', 'Left', 'Hits', 'Added', 'Accessed', 'Expires'].map{ |h| "<th>#{h}</th>" }.join
 
     # Rows
-    rows = @@cache.entries.sort_by{ |key, entry| entry.expiry.to_f }[pag[:offset], count]
+    rows = @cache.entries.sort_by{ |key, entry| entry.expiry.to_f }[pag[:offset], count]
                   .map.with_index{ |(key, entry), i|
       %{
         <tr>
@@ -2091,17 +2097,17 @@ class APIServer < Server
     }.join("\n")
 
     # Format table
-    size       = '%.1fKiB' % [      @@cache.size.to_f     / 1024]
-    raw_size   = '%.1fKiB' % [      @@cache.raw_size.to_f / 1024]
-    capacity   = '%.1fMiB' % [      @@cache.capacity.to_f / 1024 ** 2]
-    ratio      = '%.1f%%'  % [100 * @@cache.size.to_f     / @@cache.capacity]
-    comp_ratio = '%.1f%%'  % [100 * @@cache.size          / @@cache.raw_size] unless @@cache.raw_size == 0
+    size       = '%.1fKiB' % [      @cache.size.to_f     / 1024]
+    raw_size   = '%.1fKiB' % [      @cache.raw_size.to_f / 1024]
+    capacity   = '%.1fMiB' % [      @cache.capacity.to_f / 1024 ** 2]
+    ratio      = '%.1f%%'  % [100 * @cache.size.to_f     / @cache.capacity]
+    comp_ratio = '%.1f%%'  % [100 * @cache.size          / @cache.raw_size] unless @cache.raw_size == 0
     %{
       <table class=\"data\">
         <caption>
           <div class="separated">
             <span>
-              #{@@cache.name} (#{total} cur, #{@@cache.adds} tot, #{@@cache.taps} hits) |
+              #{@cache.name} (#{total} cur, #{@cache.adds} tot, #{@cache.taps} hits) |
               #{size} / #{capacity} (#{ratio}) |
               #{raw_size} -> #{size} (#{comp_ratio || 'NaN'})
             </span>
