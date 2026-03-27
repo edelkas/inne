@@ -535,7 +535,7 @@ class Userlevel < ActiveRecord::Base
   # Handle intercepted N++'s userlevel queries via the socket
   def self.search(req)
     # Parse request parameters
-    params = req.query.map{ |k, v| [k, v.to_s] }.to_h
+    params = req.query
     search = params['search'].tr('+', '').strip
     mode = params['mode'].to_i
 

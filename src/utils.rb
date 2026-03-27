@@ -424,14 +424,14 @@ def forward(req)
   action_inc('http_forwards')
 
   # Parse request elements
-  host = 'dojo.nplusplus.ninja'
-  path = req.request_uri.path
+  host = METANET_HOST
+  path = req.path
   path.sub!(/\/[^\/]+/, '') if path[/\/(.+?)\//, 1] != 'prod'
   body = req.body
 
   # Create request
   uri = URI.parse("https://#{host}#{path}?#{req.query_string}")
-  case req.request_method.upcase
+  case req.method
   when 'GET'
     new_req = Net::HTTP::Get.new(uri)
   when 'POST'
@@ -442,7 +442,7 @@ def forward(req)
 
   # Add headers and body (clean default ones first)
   new_req.to_hash.keys.each{ |h| new_req.delete(h) }
-  req.header.each{ |k, v| new_req[k] = v[0] }
+  req.headers.each{ |k, v| new_req[k] = v }
   new_req['host'] = host
   new_req.body = body
 

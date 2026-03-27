@@ -2362,19 +2362,15 @@ class Player < ActiveRecord::Base
         last_active: Time.now,
         active:      true
       )
-      steam_auth = req.query_string.split('&').map{ |s| s.split('=') }.to_h['steam_auth']
+      steam_auth = req.query['steam_auth']
       SteamTicket.add_ascii(steam_auth) if !steam_auth.blank?
     else         # If no response was received, attempt to log in locally
       locally = true
 
       # Parse any param we can find
-      params = CGI.parse(req.request_uri.query)
-      ids = [
-        (req.query['user_id'].to_i rescue 0),
-        (params['user_id'][0].to_i rescue 0)
-      ].uniq
+      ids = [req.parts['user_id'].to_i, req.query['user_id'].to_i].uniq
       ids.reject!{ |id| id <= 0 || id >= 10000000 }
-      steamid = params['steam_id'][0].to_s rescue ''
+      steamid = req.query['steam_id'].to_s
       raise "No parameters found" if ids.empty? && steamid.empty?
 
       # Try to locate player in the database based on those params

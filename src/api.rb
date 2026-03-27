@@ -1103,7 +1103,7 @@ class Server
   # Wrapper for a request (Rack environment)
   class Request
 
-    attr_reader :body, :query
+    attr_reader :headers, :body, :query
 
     def initialize(env)
       @env = env
@@ -1120,19 +1120,19 @@ class Server
       @headers[name.tr('_', '-').downcase]
     end
 
-    def method()    @env['REQUEST_METHOD']           end
-    def path()      @env['PATH_INFO']                end
-    def raw_query() @env['QUERY_STRING']             end
-    def ip()        @env['REMOTE_ADDR']              end
-    def route()     path.split('/').reject(&:empty?) end
-    def root()      route.first.to_s                 end
+    def method()       @env['REQUEST_METHOD'].upcase    end
+    def path()         @env['PATH_INFO']                end
+    def query_string() @env['QUERY_STRING']             end
+    def ip()           @env['REMOTE_ADDR']              end
+    def route()        path.split('/').reject(&:empty?) end
+    def root()         route.first.to_s                 end
 
     def parts
       @body.to_s.split('&').map{ |s| s.split('=') }.to_h
     end
 
     def key
-      path + (!raw_query.empty? ? '?' + raw_query : '')
+      path + (!query_string.empty? ? '?' + query_string : '')
     end
 
     def log
@@ -1154,7 +1154,6 @@ class Server
 
   # Wrapper for a response
   class Response
-    attr_accessor :status
     attr_reader :body, :headers, :cache
 
     def initialize(status, body = '', headers = {}, cache: DEFAULT_CACHE)
@@ -1354,45 +1353,42 @@ class NPPServer < Server
   end
 
   def handle(req, res)
-    # Ignore empty requests
+    # Ignore invalid requests
     action_inc('http_requests')
-    return respond(res) if req.path.strip == '/'
-
-    # Parse request parameters
-    mappack = req.path.split('/')[1][/\w+/i]
-    method  = req.request_method
-    query   = req.path.sub(METANET_PATH, '').split('/')[2..-1].join('/')
+    mappack, p1, p2, *route = req.route
+    return if route.empty? || p1 != 'prod' || p2 != 'steam'
+    function = route.join('/')
 
     # Always log players in, regardless of mappack
-    return respond(res, Player.login(mappack, req)) if method == 'POST' && query == METANET_POST_LOGIN
+    return respond(res, Player.login(mappack, req)) if req.method == 'POST' && function == METANET_POST_LOGIN
 
     # Automatically forward requests for unknown or disabled mappacks
     return fwd(req, res) if !Mappack.find_by(enabled: true, code: mappack)
 
     # CUSE requests only affect userlevel searching
     if mappack == 'cuse'
-      return fwd(req, res) unless method == 'GET' && query == METANET_GET_SEARCH
+      return fwd(req, res) unless req.method == 'GET' && function == METANET_GET_SEARCH
       return respond(res, Userlevel.search(req))
     end
 
     # Parse request
     body = 0
-    case method
+    case req.method
     when 'GET'
-      case query
+      case function
       when METANET_GET_SCORES
-        body = MappackScore.get_scores(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
+        body = MappackScore.get_scores(mappack, req.query, req)
       when METANET_GET_REPLAY
-        body = MappackScore.get_replay(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
+        body = MappackScore.get_replay(mappack, req.query, req)
       when METANET_GET_SEARCH
         body = Userlevel.search(req)
       end
     when 'POST'
       req.continue # Respond to "Expect: 100-continue"
-      case query
+      case function
       when METANET_POST_SCORE
         body = Scheduler.with_lock do # Prevent restarts during score submission
-          MappackScore.add(mappack, req.query.map{ |k, v| [k, v.to_s] }.to_h, req)
+          MappackScore.add(mappack, req.parts, req)
         end
       when METANET_POST_LOGIN
         body = Player.login(mappack, req)
@@ -1407,13 +1403,7 @@ class NPPServer < Server
   end
 
   def respond(res, body = nil)
-    if body.nil?
-      res.status = 400
-      res.body = ''
-    else
-      res.status = 200
-      res.body = body
-    end
+    !body.is_a?(String) ? res.error_client : res.set_body(data: body)
   end
 
   def fwd(req, res)

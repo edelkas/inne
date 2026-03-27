@@ -1275,7 +1275,7 @@ class MappackScore < ActiveRecord::Base
       ) if !legit
 
       # Warn if mappack version is outdated
-      v1 = (req.path.split('/')[1][/\d+$/i] || 1).to_i
+      v1 = (req.root[/\d+$/i] || 1).to_i
       v2 = mappack.version
       if WARN_VERSION && v1 != v2
         _thread do
