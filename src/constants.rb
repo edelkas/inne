@@ -552,7 +552,7 @@ QUERY_LIMIT_SOFT = 25   # Number of queried userlevels per page
 QUERY_LIMIT_HARD = 500  # Maximum number of queried userlevels per page
 
 # CLE-specific variables
-CLE_ON           = false
+CLE_ON           = true
 CLE_PORT         = 8126
 PWD              = ENV['NPP_HASH']
 CLE_FORWARD      = true             # Forward unrelated requests to Metanet

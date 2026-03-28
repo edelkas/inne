@@ -1099,21 +1099,39 @@ end
 class Server
   DEFAULT_HOST  = '0.0.0.0'
   DEFAULT_CACHE = 24 * 60 * 60
+  SUPPORTED_METHODS = %w[GET POST]
 
   # Wrapper for a request (Rack environment)
   class Request
 
-    attr_reader :headers, :body, :query
+    attr_reader :headers, :body, :query, :parts
 
     def initialize(env)
-      @env = env
+      @env   = env
+      @req   = Rack::Request.new(env)
+      @query = @req.GET
+      @body  = ''
+      @parts = {}
+
+      # Parse HTTP headers manually from env because Rack's helpers suck
       @headers = env.select{ |k, _| k.start_with?('HTTP_') }
                     .transform_keys{ |k| k.sub(/^HTTP_/, '').tr('_', '-').downcase }
       @headers['content-type'] = env['CONTENT_TYPE'] if env['CONTENT_TYPE']
       @headers['content-length'] = env['CONTENT_LENGTH'] if env['CONTENT_LENGTH']
-      env['rack.input'].rewind
-      @body = env['rack.input'].read
-      @query = env['QUERY_STRING'].split('&').map{ |s| s.split('=').ljust(2, nil)[0, 2] }.to_h.compact
+      return if @headers['content-length'].to_i <= 0
+
+      # Read body and parse form parts if available
+      @body = @req.body.read
+      return unless @req.form_data?
+      @req.body.rewind
+      @req.POST.each{ |k, v|
+        if v.is_a?(Hash)
+          @parts[k] = v[:tempfile].read
+          v[:tempfile].close
+        else
+          @parts[k] = v
+        end
+      }
     end
 
     def [](name)
@@ -1127,17 +1145,13 @@ class Server
     def route()        path.split('/').reject(&:empty?) end
     def root()         route.first.to_s                 end
 
-    def parts
-      @body.to_s.split('&').map{ |s| s.split('=') }.to_h
-    end
-
     def key
       path + (!query_string.empty? ? '?' + query_string : '')
     end
 
     def log
       lin("%s %s %dB %s" % [ip, method, @body.bytesize, key])
-      return if !$log[:socket]
+      return if !$log[:socket] || @body.empty?
       filename = "req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
       File.binwrite(File.join(DIR_LOGS, filename), @body)
     end
@@ -1246,8 +1260,8 @@ class Server
       @status = 200
       self.body = data
       self.cache = cache.nil? ? @cache : cache
-      @headers['Content-Type'] = type || Server::mimetype(name)
-      @headers['Content-Disposition'] = "#{disposition}; filename=\"#{File.basename(name) || 'data.bin'}\""
+      @headers['Content-Type'] = type || Server::mimetype(name.to_s)
+      @headers['Content-Disposition'] = "#{disposition}; filename=\"#{name ? File.basename(name) : 'data.bin'}\""
     end
 
     def log(time, cached = false)
@@ -1274,7 +1288,7 @@ class Server
     @name = name
     @host = host
     @port = port
-    @routes = Hash.new { |h, k| h[k] = {} }
+    @routes = SUPPORTED_METHODS.map{ |method| [method, {}] }.to_h
     @running = false
     @cache = Cache.new(capacity: cache, duration: DEFAULT_CACHE / 60, name: name) if cache > 0
     @puma = Puma::Server.new(self, nil, min_threads: min_threads, max_threads: max_threads, Silent: true)
@@ -1296,9 +1310,9 @@ class Server
   end
 
   # Dynamic method dispatcher
-  %i[get post put delete patch].each do |method|
-    define_method(method) do |path, &block|
-      @routes[method.to_s.upcase][path] = block
+  SUPPORTED_METHODS.each do |method|
+    define_method(method.downcase.to_sym) do |regex, &block|
+      @routes[method][regex] = block
     end
   end
 
@@ -1314,21 +1328,20 @@ class Server
     request = Request.new(env)
     response = Response.new(404)
     request.log
-    return if request.path =~ /\.\./i
+    return if !SUPPORTED_METHODS.include?(request.method) || request.path =~ /\.\./i
 
     # Fetch request handler
-    handler = @routes[request.method][request.root]
+    handler = @routes[request.method].find{ |k, v| request.root =~ k }&.last
     return unless handler
 
-    # Fetch response
-    cached = @cache.get(request.key)
-    if !!cached   # Hit cache
+    # Generate response
+    if !!@cache && @cache.check(request.key)
       hit_cache = true
-      response = Marshal.load(cached)
+      response = Marshal.load(@cache.get(request.key))
       @cache.tap(request.key)
-    else          # Not cached
+    else
       with_connection() { handler.call(request, response) }
-      @cache.add(request.key, Marshal.dump(response), response.cache / 60, compress: true) if response.cache > 0
+      @cache.add(request.key, Marshal.dump(response), response.cache / 60, compress: true) if !!@cache && response.cache > 0
     end
 
     # Encode body if suitable
@@ -1350,6 +1363,10 @@ class NPPServer < Server
 
   def initialize
     super('CLE', CLE_PORT)
+
+    # We use the same handler for all requests
+    get(//) { |req, res| handle(req, res) }
+    post(//){ |req, res| handle(req, res) }
   end
 
   def handle(req, res)
@@ -1384,7 +1401,6 @@ class NPPServer < Server
         body = Userlevel.search(req)
       end
     when 'POST'
-      req.continue # Respond to "Expect: 100-continue"
       case function
       when METANET_POST_SCORE
         body = Scheduler.with_lock do # Prevent restarts during score submission
@@ -1403,7 +1419,7 @@ class NPPServer < Server
   end
 
   def respond(res, body = nil)
-    !body.is_a?(String) ? res.error_client : res.set_body(data: body)
+    !body.is_a?(String) ? res.error_client : res.set_body(data: body, cache: false)
   end
 
   def fwd(req, res)
@@ -1419,41 +1435,41 @@ class APIServer < Server
     super('API', API_PORT, cache: 100)
 
     # Home page
-    get(''){ |req, res|
+    get(/^$/){ |req, res|
       action_inc('api_home')
       res.set_body(data: build_page('home'){ handle_home() }, name: 'index.html')
     }
 
     # Dispatch favicon
-    get('favicon.ico'){ |req, res|
+    get(/^favicon.ico$/){ |req, res|
       res.set_body(file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
     }
 
     # Complementary API files (HTML, CSS, JS)
-    get('api') { |req, res|
+    get(/^api$/) { |req, res|
       res.set_body(file: req.path, cache: true)
     }
 
     # Image resouces
-    get('img') { |req, res|
+    get(/^img$/) { |req, res|
       res.set_body(file: req.path, cache: true)
     }
 
     # Generate octicons on the fly
-    get('octicon') { |req, res|
+    get(/^octicon$/) { |req, res|
       file = req.route.last
       name, size, color = file.remove('.svg').split('_')
       res.set_body(data: build_octicon(name, size, color), name: file, cache: true)
     }
 
     # Show current contents of the cache
-    get('cache') { |req, res|
+    get(/^cache$/) { |req, res|
       content = build_page('run', 'API cache status') { handle_cache(req.query) }
       res.set_body(data: content, name: 'cache.html', cache: false)
     }
 
     # Show inne repo status
-    get('git') { |req, res|
+    get(/^git$/) { |req, res|
       action_inc('api_git')
       link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
       body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(req.query) }
@@ -1461,21 +1477,21 @@ class APIServer < Server
     }
 
     # Show submitted scores
-    get('scores') { |req, res|
+    get(/^scores$/) { |req, res|
       action_inc('api_scores')
       body = build_page('scores', 'Show the latest submitted top20 highscores to vanilla leaderboards'){ handle_scores(req.query) }
       res.set_body(data: body, name: 'scores.html', cache: 5 * 60)
     }
 
     # Show detailed info about runs
-    get('run') { |req, res|
+    get(/^run$/) { |req, res|
       action_inc('api_run')
       body = build_page('run', 'Show information about a given run') { handle_run(req.query) }
       res.set_body(data: body, name: 'run.html', cache: 60 * 60)
     }
 
     # Generate a screenshot with a user-supplied palette
-    post('screenshot'){ |req, res|
+    post(/^screenshot$/){ |req, res|
       ret = handle_screenshot(req.query, req.body)
       if !ret.key?(:file)
         res.error_client(ret[:msg] || 'Unknown query error')
