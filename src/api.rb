@@ -1098,7 +1098,7 @@ end
 # See "Socket Variables" in constants.rb for docs
 class Server
   DEFAULT_HOST  = '0.0.0.0'
-  DEFAULT_CACHE = 24 * 60 * 60
+  DEFAULT_CACHE = 24 * 60 * 60 # Local caching time
   SUPPORTED_METHODS = %w[GET POST]
 
   # Wrapper for a request (Rack environment)
@@ -1188,26 +1188,7 @@ class Server
     end
 
     def cache=(cache)
-      cache = case cache
-      when true
-        365 * 24 * 60 * 60
-      when false
-        0
-      when Integer
-        cache
-      when Float
-        cache.round
-      else
-        nil
-      end
-
-      if cache
-        @headers['Cache-Control'] = cache > 0 ? "public, max-age=#{cache}, immutable" : 'no-cache'
-        @cache = [cache, 0].max
-      else
-        @headers.delete('Cache-Control')
-        @cache = 0
-      end
+      @cache = Server.normalize_cache(cache) || @cache
     end
 
     def encode(accepted)
@@ -1244,6 +1225,7 @@ class Server
     end
 
     # Fill body with arbitrary data or an arbitrary file as a response
+    # Cache sets the Cache-Control header but also the local caching time
     def set_body(data: nil, file: nil, type: nil, name: nil, inline: true, cache: nil, binary: true)
       # Data must be provided either directly or in a file
       if !data && !file
@@ -1259,9 +1241,10 @@ class Server
       # Set HTTP status, headers, and body
       @status = 200
       self.body = data
-      self.cache = cache.nil? ? @cache : cache
       @headers['Content-Type'] = type || Server::mimetype(name.to_s)
       @headers['Content-Disposition'] = "#{disposition}; filename=\"#{name ? File.basename(name) : 'data.bin'}\""
+      @cache = Server.normalize_cache(cache) || @cache
+      @headers['Cache-Control'] = @cache > 0 ? "public, max-age=#{@cache}, immutable" : 'no-cache'
     end
 
     def log(time, cached = false)
@@ -1282,6 +1265,24 @@ class Server
 
   def self.mimetype(filename)
     Rack::Mime.mime_type(File.extname(filename))
+  end
+
+  # Standardize cache values:
+  #   true - 1 year
+  #  false - no cache
+  # number - seconds
+  #   else - nil (keep default)
+  def self.normalize_cache(cache)
+    case cache
+    when true
+      365 * 24 * 60 * 60
+    when false
+      0
+    when Numeric
+      [cache.round, 0].max
+    else
+      nil
+    end
   end
 
   def initialize(name, port, host: DEFAULT_HOST, min_threads: 1, max_threads: 5, cache: 0)
@@ -1438,21 +1439,25 @@ class APIServer < Server
     get(/^$/){ |req, res|
       action_inc('api_home')
       res.set_body(data: build_page('home'){ handle_home() }, name: 'index.html')
+      res.cache = false
     }
 
     # Dispatch favicon
     get(/^favicon.ico$/){ |req, res|
       res.set_body(file: File.join(PATH_ICONS, API_FAVICON + '.ico'), cache: true)
+      res.cache = false
     }
 
     # Complementary API files (HTML, CSS, JS)
     get(/^api$/) { |req, res|
       res.set_body(file: req.path, cache: true)
+      res.cache = false
     }
 
     # Image resouces
     get(/^img$/) { |req, res|
       res.set_body(file: req.path, cache: true)
+      res.cache = false
     }
 
     # Generate octicons on the fly
@@ -1460,6 +1465,7 @@ class APIServer < Server
       file = req.route.last
       name, size, color = file.remove('.svg').split('_')
       res.set_body(data: build_octicon(name, size, color), name: file, cache: true)
+      res.cache = false
     }
 
     # Show current contents of the cache
