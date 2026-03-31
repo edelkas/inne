@@ -1101,6 +1101,8 @@ class Server
   DEFAULT_CACHE = 24 * 60 * 60 # Local caching time
   SUPPORTED_METHODS = %w[GET POST]
 
+  attr_reader :name, :log_req, :log_res
+
   # Wrapper for a request (Rack environment)
   class Request
 
@@ -1149,10 +1151,10 @@ class Server
       path + (!query_string.empty? ? '?' + query_string : '')
     end
 
-    def log
-      lin("%s %s %dB %s" % [ip, method, @body.bytesize, key])
-      return if !$log[:socket] || @body.empty?
-      filename = "req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
+    def log(server)
+      lin("%s: %s %s %dB %s" % [server.name, ip, method, @body.bytesize, key])
+      return if !$log[:socket] || @body.empty? || !server.log_req
+      filename = "#{server.name.downcase}_req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
       File.binwrite(File.join(DIR_LOGS, filename), @body)
     end
 
@@ -1247,14 +1249,14 @@ class Server
       @headers['Cache-Control'] = @cache > 0 ? "public, max-age=#{@cache}, immutable" : 'no-cache'
     end
 
-    def log(time, cached = false)
+    def log(server, time, cached = false)
       delta = Time.now - time
-      lout("%d %dB %dms %s" % [@status, @body.bytesize, 1000 * delta, cached ? '(cached)' : ''])
-      return if !$log[:socket] || @body.empty?
+      lout("%s: %d %dB %dms %s" % [server.name, @status, @body.bytesize, 1000 * delta, cached ? '(cached)' : ''])
+      return if !$log[:socket] || @body.empty? || !server.log_res
       if @body.encoding.name == 'UTF-8'
         dbg('Response body: ' + @body)
       else
-        filename = "res_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
+        filename = "#{server.name.downcase}_res_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
         File.binwrite(File.join(DIR_LOGS, filename), body)
       end
     rescue => e
@@ -1285,15 +1287,18 @@ class Server
     end
   end
 
-  def initialize(name, port, host: DEFAULT_HOST, min_threads: 1, max_threads: 5, cache: 0)
+  def initialize(name, port, host: DEFAULT_HOST, min_threads: 1, max_threads: 5, cache: 0, log_req: true, log_res: true)
     @name = name
     @host = host
     @port = port
     @routes = SUPPORTED_METHODS.map{ |method| [method, {}] }.to_h
+    @error = nil
     @running = false
     @cache = Cache.new(capacity: cache, duration: DEFAULT_CACHE / 60, name: name) if cache > 0
     @puma = Puma::Server.new(self, nil, min_threads: min_threads, max_threads: max_threads, Silent: true)
     @puma.add_tcp_listener(@host, @port)
+    @log_req = log_req
+    @log_res = log_res
   end
 
   def start
@@ -1316,11 +1321,12 @@ class Server
       @routes[method][regex] = block
     end
   end
+  define_method(:error) do |&block|
+    @error = block
+  end
 
   # Rack entry point
-  # TODO: Handle Expect: 100-continue
   # TODO: Monkey-patch Rack's logging
-  # TODO: We might want to exclude some things (e.g. images) from being cached
   def call(env)
     time = Time.now
     hit_cache = false
@@ -1328,7 +1334,7 @@ class Server
     # Parse request
     request = Request.new(env)
     response = Response.new(404)
-    request.log
+    request.log(self)
     return if !SUPPORTED_METHODS.include?(request.method) || request.path =~ /\.\./i
 
     # Fetch request handler
@@ -1350,10 +1356,10 @@ class Server
     encoded = response.encode(encoding) if encoding
   rescue => e
     lex(e, "#{@name} server: Failed to handle request")
-    response.error_server
+    @error ? @error.call(request, response) : response.error_server
   ensure
     request.clear
-    response.log(time, hit_cache)
+    response.log(self, time, hit_cache)
     return response.dispatch
   end
 
@@ -1362,8 +1368,8 @@ end
 # Implement the N++ proxy server that handles custom leaderboards for mappacks, CUSE, etc.
 class NPPServer < Server
 
-  def initialize
-    super('CLE', CLE_PORT)
+  def initialize(**kwargs)
+    super('CLE', CLE_PORT, **kwargs)
 
     # We use the same handler for all requests
     get(//) { |req, res| handle(req, res) }
@@ -1432,8 +1438,8 @@ end
 class APIServer < Server
 
   # TODO: Call handle_error on errors, properly log
-  def initialize
-    super('API', API_PORT, cache: 100)
+  def initialize(**kwargs)
+    super('API', API_PORT, cache: 100, **kwargs)
 
     # Home page
     get(/^$/){ |req, res|
@@ -1507,6 +1513,9 @@ class APIServer < Server
         res.set_body(data: ret[:file], name: ret[:name], cache: 0)
       end
     }
+
+    # Generic error handler
+    error() { |req, res| handle_error(res, 'Failed to process request') }
   end
 
   # Fetch a file for the API to server
@@ -1828,6 +1837,7 @@ class APIServer < Server
     end
 
     # Links
+    spam_warning = "Do not spam the API to bulk download these, you will be banned by the firewall! Contact me on Discord for large dumps."
     route_board   = make_route('scores', { type: run.highscoreable_type, id: run.highscoreable_id })
     route_player  = make_route('scores', { player: run.metanet_id })
     route_map     = "data:application/octet-stream;base64,#{Base64.encode64(map_data)}"     if map_data
@@ -1838,7 +1848,7 @@ class APIServer < Server
     url_map     = "<a href=\"#{route_map}\" download=\"#{sanitize_filename(h.name)}\" tooltip=\"Map file for the editor\">Map</a>" if route_map
     url_replay  = "<a href=\"#{route_replay}\" download=\"replay\" tooltip=\"Gzipped, suitable for nclone\">Replay</a>" if route_replay
     url_attract = "<a href=\"#{route_attract}\" download=\"#{h.id % 2 ** 16}\" tooltip=\"Suitable for N++ main menu, TAS tool...\">Attract</a>" if route_attract
-    urls = [url_map, url_replay, url_attract].compact.join(', ')
+    urls = [url_map, url_replay, url_attract].compact.join(', ') + " <a tooltip=\"#{spam_warning}\"><img src=\"octicon/alert-fill_12_F80.svg\"></a>"
 
     # Run properties
     attrs = [
@@ -2171,7 +2181,7 @@ class APIServer < Server
 
   def handle_error(res, msg, code = 500)
     body = "<div class=\"centered title off\">#{msg}</div>"
-    res.error_server(build_page('error'){ body })
+    res.error_server(build_page('error'){ body }.b)
   rescue => e
     lex(e, 'Failed to handle API error')
   end

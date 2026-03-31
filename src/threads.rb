@@ -844,7 +844,7 @@ def start_general_tasks
 
   # Start API to provide external outte functionality
   if (DO_EVERYTHING || API_ON) && !DO_NOTHING
-    $servers['api'] = APIServer.new
+    $servers['api'] = APIServer.new(log_res: false)
     $servers['api'].start
   end
 end
