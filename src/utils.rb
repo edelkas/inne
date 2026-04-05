@@ -422,6 +422,7 @@ end
 def forward(req)
   return nil if req.nil?
   action_inc('http_forwards')
+  t = Time.now
 
   # Parse request elements
   host = METANET_HOST
@@ -450,6 +451,7 @@ def forward(req)
   res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 5){ |http|
     http.request(new_req)
   }
+  dbg("Forwarded in %.3fs to Metanet: %s" % [Time.now - t, uri.to_s])
   res.code.to_i < 200 || res.code.to_i > 299 ? nil : res.body.to_s
 rescue => e
   lex(e, 'Failed to forward request to Metanet')

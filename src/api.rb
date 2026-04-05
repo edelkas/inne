@@ -218,7 +218,7 @@ module Twitch extend self
       timestamp:   Time.now,
       footer:      Discordrb::Webhooks::EmbedFooter.new(text: "Reported by #{event.user.name}")
     )
-    send_message($content_channel, embed: embed)
+    send_message($content_channel, embeds: [embed])
   end
 
   # TODO: Accumulate reports to different streams in db, after a certain amount trigger autoban
@@ -234,7 +234,7 @@ module Twitch extend self
       timestamp:   Time.now,
       footer:      Discordrb::Webhooks::EmbedFooter.new(text: "After having #{n} streams reported.")
     )
-    send_message($content_channel, embed: embed)
+    send_message($content_channel, embeds: [embed])
   end
 end
 

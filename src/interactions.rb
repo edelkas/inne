@@ -9,8 +9,36 @@
 
 $load_time = Time.now
 
+def create_components
+  Discordrb::Webhooks::View.new
+end
+
 def initialize_components
-  $components = Discordrb::Webhooks::View.new
+  $components = create_components
+end
+
+# TODO: Add button accesory
+def view_add_section(texts: [], thumbnail: nil, description: nil, view: create_components())
+  view.section do |section|
+    texts.each{ |text| section.text_display(content: text) unless text.strip.empty? }
+    section.thumbnail(url: file_url(thumbnail), description: description) if thumbnail
+  end
+end
+
+def view_add_text(content: '', id: nil, view: create_components())
+  view.text_display(content: content, id: id)
+end
+
+def view_add_file(file: nil, id: nil, spoiler: false, view: create_components())
+  return if !file
+  view.file(url: file_url(file), id: id, spoiler: spoiler)
+end
+
+def view_add_gallery(items: [], spoiler: false, id: nil, view: create_components())
+  return if items.empty?
+  view.media_gallery(id: id) do |gallery|
+    items.each{ |item| gallery.item(url: file_url(item), spoiler: spoiler) }
+  end
 end
 
 # ActionRow builder for a generic Select Menu

@@ -7,7 +7,7 @@ $load_time = Time.now
 require 'active_support/core_ext/integer/inflections' # ordinalize
 require 'active_support/core_ext/numeric/time'        # 1.hour, 3.minutes.ago, etc
 
-
+# TODO: Adapt for V2-component-based messages
 # Fetch message from an event. Depending on the event that was triggered, this
 # may accessed and handled in a different way.
 def parse_message(event, clean: true, embed: false)
@@ -1406,6 +1406,11 @@ def send_file(event, data, name = 'result.txt', binary = false, spoiler = false)
   event.attach_file(tmp_file(data, name, binary: binary))
 end
 
+def file_url(file)
+  "attachment://#{File.basename(file.path)}"
+end
+
+# TODO: Adapt to V2-component-based messages
 # Log the main aspects of a message to the terminal right after sending it to Discord
 def log_message(content, files = [], components = nil, embeds = [], edit: false)
   # Function to format numbers
@@ -1425,7 +1430,7 @@ def log_message(content, files = [], components = nil, embeds = [], edit: false)
   end
 
   # Log message components and type
-  if components
+  if false #components
     comp_list = components.to_a.map{ |row| row[:components] }.flatten
     comp_count = comp_list.length
     row_count = components.rows.size
@@ -1464,16 +1469,17 @@ end
 # be used, if any. Register msg in db at the end.
 def send_message(
     dest,              # Destination (respondable event, or channel)
-    content:    '',    # Message text
+    content:    '',    # Message text, unless it's v2 (see below)
     files:      [],    # Message attachments
+    embeds:     [],    # Rich embed
     components: nil,   # Message components (buttons, select menus...)
-    embed:      nil,   # Rich embed
     spoiler:    false, # Whether to spoiler the attachments
     db:         true,  # Whether we should register this msg in the db
     edit:       true,  # Whether a component event should edit or send a new msg
     append:     false, # Whether to append content to preexisting message
     log:        true,  # Whether to log the sent message in the terminal
-    ephemeral:  false  # Only the user can see the message, available for interaction responses
+    ephemeral:  false, # Only the user can see the message, available for interaction responses
+    v2:         false  # Send V2-based component message (IS_COMPONENTS_V2)
   )
   # Save stuff already appended to message, and remove it to prevent autosend
   if dest.is_a?(Discordrb::Events::Respondable)  # Grab message
@@ -1489,18 +1495,21 @@ def send_message(
 
   # Config and return if no message
   content.strip!
+  embeds.compact!
+  content = '' if v2
+  embeds = [] if v2
   files.reject!{ |f| !f.is_a?(File) }
-  return if content.empty? && files.empty? && embed.nil?
+  return if content.empty? && files.empty? && embeds.empty? && components.nil?
 
   # Include dynamically created components
-  components = $components if $components && $components.rows.size > 0
+  components = $components if !components && $components && !$components.to_a.empty?
 
   # Only update message if it's a component event (no need to log)
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append
     action_inc('edits')
-    log_message(content, files, components, [embed].compact, edit: true) if log
-    return dest.update_message(content: content, components: components, embeds: [embed].compact, ephemeral: ephemeral)
+    log_message(content, files, components, embeds, edit: true) if log
+    return dest.update_message(content: content, embeds: embeds, components: components, has_components: v2, ephemeral: ephemeral)
   end
 
   # Manually spoiler attachments if necessary
@@ -1514,12 +1523,10 @@ def send_message(
 
   # Send message (syntax varies depending on event type)
   case dest
-  when Discordrb::Channel
-    msg = dest.send(content, false, embed, files, nil, nil, components)
-  when Discordrb::Events::Respondable # Messages, reactions
-    msg = dest.respond(content, false, embed, files, nil, nil, components)
+  when Discordrb::Channel, Discordrb::Events::Respondable # Channel, messages, reactions
+    msg = dest.send_message!(content: content, embeds: embeds, components: components, attachments: files, has_components: v2)
   when Discordrb::Events::InteractionCreateEvent # Components, application commands
-    msg = dest.respond(content: content, embeds: [embed].compact, components: components, attachments: files, wait: true, ephemeral: ephemeral)
+    msg = dest.respond(content: content, embeds: embeds, components: components, attachments: files, has_components: v2, wait: true, ephemeral: ephemeral)
   end
   return if !msg
 
@@ -1527,7 +1534,7 @@ def send_message(
   user_id = dest.user.id if dest.respond_to?(:user)
   Message.create(id: msg.id, user_id: user_id, date: Time.now) if user_id && db
   action_inc('messages')
-  log_message(content, files, components, [embed].compact) if log
+  log_message(content, files, components, embeds) if log
   msg
 rescue => e
   lex(e, 'Failed to send message to Discord')

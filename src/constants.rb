@@ -107,7 +107,7 @@ CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 RICH_RANKINGS    = false
 RICH_DIFFS       = true
 SHOW_CHEATERS    = true
-SCORE_THUMBNAILS = false
+SCORE_THUMBNAILS = true
 SCORE_EMBEDS     = false
 
 # Non-standard character widths in the monospaced font (for padding adjustments)
@@ -233,7 +233,7 @@ FILENAME_LIMIT = 128 # Never surpass 259 (Windows' limit, google MAX_PATH)
 SCREENSHOT_SCALE_LEVEL   = 11
 SCREENSHOT_SCALE_EPISODE = 3
 SCREENSHOT_SCALE_STORY   = 2
-THUMBNAIL_SCALE          = 3
+THUMBNAIL_SCALE          = 2
 
 # Animation playback speed
 ANIMATION_STEP_NORMAL  = 1   # How many frames to trace per GIF frame
@@ -545,7 +545,7 @@ SPEEDRUN_COLOR_INFO = 0x93a5a6 # Embed bar color for informational notices
 #    from a browser) as opposed to from Discord or N++.
 
 SOCKETS    = true  # Allow open sockets
-SOCKET_LOG = true  # Log request and response details
+SOCKET_LOG = false # Log request and response details
 
 # CUSE-specific variables
 QUERY_LIMIT_SOFT = 25   # Number of queried userlevels per page

@@ -393,7 +393,7 @@ end
 def update_speedrun
   Speedrun::fetch_new_runs.each{ |run|
     embed = Speedrun::format_embed(run)
-    send_message($speedrun_channel, embed: embed)
+    send_message($speedrun_channel, embeds: [embed])
   }
 end
 
