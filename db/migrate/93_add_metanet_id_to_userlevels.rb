@@ -14,8 +14,9 @@ class AddMetanetIdToUserlevels < ActiveRecord::Migration[5.1]
           SET userlevel_scores.metanet_id = userlevel_players.metanet_id
           WHERE userlevel_scores.id >= #{offset} AND userlevel_scores.id < #{offset + size}
         SQL
-        dbg("Updated userlevel scores #{offset} - #{offset + size} (max. #{max})...", progress: true)
+        print("Updated userlevel scores %07d - %07d (%d)...\r" % [offset, offset + size, max])
       }
+      puts
     end
   end
 end

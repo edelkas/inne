@@ -837,13 +837,13 @@ def start_general_tasks
   Scheduler.add("Compute fractions", freq: FRACTION_FREQUENCY, force: false, log: false) { compute_new_fractions } if DO_EVERYTHING || COMPUTE_FRACTIONS
 
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
-  if (DO_EVERYTHING || CLE_ON) && !DO_NOTHING
+  if SOCKETS && CLE_ON && !DO_NOTHING
     $servers['cle'] = NPPServer.new
     $servers['cle'].start
   end
 
   # Start API to provide external outte functionality
-  if (DO_EVERYTHING || API_ON) && !DO_NOTHING
+  if SOCKETS && API_ON && !DO_NOTHING
     $servers['api'] = APIServer.new(log_res: false)
     $servers['api'].start
   end

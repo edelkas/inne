@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = true  # Switch to the local test bot
+TEST           = false # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = false # Execute all threads
+DO_EVERYTHING  = true  # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -565,7 +565,7 @@ REPLAY_ID_BITS   = 24               # See MappackHighscoreable.get_scores to und
 
 # API-specific variables
 API_ON       = true
-API_PORT     = TEST ? 9119 : 80
+API_PORT     = 9000
 API_FAVICON  = 'moleHack'
 API_TEMPLATE = 'template.html'
 API_STYLE    = 'style.css'
@@ -948,7 +948,8 @@ HACKERS = {
   401089 => ["Haidi"],
   409973 => ["outte++2"],
   414614 => ["Λ"],
-  424914 => [">:("]
+  424914 => [">:("],
+  428175 => ["Jake_"]
 }
 
 CHEATERS = {

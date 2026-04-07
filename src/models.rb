@@ -3309,7 +3309,7 @@ class Archive < ActiveRecord::Base
     query.update_all(cheated: true)
 
     # Delete ignored players
-    query = Player.where(metanet_id: HACKERS.keys)
+    query = Player.where(metanet_id: HACKERS.keys).where.not(metanet_id: [OUTTE_ID, OUTTE2_ID])
     count = query.count.to_i
     ret['player_del'] = "Deleted #{count} hackers." unless count == 0
     query.delete_all
