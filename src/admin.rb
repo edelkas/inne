@@ -579,9 +579,24 @@ rescue => e
   lex(e, "Error getting memory info.", event: event)
 end
 
+# Test RSS news embed notices
+def test_rss(event, page: nil)
+  flags = parse_flags(event)
+  name = flags[:feed] || 'steam'
+  feed = Feed.get(name)
+  perror("Error fetching feed news") unless feed
+  pag = get_paging(event, page, feed.size)
+  index = (flags[:item] || pag[:page] - 1).to_i
+  item = feed[index]
+  perror("Feed `#{name}` has no item #{index}") unless item
+  embed = feed.format(item)
+  view = interaction_add_button_navigation(nil, pag[:page], pag[:pages], func: 'test_rss')
+  send_message(event, components: view, embeds: [embed])
+end
+
 # Restart outte's process
 def send_restart(event)
-  flags = parse_flags(remove_command(parse_message(event)))
+  flags = parse_flags(event)
   force = flags.key?(:force)
   restart("Manual#{force ? ' (forced)' : ''}", force: force)
 rescue => e
@@ -590,7 +605,7 @@ end
 
 # Shut down outte's process
 def send_shutdown(event, force = false)
-  flags = parse_flags(remove_command(parse_message(event)))
+  flags = parse_flags(event)
   force ||= flags.key?(:force)
   alert("#{force ? 'Killing' : 'Shutting down'} outte.", discord: true)
   shutdown(trap: false, force: force)
@@ -1304,6 +1319,7 @@ def respond_special(event)
   return rename_author(event)            if cmd == 'rename_author'
   return test_report(event)              if cmd == 'report'
   return send_restart(event)             if cmd == 'restart'
+  return test_rss(event)                 if cmd == 'rss'
   return sanitize_archives(event)        if cmd == 'sanitize_archives'
   return sanitize_demos(event)           if cmd == 'sanitize_demos'
   return sanitize_hashes(event)          if cmd == 'sanitize_hashes'

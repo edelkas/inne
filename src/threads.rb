@@ -397,6 +397,11 @@ def update_speedrun
   }
 end
 
+# Monitor several N++-related RSS feeds (Steam, SteamDB) for news and send notices
+def update_rss
+  Feed::check
+end
+
 # Update missing demos (e.g., if they failed to download originally)
 def download_demos
   Archive.where(lost: false)
@@ -890,6 +895,11 @@ def start_discord_tasks
 
   # Check for new N++-related speedruns every minute
   Scheduler.add("Update Speedrun", freq: SPEEDRUN_UPDATE_FREQUENCY, log: false) { update_speedrun } if DO_EVERYTHING  || UPDATE_SPEEDRUN
+
+  # Check for new N++-related RSS news every minute
+  Feed.new('steam',   RSS_STEAM_URI   % APP_ID, TEST ? nil : CHANNEL_MAIN, title: "💥 New N++ update on Steam!")
+  #Feed.new('steamdb', RSS_STEAMDB_URI % APP_ID, TEST ? nil : CHANNEL_DEBUG, title: "🛠 New N++ Steam patch")
+  Scheduler.add("Update RSS", freq: RSS_UPDATE_FREQUENCY, log: false) { update_rss } if DO_EVERYTHING  || UPDATE_RSS
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY

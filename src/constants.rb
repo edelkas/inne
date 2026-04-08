@@ -11,10 +11,10 @@
 # <---------------------------------------------------------------------------->
 
 # General
-TEST           = false # Switch to the local test bot
+TEST           = true  # Switch to the local test bot
 BENCHMARK      = false # Benchmark and log functions (for optimization)
 DO_NOTHING     = false # Don't execute any threads (see below for ind flags)
-DO_EVERYTHING  = true  # Execute all threads
+DO_EVERYTHING  = false # Execute all threads
 RESPOND        = true  # Respond to pings / DMs (for testing)
 DEBUG          = false # Breakpoint right after loading the bot
 
@@ -88,6 +88,7 @@ GITHUB_LINK = "https://github.com/#{GITHUB_USER}/#{GITHUB_REPO}"
 BOTMASTER_ID           = 204332624288677890  # User ID of the bot manager (Eddy)
 SERVER_ID              = 197765375503368192  # Discord server/guild ID (N++ Server)
 TEST_SERVER_ID         = 535635802386857995  # Development server
+CHANNEL_MAIN           = 197765375503368192  # #nplusplus
 CHANNEL_HIGHSCORES     = 210778111594332181  # #highscores
 CHANNEL_SPEEDRUNNING   = 231135753059565568  # #speedrunning
 CHANNEL_USERLEVELS     = 221721273405800458  # #userlevels
@@ -96,6 +97,7 @@ CHANNEL_CONTENT        = 197793786389200896  # #content-creation
 CHANNEL_SECRETS        = 217283494664077312  # #secrets
 CHANNEL_CTP_HIGHSCORES = 1137794057205198848 # #ctp-highscores
 CHANNEL_CTP_SECRETS    = 1137794113475969034 # #ctp-secrets
+CHANNEL_DEBUG          = 530162144843530240  # #debug-room
 
 # Limits
 DISCORD_CHAR_LIMIT     = 2000                # Message character limit
@@ -459,6 +461,7 @@ FOOD           = [                  # Emojis for the potato joke
 UPDATE_STATUS     = false # Thread to regularly update the bot's status
 UPDATE_TWITCH     = false # Thread to regularly look up N related Twitch streams
 UPDATE_SPEEDRUN   = false # Thread to regularly look up new N related speedruns
+UPDATE_RSS        = false # Thread to regularly monitor several RSS feeds
 UPDATE_SCORES     = false # Thread to regularly download Metanet's scores
 UPDATE_DEMOS      = false # Thread to regularly download missing Metanet demos
 POST_LOTD         = false # Thread to regularly publish level of the day
@@ -480,6 +483,7 @@ REPORT_USERLEVELS = false # Thread to regularly post userlevels' highscoring rep
 STATUS_UPDATE_FREQUENCY     =             5 * 60
 TWITCH_UPDATE_FREQUENCY     =                 60
 SPEEDRUN_UPDATE_FREQUENCY   =                 60
+RSS_UPDATE_FREQUENCY        =                 60
 HIGHSCORE_UPDATE_FREQUENCY  =       24 * 60 * 60
 DEMO_UPDATE_FREQUENCY       =       24 * 60 * 60
 LEVEL_UPDATE_FREQUENCY      =       24 * 60 * 60
@@ -510,6 +514,13 @@ TWITCH_BLACKLIST = [           # Don't post stream by these users
   425806947, # eblan4ikof
   1055190989 # 3awilson
 ]
+
+# <---------------------------------------------------------------------------->
+# <------                         RSS VARIABLES                          ------>
+# <---------------------------------------------------------------------------->
+
+RSS_STEAM_URI = 'https://store.steampowered.com/feeds/news/app/%d/'
+RSS_STEAMDB_URI = 'https://steamdb.info/api/PatchnotesRSS/?appid=%d'
 
 # <---------------------------------------------------------------------------->
 # <------                    SPEEDRUN API VARIABLES                      ------>

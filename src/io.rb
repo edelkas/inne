@@ -71,6 +71,13 @@ def compute_pages(count = 1, page = 1, pagesize = PAGE_SIZE)
   { page: page, pages: pages, offset: offset }
 end
 
+# Shortcut for parsing + computing pages, since we have to do that often
+def get_paging(event, page, count, size = 1)
+  msg = parse_message(event)
+  page = parse_page(msg, page, false, event.message.components)
+  pag = compute_pages(count, page, size)
+end
+
 # Given a list, page through it by sending messages to Discord with only
 # a page of it (of given offset and length), together with buttons to
 # navigate the pages interactively.

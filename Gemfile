@@ -9,6 +9,8 @@ source 'https://rubygems.org' do
   gem 'rubyzip'
   gem 'unicode-emoji'
   gem 'puma'
+  gem 'rss'
+  gem 'html-to-markdown'
 
   group :imaging do
     gem 'rmagick'

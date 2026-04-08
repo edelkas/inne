@@ -3,17 +3,20 @@
 #   - Twitch.com:   Fetching N-related streams
 #   - Speedrun.com: Leaderboards, notifications for new/verified runs, etc.
 #   - Steam:        Generate authentication tickets for N++
+#   - RSS:          Track various feeds for N++ updates.
 #   - N++:          Our custom game server (NPPServer) for mappacks
 #   - Custom API:   Our custom API (APIServer) to request stats on command
 # We also have a general socket module (Sock) which is the base for both servers
 
 $load_time = Time.now
 
+require 'html_to_markdown'
 require 'json'
 require 'net/http'
 require 'octicons'
 require 'puma'
 require 'rack'
+require 'rss'
 require 'socket'
 
 module Twitch extend self
@@ -1091,6 +1094,104 @@ class SteamTicket < ActiveRecord::Base
       next if ['steam_id', 'app_id', 'ticket'].include?(name)
       self.send("#{name}=".to_sym, value)
     }
+  end
+end
+
+# Wrapper to track RSS or Atom feeds, usually for N++-related news
+class Feed
+  MAX_REPORT_AGE = 24 * 60 * 60 # Oldest runs to consider new (i.e. notifiable)
+  DATABASE_KEY   = 'feed_%s_date'
+
+  @@feeds = {}
+
+  def self.check
+    @@feeds.each{ |k, v| v.check }
+  end
+
+  def self.get(name)
+    @@feeds[name]
+  end
+
+  def self.nav(name)
+    feed = @@feeds[name]
+    return unless feed
+    item = feed[0]
+    return unless item
+    feed.post(item, botmaster.pm)
+  end
+
+  def initialize(key, uri, channel_id = nil, title: nil)
+    @key     = key
+    @uri     = uri
+    @channel = channel_id ? find_channel(id: channel_id) : botmaster.pm
+    @title   = title || "New #{key} update"
+    @data    = nil
+    @updated = nil
+    @@feeds[@key] = self
+  end
+
+  def get_date
+    prop = GlobalProperty.find_or_create_by(key: DATABASE_KEY % @key)
+    prop.value ? Time.parse(prop.value) : Time.now - MAX_REPORT_AGE
+  end
+
+  def set_date(date)
+    GlobalProperty.find_or_create_by(key: DATABASE_KEY % @key).update(value: [get_date, date].max)
+  end
+
+  def [](i)
+    return unless @data&.items&.size.to_i > i
+    @data.items[i]
+  end
+
+  def update
+    res = Net::HTTP.get_response(URI(@uri))
+    return unless res.is_a?(Net::HTTPSuccess)
+    @updated = Time.now
+    @data = RSS::Parser.parse(res.body)
+  rescue => e
+    lex(e, "Failed to fetch update from #{@key} RSS feed")
+  end
+
+  def check
+    update
+    return unless @data
+    date = get_date
+    @data.items.select{ |item| item.date > date }.sort_by(&:date).each{ |item|
+      report(item)
+      sleep(1)
+    }
+  end
+
+  def format(item)
+    enc = item.enclosure
+    thumb = enc && enc.type.split('/').first == 'image' ? enc.url : nil
+    desc = HtmlToMarkdown.convert(item.description.gsub(/\n+/, "\n"), heading_style: :atx)[:content]
+    desc = "# __#{item.title}__\n#{desc}"
+    Discordrb::Webhooks::Embed.new(
+      title:       @title,
+      description: desc[...1024],
+      url:         item.link,
+      timestamp:   item.date,
+      thumbnail:   thumb ? Discordrb::Webhooks::EmbedThumbnail.new(url: thumb) : nil
+    )
+  end
+
+  def post(item, channel)
+    send_message(channel, embeds: [format(item)])
+  end
+
+  def report(item)
+    return unless @channel
+    post(item, @channel)
+    set_date(item.date)
+  rescue => e
+    lex(e, "Failed to report #{@key} RSS news")
+  end
+
+  def size
+    return 0 unless @data
+    @data.items.size
   end
 end
 

@@ -41,6 +41,11 @@ def view_add_gallery(items: [], spoiler: false, id: nil, view: create_components
   end
 end
 
+def view_nav(event, page, count, view: nil, func: nil, size: 1)
+  pag = get_paging(event, page, count, size)
+  interaction_add_button_navigation(view, pag[:page], pag[:pages], func: func)
+end
+
 # ActionRow builder for a generic Select Menu
 def interaction_add_select_menu(view = nil, id = 'menu', names = [], default = '', placeholder = 'Section')
   view = Discordrb::Webhooks::View.new if !view
