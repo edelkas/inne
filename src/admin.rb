@@ -585,6 +585,10 @@ def test_rss(event, page: nil)
   name = flags[:feed] || 'steam'
   feed = Feed.get(name)
   perror("Error fetching feed news") unless feed
+  if flags.key?(:list)
+    send_message(event, content: feed.list)
+    return
+  end
   pag = get_paging(event, page, feed.size)
   index = (flags[:item] || pag[:page] - 1).to_i
   item = feed[index]

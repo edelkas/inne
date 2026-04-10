@@ -1193,6 +1193,14 @@ class Feed
     return 0 unless @data
     @data.items.size
   end
+
+  def list
+    return unless @data
+    list = @data.items.map{ |item|
+      "- %s (from %s)" % [mdurl(item.title, item.link, false), format_timestamp(item.date, date: true)]
+    }.join("\n")
+    "Latest news:\n#{list}"
+  end
 end
 
 # Generic wrapper around a Puma server. Used for both the N++ proxy and the API.

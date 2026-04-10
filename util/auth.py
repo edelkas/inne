@@ -79,6 +79,7 @@ parser.add_argument('app',              type=int,            help='Steam app ID 
 parser.add_argument('-c', '--connect',  action='store_true', help='Stay connected after exporting tickets (will require an Interrupt to close)')
 parser.add_argument('-d', '--dry',      action='store_true', help='Performs a dry run (logs in a verifies supplied ticket)')
 parser.add_argument('-f', '--file',     type=str,            help='Export tickets to this file instead of STDOUT')
+parser.add_argument('-i', '--info',     action='store_true', help='Only fetch game info, implies -d')
 parser.add_argument('-o', '--ticket',   type=str,            help='App ownership ticket to attempt to reuse (also SSAA_TICKET)')
 parser.add_argument('-p', '--password', type=str,            help='Steam password used for login (also SSAA_PASSWORD env var)')
 parser.add_argument('-u', '--username', type=str,            help='Steam username used for login (also SSAA_USERNAME env var)')
@@ -134,10 +135,20 @@ class Bot(steam.Client):
         self.log_tokens()
         if not TOKEN and args.verbose:
             dbg(f"Refresh token: {self.refresh_token}")
-
-        # Reuse ownership ticket or fetch a new one
         app = self.get_app(args.app)
         await self.change_presence(app=app)
+
+        # Fetch game info
+        if args.info:
+            info = await self.get_info(app)
+            if args.file:
+                with open(args.file, 'a') as f:
+                    f.write(json.dumps(info) + '\n')
+            else:
+                print(json.dumps(info))
+            await end()
+
+        # Reuse ownership ticket or fetch a new one
         ticket = await self.get_ownership_ticket(app)
         if not ticket:
             await end(ExitCode.NO_OWNERSHIP_TICKET)
@@ -262,6 +273,108 @@ class Bot(steam.Client):
             dbg(line)
             dbg("|DLCs    |%-67s|" % (', '.join(str(dlc.id) for dlc in ticket.dlc),))
         dbg("+" + "-" * 76 + "+")
+
+    # < ------------ INFO ------------>
+
+    async def get_info(self, app: steam.app.PartialApp) -> dict:
+        log("Fetching player count...")
+        pcount = await app.player_count() # int
+
+        log("Fetching app stats...")
+        stats = await app.stats()         # AppStats
+        stats = {
+            "version": stats.version,
+            "stats":   [
+                {
+                    "name": s.name,
+                    "display": s.display_name,
+                    "default": s.default_value
+                } for s in stats.stats
+            ]
+        }
+
+        log("Fetching app info...")
+        info = await app.info()           # AppInfo
+        branches = [
+            {
+                "name":        b.name,
+                "build_id":    b.build_id,
+                "date":        b.updated_at,
+                "description": b.description,
+                "private":     b.password_required,
+                "password":    b.password,
+                "depots":      [
+                    {
+                        "id":             d.id,
+                        "name":           d.name,
+                        "max_size":       d.max_size,
+                        "shared_install": d.shared_install,
+                        "system_defined": d.system_defined,
+                        "manifest":       d.manifest.id
+
+                    } for d in b.depots],
+                "manifests":   [
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "depot": m.depot.id
+                    } for m in b.manifests]
+            } for b in info.branches
+        ]
+        log("Fetching app achievements...")
+        achs = await info.achievements()
+        achs = [
+            {
+                "name":        a.name,
+                "display":     a.display_name,
+                "description": a.description,
+                "hidden":      a.hidden,
+                "ratio":       a.global_percent_unlocked
+            } for a in achs
+        ]
+        info = {
+            "id":           info.id,
+            "changenum":    info.change_number,
+            "name":         info.name,
+            "sha":          info.sha,
+            "url":          info.website_url,
+            "developers":   info.developers,
+            "date":         info.created_at,
+            "score":        info.review_score.name,
+            "ratio":        info.review_percentage,
+            "free":         info.is_free(),
+            "platforms":    {"windows": info.is_on_windows(), "linux": info.is_on_linux(), "mac": info.is_on_mac_os()},
+            "genres":       [{"id": g.id, "name": g.name} for g in info.genres],
+            "categories":   [{"id": c.id, "name": c.name, "url": c.url()} for c in info.categories], # type: ignore
+            "tags":         [{"id": t.id, "name": t.name, "url": t.url()} for t in info.tags],       # type: ignore
+            "achievements": achs
+        }
+
+        log("Fetching app DLCs...")
+        dlcs = await app.dlc()            # List[DLC]
+        dlcs = [
+            {
+                "id":        dlc.id,
+                "name":      dlc.name,
+                "date":      dlc.created_at,
+                "free":      dlc.is_free,
+                "platforms": {"windows": dlc.is_on_windows(), "linux": dlc.is_on_linux(), "mac": dlc.is_on_mac_os()}
+
+            } for dlc in dlcs
+        ]
+
+        log("Fetching app packages...")
+        packages = await app.packages()   # List[FetchedAppPackage]
+        packages = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "url": p.url
+
+            } for p in packages
+        ]
+
+        return { "players": pcount, "stats": stats, "info": info, "branches": branches, "dlcs": dlcs, "packages": packages }
 
     # < ------------ OTHER ------------>
 
