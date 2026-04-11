@@ -966,14 +966,8 @@ class SteamTicket < ActiveRecord::Base
 
   # Generate a new ticket by running a Python util that connects to Steam's API
   def self.generate(app_id, username: nil, password: nil, token: nil, ticket: nil, file: nil)
-    path = "#{PATH_STEAM_AUTH} #{app_id} -s"
-    path << " -U #{username}" if username
-    path << " -P #{password}" if password
-    path << " -T #{token}"    if token
-    path << " -O #{ticket}"   if ticket
-    path << " -F #{file}"     if file
     dbg("Requesting new Steam ticket for #{app_id}...")
-    stdout, stderr, status = python(path, output: true)
+    stdout, stderr, status = steamworks(app_id, username: username, password: password, token: token, ticket: ticket, file: file)
     return if status.nil?
     return err("Steam credentials expired or unavailable", discord: true) if status.exitstatus == EXIT_NO_CREDENTIALS
     return if !status.success? || stdout.blank?

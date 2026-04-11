@@ -2490,6 +2490,52 @@ def prev_lotd_time(type, ctp: false)
   time
 end
 
+# Perform a request to Steamworks API using our Python tool which depends on Gobot1234/steam.py
+# Note that different requests require different arguments
+def steamworks(
+    app,             # App ID, for N++ it's 230270
+    username: nil,   # Steam username when login is required (see token)
+    password: nil,   # Steam password when login is required (see token)
+    token:    nil,   # Refresh token to login without username+password (preferred)
+    ticket:   nil,   # App ownership ticket to reuse when generating authentication tickets
+    file:     nil,   # File path to store output (defaults to STDOUT)
+    branch:   nil,   # App branch name
+    depot:    nil,   # App depot ID
+    manifest: nil,   # App manifest ID
+    silent:   true,  # Disable logging to STDOUT, except for output itself
+    verbose:  false  # Enable verbose logging to STDOUT
+  )
+  path = "#{PATH_STEAM_AUTH} #{app}"
+  path << ' -s' if silent
+  path << ' -v' if verbose
+  path << " -U #{username}" if username
+  path << " -P #{password}" if password
+  path << " -T #{token}"    if token
+  path << " -O #{ticket}"   if ticket
+  path << " -F #{file}"     if file
+  path << " -B #{branch}"   if branch
+  path << " -D #{depot}"    if depot
+  path << " -M #{manifest}" if manifest
+  python(path, output: true)
+end
+
+# Fetch app info from Steamworks
+def get_steam_appinfo(username: nil, password: nil, token: nil)
+  stdout, stderr, status = steamworks(APP_ID, username: username, password: password, token: token)
+  return if status.nil? || !status.success? || stdout.blank?
+  JSON.load(stdout)
+end
+
+# Fetch manifest metadata from Steamworks
+def get_steam_manifest(username: nil, password: nil, token: nil, branch: nil, depot: nil, manifest: nil)
+  stdout, stderr, status = steamworks(
+    APP_ID, username: username, password: password, token: token,
+    branch: branch, depot: depot, manifest: manifest
+  )
+  return if status.nil? || !status.success? || stdout.blank?
+  JSON.load(stdout)
+end
+
 # <---------------------------------------------------------------------------->
 # <------                           GRAPHICS                             ------>
 # <---------------------------------------------------------------------------->

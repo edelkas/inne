@@ -516,11 +516,20 @@ TWITCH_BLACKLIST = [           # Don't post stream by these users
 ]
 
 # <---------------------------------------------------------------------------->
-# <------                         RSS VARIABLES                          ------>
+# <------                       STEAMDB VARIABLES                        ------>
 # <---------------------------------------------------------------------------->
 
-RSS_STEAM_URI = 'https://store.steampowered.com/feeds/news/app/%d/'
-RSS_STEAMDB_URI = 'https://steamdb.info/api/PatchnotesRSS/?appid=%d'
+RSS_STEAM_URI = 'https://store.steampowered.com/feeds/news/app/%d/'  # args: app_id
+RSS_STEAMDB_URI = 'https://steamdb.info/api/PatchnotesRSS/?appid=%d' # args: app_id
+
+STEAMDB_URI_BRANCH   = 'https://steamdb.info/app/%d/depots/?branch=%s'        # args: app_id, branch_name
+STEAMDB_URI_DEPOT    = 'https://steamdb.info/depot/%d/'                       # args: depot_id
+STEAMDB_URI_MANIFEST = 'https://steamdb.info/depot/%d/history/?changeid=M:%d' # args: depot_id, manifest_id
+STEAMDB_URI_PACKAGE  = 'https://steamdb.info/sub/%d/'                         # args: package_id
+STEAMDB_URI_BUILD    = 'https://steamdb.info/patchnotes/%d/'                  # args: build_id
+
+STEAMDB_COLOR_NEW = 0x00cb74 # Embed bar color for newly created braches or depots
+STEAMDB_COLOR_DEL = 0xf24e43 # Embed bar color for deleted branches or depots
 
 # <---------------------------------------------------------------------------->
 # <------                    SPEEDRUN API VARIABLES                      ------>
