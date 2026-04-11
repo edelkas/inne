@@ -967,11 +967,11 @@ class SteamTicket < ActiveRecord::Base
   # Generate a new ticket by running a Python util that connects to Steam's API
   def self.generate(app_id, username: nil, password: nil, token: nil, ticket: nil, file: nil)
     path = "#{PATH_STEAM_AUTH} #{app_id} -s"
-    path << " -u #{username}" if username
-    path << " -p #{password}" if password
-    path << " -t #{token}"    if token
-    path << " -o #{ticket}"   if ticket
-    path << " -f #{file}"     if file
+    path << " -U #{username}" if username
+    path << " -P #{password}" if password
+    path << " -T #{token}"    if token
+    path << " -O #{ticket}"   if ticket
+    path << " -F #{file}"     if file
     dbg("Requesting new Steam ticket for #{app_id}...")
     stdout, stderr, status = python(path, output: true)
     return if status.nil?

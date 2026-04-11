@@ -1,4 +1,4 @@
-import argparse, asyncio, base64, datetime, enum, json, os, steam, steam.gateway, struct, sys, textwrap, typing
+import argparse, asyncio, base64, datetime, enum, json, os, steam, steam.gateway, struct, sys, textwrap, traceback, typing
 
 # Helpers
 def write(str, symb):
@@ -9,8 +9,9 @@ def dbg(str):
         write(str, '+')
 def log(str): write(str, '-')
 def warn(str): write(str, '!')
-def date(d): return d.strftime('%Y-%m-%d %H:%M:%S')
+def date(d): return d.isoformat() if d else 'Unknown'
 def time(t): return date(datetime.datetime.fromtimestamp(t))
+def serial(bytes: bytes) -> str: return bytes.hex().upper()
 
 # Exiting the program
 class ExitCode(enum.Enum):
@@ -33,6 +34,13 @@ async def end(code: ExitCode = ExitCode.OK) -> typing.NoReturn:
         await client.disconnect()
     raise SystemExit(code.value)
 
+def save(data: str):
+    if args.file:
+        with open(args.file, 'w') as f:
+            f.write(data + '\n')
+    else:
+        print(data)
+
 # Argument parsing
 parser = argparse.ArgumentParser(
     formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -44,6 +52,7 @@ parser = argparse.ArgumentParser(
     as arguments or as environment variables. An ASCII ownership ticket can be supplied, otherwise
     a new one will be generated, but they typically have a lifetime of 21 days so its recommended
     to cache them and pass them whenever possible. Requires Python 3.11+. See below for more info.
+    Usage hint: Boolean flags are lower-case, flags that require a value are upper-case.
     """),
     epilog=textwrap.dedent("""
     Session tickets are normally obtained via Steamwork's GetAuthSessionTicket method and need to
@@ -76,15 +85,18 @@ parser = argparse.ArgumentParser(
     """)
 )
 parser.add_argument('app',              type=int,            help='Steam app ID (e.g. 440 for TF2)')
+parser.add_argument('-B', '--branch',   type=str,            help='Branch name, for fetching build or manifest info')
 parser.add_argument('-c', '--connect',  action='store_true', help='Stay connected after exporting tickets (will require an Interrupt to close)')
+parser.add_argument('-D', '--depot',    type=int,            help='Depot ID, for fetching build or manifest info')
 parser.add_argument('-d', '--dry',      action='store_true', help='Performs a dry run (logs in a verifies supplied ticket)')
-parser.add_argument('-f', '--file',     type=str,            help='Export tickets to this file instead of STDOUT')
+parser.add_argument('-F', '--file',     type=str,            help='Export tickets to this file instead of STDOUT')
 parser.add_argument('-i', '--info',     action='store_true', help='Only fetch game info, implies -d')
-parser.add_argument('-o', '--ticket',   type=str,            help='App ownership ticket to attempt to reuse (also SSAA_TICKET)')
-parser.add_argument('-p', '--password', type=str,            help='Steam password used for login (also SSAA_PASSWORD env var)')
-parser.add_argument('-u', '--username', type=str,            help='Steam username used for login (also SSAA_USERNAME env var)')
+parser.add_argument('-M', '--manifest', type=int,            help='Manifest ID to fetch details from')
+parser.add_argument('-O', '--ticket',   type=str,            help='App ownership ticket to attempt to reuse (also SSAA_TICKET)')
+parser.add_argument('-P', '--password', type=str,            help='Steam password used for login (also SSAA_PASSWORD env var)')
+parser.add_argument('-U', '--username', type=str,            help='Steam username used for login (also SSAA_USERNAME env var)')
 parser.add_argument('-s', '--silent',   action='store_true', help='Supresses all STDOUT and STDERR output except for the ticket itself')
-parser.add_argument('-t', '--token',    type=str,            help='Refresh token JWT used for login (also SSAA_TOKEN env var)')
+parser.add_argument('-T', '--token',    type=str,            help='Refresh token JWT used for login (also SSAA_TOKEN env var)')
 parser.add_argument('-v', '--verbose',  action='store_true', help='Print additional technical information to the terminal')
 args = parser.parse_args()
 
@@ -140,12 +152,12 @@ class Bot(steam.Client):
 
         # Fetch game info
         if args.info:
-            info = await self.get_info(app)
-            if args.file:
-                with open(args.file, 'a') as f:
-                    f.write(json.dumps(info) + '\n')
-            else:
-                print(json.dumps(info))
+            save(json.dumps(await self.get_info(app)))
+            await end()
+
+        # Fetch manifest details
+        if args.branch and args.depot and args.manifest:
+            save(json.dumps(await self.get_manifest(app, args.branch, args.depot, args.manifest)))
             await end()
 
         # Reuse ownership ticket or fetch a new one
@@ -163,7 +175,7 @@ class Bot(steam.Client):
         await ticket.activate()
 
         # Export ticket
-        ascii = bytes(ticket)[4:].hex().upper()
+        ascii = serial(bytes(ticket)[4:])
         if args.file:
             with open(args.file, 'a') as f:
                 f.write(ascii + '\n')
@@ -181,6 +193,10 @@ class Bot(steam.Client):
 
     async def on_error(self, event, error, *arg, **kwarg) -> None:
         warn(f"Received error: {event} ({error})")
+        if not args.verbose:
+            return
+        exc_type, exc_val, exc_tb = sys.exc_info()
+        traceback.print_exception(exc_type, exc_val, exc_tb)
 
     # < ------------ TICKET MANIPULATION ------------>
 
@@ -225,7 +241,7 @@ class Bot(steam.Client):
             return
         log("Requesting new ownership ticket...")
         ticket = await self._state.fetch_app_ownership_ticket(app.id)
-        dbg(ticket.hex().upper())
+        dbg(serial(ticket))
         ticket = steam.OwnershipTicket(self._state, steam.utils.StructIO(ticket))
         if self.verify_ticket(ticket):
             self.log_ownership_ticket(ticket)
@@ -256,7 +272,7 @@ class Bot(steam.Client):
         dbg("    %40s    %16s %17s %19s" % ('Raw bytes', 'Token', 'Steam ID', 'Date'))
         for token in tokens:
             gc, steam_id, gen_time = struct.unpack('<2QL', token)
-            dbg(f"    {token.hex().upper()} -> {gc:016x} {steam_id} {time(gen_time)}")
+            dbg(f"    {serial(token)} -> {gc:016x} {steam_id} {time(gen_time)}")
 
     def log_ownership_ticket(self, ticket: steam.OwnershipTicket) -> None:
         line = "+" + "-" * 76 + "+"
@@ -277,104 +293,149 @@ class Bot(steam.Client):
     # < ------------ INFO ------------>
 
     async def get_info(self, app: steam.app.PartialApp) -> dict:
-        log("Fetching player count...")
-        pcount = await app.player_count() # int
+        fetch_count        = False
+        fetch_stats        = False
+        fetch_info         = True
+        fetch_achievements = False
+        fetch_dlcs         = False
+        fetch_packages     = False
+        result = {}
 
-        log("Fetching app stats...")
-        stats = await app.stats()         # AppStats
-        stats = {
-            "version": stats.version,
-            "stats":   [
+        if fetch_count:
+            log("Fetching player count...")
+            result["players"] = await app.player_count() # int
+
+        if fetch_stats:
+            log("Fetching app stats...")
+            stats = await app.stats() # AppStats
+            result["stats"] = {
+                "version": stats.version,
+                "stats":   [
+                    {
+                        "name": s.name,
+                        "display": s.display_name,
+                        "default": s.default_value
+                    } for s in stats.stats
+                ]
+            }
+
+        if fetch_info:
+            log("Fetching app info and branches...")
+            info = await app.info() # AppInfo
+            result["info"] = {
+                "id":           info.id,
+                "changenum":    info.change_number,
+                "name":         info.name,
+                "sha":          info.sha,
+                "url":          info.website_url,
+                "developers":   info.developers,
+                "date":         date(info.created_at),
+                "score":        info.review_score.name,
+                "ratio":        info.review_percentage,
+                "free":         info.is_free(),
+                "platforms":    {"windows": info.is_on_windows(), "linux": info.is_on_linux(), "mac": info.is_on_mac_os()},
+                "genres":       [{"id": g.id, "name": g.name} for g in info.genres],
+                "categories":   [{"id": c.id, "name": c.name} for c in info.categories],
+                "tags":         [{"id": t.id, "name": t.name} for t in info.tags]
+            }
+            result["branches"] = [
                 {
-                    "name": s.name,
-                    "display": s.display_name,
-                    "default": s.default_value
-                } for s in stats.stats
+                    "name":        b.name,
+                    "build_id":    b.build_id,
+                    "date":        date(b.updated_at),
+                    "description": b.description,
+                    "private":     b.password_required,
+                    "password":    b.password,
+                    "depots":      [
+                        {
+                            "id":             d.id,
+                            "name":           d.name,
+                            "max_size":       d.max_size,
+                            "shared_install": d.shared_install,
+                            "system_defined": d.system_defined,
+                            "manifest":       d.manifest.id
+
+                        } for d in b.depots],
+                    "manifests":   [
+                        {
+                            "id": m.id,
+                            "name": m.name,
+                            "depot": m.depot.id
+                        } for m in b.manifests]
+                } for b in info.branches
+            ]
+
+        if fetch_achievements:
+            log("Fetching app achievements...")
+            achs = await app.achievements() # List[AppAchivement]
+            result["achievements"] = [
+                {
+                    "name":        a.name,
+                    "display":     a.display_name,
+                    "description": a.description,
+                    "hidden":      a.hidden,
+                    "ratio":       a.global_percent_unlocked
+                } for a in achs
+            ]
+
+        if fetch_dlcs:
+            log("Fetching app DLCs...")
+            dlcs = await app.dlc() # List[DLC]
+            result["dlcs"] = [
+                {
+                    "id":        dlc.id,
+                    "name":      dlc.name,
+                    "date":      date(dlc.created_at),
+                    "free":      dlc.is_free,
+                    "platforms": {"windows": dlc.is_on_windows(), "linux": dlc.is_on_linux(), "mac": dlc.is_on_mac_os()}
+
+                } for dlc in dlcs
+            ]
+
+        if fetch_packages:
+            log("Fetching app packages...")
+            packages = await app.packages() # List[FetchedAppPackage]
+            result["packages"] = [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "url": p.url
+
+                } for p in packages
+            ]
+
+        return result
+
+    # TODO: Retrieve chunks for fine-grained statistics and diffing?
+    async def get_manifest(self, app: steam.app.PartialApp, branch: str, depot_id: int, manifest_id: int) -> dict:
+        log(f"Fetching manifest {manifest_id} from branch {branch} and depot {depot_id}...")
+        manifest = await app.fetch_manifest(id=manifest_id, depot_id=depot_id, branch=branch)
+        # Depot file flags bitmap:
+        #   u (user config),  v (versioned user config),  e (encrypted),          r (read-only),       h (hidden),
+        #   x (executable),   d (directory),              c (custom executable),  s (install script),  l (symbolic link)
+        flags = ['u', 'v', 'e', 'r', 'h', 'x', 'd', 'c', 's', 'l']
+        result = {
+            "id":              manifest.id,
+            "app":             manifest.app.id,
+            "depot":           manifest.depot_id,
+            "name":            manifest.name,
+            "count":           len(manifest),
+            "size_raw":        manifest.size_original,
+            "size_compressed": manifest.size_compressed,
+            "compressed":      manifest.compressed,
+            "size":            manifest.size_compressed if manifest.compressed else manifest.size_original,
+            "server":          manifest.server.url.human_repr(),
+            "files":           [
+                {
+                    "path":        str(f),
+                    "size":        f.size,
+                    "flags":       [flag for i, flag in enumerate(flags) if int(f.flags.value) & (1 << i)],
+                    "sha_name":    serial(f.sha_filename),
+                    "sha_content": serial(f.sha_content)
+                } for f in manifest.paths
             ]
         }
-
-        log("Fetching app info...")
-        info = await app.info()           # AppInfo
-        branches = [
-            {
-                "name":        b.name,
-                "build_id":    b.build_id,
-                "date":        b.updated_at,
-                "description": b.description,
-                "private":     b.password_required,
-                "password":    b.password,
-                "depots":      [
-                    {
-                        "id":             d.id,
-                        "name":           d.name,
-                        "max_size":       d.max_size,
-                        "shared_install": d.shared_install,
-                        "system_defined": d.system_defined,
-                        "manifest":       d.manifest.id
-
-                    } for d in b.depots],
-                "manifests":   [
-                    {
-                        "id": m.id,
-                        "name": m.name,
-                        "depot": m.depot.id
-                    } for m in b.manifests]
-            } for b in info.branches
-        ]
-        log("Fetching app achievements...")
-        achs = await info.achievements()
-        achs = [
-            {
-                "name":        a.name,
-                "display":     a.display_name,
-                "description": a.description,
-                "hidden":      a.hidden,
-                "ratio":       a.global_percent_unlocked
-            } for a in achs
-        ]
-        info = {
-            "id":           info.id,
-            "changenum":    info.change_number,
-            "name":         info.name,
-            "sha":          info.sha,
-            "url":          info.website_url,
-            "developers":   info.developers,
-            "date":         info.created_at,
-            "score":        info.review_score.name,
-            "ratio":        info.review_percentage,
-            "free":         info.is_free(),
-            "platforms":    {"windows": info.is_on_windows(), "linux": info.is_on_linux(), "mac": info.is_on_mac_os()},
-            "genres":       [{"id": g.id, "name": g.name} for g in info.genres],
-            "categories":   [{"id": c.id, "name": c.name, "url": c.url()} for c in info.categories], # type: ignore
-            "tags":         [{"id": t.id, "name": t.name, "url": t.url()} for t in info.tags],       # type: ignore
-            "achievements": achs
-        }
-
-        log("Fetching app DLCs...")
-        dlcs = await app.dlc()            # List[DLC]
-        dlcs = [
-            {
-                "id":        dlc.id,
-                "name":      dlc.name,
-                "date":      dlc.created_at,
-                "free":      dlc.is_free,
-                "platforms": {"windows": dlc.is_on_windows(), "linux": dlc.is_on_linux(), "mac": dlc.is_on_mac_os()}
-
-            } for dlc in dlcs
-        ]
-
-        log("Fetching app packages...")
-        packages = await app.packages()   # List[FetchedAppPackage]
-        packages = [
-            {
-                "id": p.id,
-                "name": p.name,
-                "url": p.url
-
-            } for p in packages
-        ]
-
-        return { "players": pcount, "stats": stats, "info": info, "branches": branches, "dlcs": dlcs, "packages": packages }
+        return result
 
     # < ------------ OTHER ------------>
 
