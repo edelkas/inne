@@ -268,7 +268,8 @@ IMAGESEARCH_COLS  = 5    # Number of columns when sorting results in a grid
 TRANSPARENT_COLOR = 0x00FF00FF
 
 # Fonts
-FONT_TIMEBAR = 'retro'
+FONT_SCREENSHOTS = 'sys/Sys.ttf'
+FONT_TIMEBAR     = 'retro'
 
 # Memory mitigation
 ANIM_GC              = false  # Garbage collect periodically when generating frames

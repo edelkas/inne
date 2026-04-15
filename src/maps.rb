@@ -2231,7 +2231,7 @@ module Map
       mpl.ioff
 
       # Prepare custom font (Sys)
-      font = "#{DIR_UTILS}/sys.ttf"
+      font = File.join(DIR_FONTS, FONT_SCREENSHOTS)
       fm = PyCall.import_module('matplotlib.font_manager')
       fm.fontManager.addfont(font)
       mpl.rcParams['font.family'] = 'sans-serif'
