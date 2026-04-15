@@ -1,7 +1,9 @@
-require 'byebug'
 require 'fileutils'
+require 'stringio'
 require 'win32/registry'
 require 'zip'
+require 'zlib'
+Zip.default_compression = Zlib::BEST_SPEED
 
 # Mappack-specific constants
 MAPPACK   = 'REDUX v1.1'
@@ -9,7 +11,7 @@ AUTHOR    = 'WheatyTruffles & DarkStuff'
 NAME      = 'rdx'
 FILES     = ['S', 'Scodes']
 SPLASH    = "#{MAPPACK} by #{AUTHOR}"
-SIGN      = "Wheaty & DS"
+SIGN      = AUTHOR
 TITLE     = "#{MAPPACK} by #{AUTHOR}"
 CONTROLS  = false
 NPROFILE  = true
@@ -213,35 +215,37 @@ rescue => e
   log_exception(e, "Failed to change level files.")
 end
 
-def swap_save(new_file, bak_file, nprofile, zip_in: true, zip_out: true)
+def swap_save(new_file, bak_file, nprofile)
   # Return if there are duplicates in the specified names
   return false if [new_file, bak_file, nprofile].uniq.size < 3
 
   # Return if the specified new file doesn't exist
   return false if !File.file?(new_file)
 
-  # Backup the current save
-  if File.file?(nprofile)
-    if zip_out
-      cur = File.binread(nprofile)
-      buf = Zip::OutputStream.write_buffer{ |zip|
-        zip.put_next_entry('nprofile')
-        zip.write(cur)
-      }
-      File.binwrite(bak_file, buf.string)
-    else
-      File.rename(nprofile, bak_file)
-    end
+  # Backup the current save (uncompressed as a fallback only)
+  if fn = File.file?(nprofile + '.gz') ? nprofile + '.gz' : File.file?(nprofile) ? nprofile : nil
+    cur = File.binread(fn)
+    buf = Zip::OutputStream.write_buffer{ |zip|
+      zip.put_next_entry(File.basename(fn))
+      zip.write(cur)
+    }
+    File.binwrite(bak_file, buf.string)
   end
 
-  # Copy the new save
-  if zip_in
-    Zip::File.open(new_file){ |zip|
-      File.binwrite(nprofile, zip.glob('nprofile').first.get_input_stream.read)
-    }
-  else
-    File.copy(new_file, nprofile)
-  end
+  # Copy (and compress if necessary) the new save
+  Zip::File.open(new_file){ |zip|
+    file = zip.glob('nprofile*').first
+    data = file.get_input_stream.read
+    if File.extname(file.name) != '.gz'
+      buf = StringIO.new(''.b)
+      Zlib::GzipWriter.wrap(buf, Zlib::BEST_SPEED){ |gz|
+        gz.orig_name = 'nprofile'
+        gz.write(data)
+      }
+      data = buf.string
+    end
+    File.binwrite(nprofile + '.gz', data)
+  }
 
   return true
 rescue
