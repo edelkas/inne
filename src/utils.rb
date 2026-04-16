@@ -1561,12 +1561,21 @@ rescue
   nil
 end
 
-# Find an app emoji (Discordrb still doesn't support it, so we rawdog it)
+# Find an app emoji
+# Obsolete now that discordrb supports them, but still in use in the code
 def app_emoji(name)
   return if !APP_EMOJIS.key?(name)
   id = APP_EMOJIS[name][TEST ? :test : :prod]
   return if !id
   "<:#{name}:#{id}>"
+end
+
+# Fetch all available app emojis using discordrb, store them in a global var
+# keyed by the name so we only need to do this once on startup
+def fetch_app_emojis
+  $emojis = $bot.application_emojis.index_by(&:name)
+  dbg("Fetched #{$emojis.size} application emojis")
+  $emojis
 end
 
 # Find user by name and tag in a given server

@@ -129,6 +129,9 @@ EMOJIS_TO_DELETE = ['❌', '✖️', '🇽', '⛔', '🚫', '❎']
 EMOJIS_FOR_PLAY = ['Ninja', 'ninjajump', 'ninjavictory', 'nAight']
 EMOJI_NUMBERS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
 EMOJI_TO_BAN = '🔨'
+
+# Emojis available to outte. This list is OUTDATED now that discordrb supports
+# application emojis natively and we don't have to do this manually.
 APP_EMOJIS = {
   'plus_1st'    => { test: 1393773038163460259, prod: 1393770276659138630 },
   'plus_2nd'    => { test: 1393773051748945960, prod: 1393770299454918676 },

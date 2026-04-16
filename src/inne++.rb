@@ -182,6 +182,7 @@ def initialize_vars
   $sql_vars        = {}
   $sql_status      = {}
   $sql_conns       = []
+  $emojis          = {}
   $trace_context   = {
     h:       nil,
     theme:   "",
@@ -432,6 +433,7 @@ def run_bot
   }
   leave_unknown_servers
   register_commands
+  fetch_app_emojis
   succ("Bot connected to servers: #{$bot.servers.map{ |id, s| s.name }.join(', ')} (%.2fs)." % [Time.now - t])
 rescue => e
   fatal("Failed to execute bot: #{e}")
