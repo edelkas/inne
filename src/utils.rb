@@ -385,9 +385,9 @@ end
 #   :search => Download a page of searched userlevels (idem)
 # Arguments:
 #   fast: Only try players that have been active in the last week
-#   auth: Only try players for whom we have steam auth tickets saved
+#   auth: Only try players for whom we have steam auth tickets saved (obsolete)
 def get_data(type, fast: false, auth: true, **args)
-  # Proc to perform request for a specific player
+  # Proc to perform request for a specific player, returns from get_data if successful
   request = Proc.new{ |player|
     res = player.send_request(type, args: args, auth: true, silent: true)
     next res if !res
@@ -402,14 +402,13 @@ def get_data(type, fast: false, auth: true, **args)
   request[player = GlobalProperty.get_current_player]
   request[Player.find_by(steam_id: DATA_STEAM_ID)] if player.steam_id != DATA_STEAM_ID
   attempts = 0
-  if auth
-    players = Player.joins("INNER JOIN `steam_tickets` ON `steam_tickets`.`steam_id` = `players`.`steam_id`").order(date: :desc)
-  else
-    players = Player.where.not(steam_id: nil).where(fast ? { active: true } : nil ).order(last_active: :desc)
-  end
+  players = Player.joins("INNER JOIN `steam_tickets` ON `steam_tickets`.`steam_id` = `players`.`steam_id`").order(date: :desc)
+  #players = Player.where.not(steam_id: nil).where(fast ? { active: true } : nil ).order(last_active: :desc)
   players.each{ |player|
     res = request[player]
-    (attempts += 1) < RETRIES ? redo : return if res.nil?
+    return unless res.nil?            # All subsequent players are unauthenticated, stop
+    redo if (attempts += 1) < RETRIES # Error, retry a few times
+    return                            # Too many errors, stop
   }
 
   # Request failed
@@ -421,6 +420,10 @@ end
 # Forward an arbitrary request to Metanet, return response's body if 200, nil else
 def forward(req)
   return nil if req.nil?
+  if req.query['steam_auth'].to_s.length < 2 * SteamTicket::MIN_TICKET_LENGTH
+    alert("Not forwarding to Metanet, invalid steam auth ticket: #{req.key}")
+    return
+  end
   action_inc('http_forwards')
   t = Time.now
 

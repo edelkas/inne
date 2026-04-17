@@ -945,7 +945,7 @@ end
 #------------------------------------------------------------------------------#
 
 class SteamTicket < ActiveRecord::Base
-  # The ticket length is variable, for N++ they should always be 234 bytes
+  # The ticket length is variable, for N++ they're currently 240 bytes
   TOKEN_LENGTH      =  20
   SESSION_LENGTH    =  24
   MIN_TICKET_LENGTH = 230
