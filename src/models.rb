@@ -2477,10 +2477,19 @@ class Player < ActiveRecord::Base
   #   false if unauthenticated
   #   The response body otherwise
   def send_request(type, args: {}, parts: [], auth: true, silent: false, discord: false)
+    dbg("Sending Metanet request #{type} with extra args #{args}...")
+
     # Ensure we know the player's Steam ID
     if !steam_id
-      err("Player #{name} (#{metanet_id}) has no Steam ID") unless silent
+      send(silent ? :dbg : :err, "Player #{name} (#{metanet_id}) has no Steam ID")
       perror("I don't know your Steam ID, please contact the botmaster!") if discord
+      return
+    end
+
+    # Enforce authorized requests only. If no valid ticket is found, we may try
+    # to re-authenticate once. If this fails too, we return.
+    if (!ticket || ticket.expired?) && (!auth || !authenticate || !ticket || ticket.expired?)
+      send(silent ? :dbg : :err, "No valid auth ticket found for player #{steam_id}")
       return
     end
 
@@ -2530,20 +2539,21 @@ class Player < ActiveRecord::Base
     end
 
     # Perform request
+    dbg("Metanet query: #{req.method} #{uri} #{req.body.to_s.length}B")
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 5){ |http|
       http.request(req)
     }
 
     # Invalid request
     if !res.is_a?(Net::HTTPSuccess)
-      err("Failed to request #{type} for player #{steam_id}") unless silent
+      send(silent ? :dbg : :err, "Failed to request #{type} for player #{steam_id} (code #{res.code.to_i})")
       perror("Failed to request #{type} from N++'s server :(") if discord
       return
     end
 
     # Unauthenticated
     if res.body.to_s == METANET_INVALID_RES
-      alert("Player #{name} (#{metanet_id}) is not authenticated") unless silent
+      send(silent ? :dbg : :err, "Player #{name} (#{metanet_id}) is not authenticated")
       if !auth || !authenticate
         perror("You seem to be unauthenticated, please open N++") if discord
         return false
@@ -2551,6 +2561,7 @@ class Player < ActiveRecord::Base
       return send_request(type, args: args, parts: parts, auth: false, silent: silent, discord: discord)
     end
 
+    dbg("Received #{res.body.to_s.length} bytes")
     res.body.to_s
   rescue => e
     lex(e, "Error when requesting #{uri}")
