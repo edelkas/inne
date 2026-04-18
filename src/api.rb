@@ -1135,6 +1135,7 @@ class SteamApp < ActiveRecord::Base
       if !branch
         branch = SteamBranch.create(app_id: id, name: h_branch['name'])
         new_stuff << branch
+        succ("New branch #{h_branch['name']} found")
       end
       branch.update(
         description: h_branch['description'],
@@ -1154,6 +1155,7 @@ class SteamApp < ActiveRecord::Base
           date:        Time.parse(h_branch['date'])
         )
         new_stuff << build
+        succ("New build #{h_branch['build_id']} for branch #{h_branch['name']} found")
       end
 
       # Parse depots
@@ -1174,6 +1176,7 @@ class SteamApp < ActiveRecord::Base
             exists:     true
           )
           new_stuff << depot
+          succ("New depot #{h_depot['id']} found")
         end
 
         # Detect new manifests, or manifests that we didn't previusly fetch
@@ -1182,6 +1185,7 @@ class SteamApp < ActiveRecord::Base
           manifest.fetch(username: username, password: password, token: token, branch: h_branch['name'])
           manifest.update(date: Time.now)
           new_stuff << manifest
+          succ("New manifest #{h_depot['manifest']} for depot #{h_depot['id']} found")
         end
 
         # Detect new versions
@@ -1210,7 +1214,7 @@ class SteamApp < ActiveRecord::Base
     new_stuff.each(&:reload)
     new_stuff.map!(&:embed_new)
     to_report = new_stuff + removed_branches + removed_depots
-    return 0 if to_report.empty?
+    dbg("Found no new Steam patches") if to_report.empty?
     channel = !TEST ? find_channel(id: CHANNEL_DEBUG) : botmaster.pm
     to_report.each_slice(DISCORD_EMBED_LIMIT){ |embeds|
       send_message(channel, embeds: embeds)

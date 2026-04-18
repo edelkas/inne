@@ -897,9 +897,13 @@ def start_discord_tasks
   Scheduler.add("Update Speedrun", freq: SPEEDRUN_UPDATE_FREQUENCY, log: false) { update_speedrun } if DO_EVERYTHING  || UPDATE_SPEEDRUN
 
   # Check for new N++-related RSS news every minute
-  Feed.new('steam',   RSS_STEAM_URI   % APP_ID, TEST ? nil : CHANNEL_MAIN, title: "💥 New N++ update on Steam!")
-  #Feed.new('steamdb', RSS_STEAMDB_URI % APP_ID, TEST ? nil : CHANNEL_DEBUG, title: "🛠 New N++ Steam patch")
+  Feed.new('steam', RSS_STEAM_URI % APP_ID, TEST ? nil : CHANNEL_MAIN, title: "💥 New N++ update on Steam!")
   Scheduler.add("Update RSS", freq: RSS_UPDATE_FREQUENCY, log: false) { update_rss } if DO_EVERYTHING  || UPDATE_RSS
+
+  # Check for new N++ Steam patches every 5 minutes
+  Scheduler.add("Update Steam patches", freq: STEAM_UPDATE_FREQUENCY, log: false) {
+    SteamApp.find_or_create_by(id: APP_ID).fetch_info(token: ENV["STEAM_TOKEN_#{DATA_STEAM_ID}"])
+  } if DO_EVERYTHING  || UPDATE_STEAM
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY
