@@ -2514,10 +2514,14 @@ def steamworks(
     branch:   nil,   # App branch name
     depot:    nil,   # App depot ID
     manifest: nil,   # App manifest ID
+    dry:      false, # Dry run, only connects and verifies supplied ticket
+    info:     false, # Fetch app info
     silent:   true,  # Disable logging to STDOUT, except for output itself
     verbose:  false  # Enable verbose logging to STDOUT
   )
   path = "#{PATH_STEAM_AUTH} #{app}"
+  path << ' -d' if dry
+  path << ' -i' if info
   path << ' -s' if silent
   path << ' -v' if verbose
   path << " -U #{username}" if username
@@ -2529,23 +2533,6 @@ def steamworks(
   path << " -D #{depot}"    if depot
   path << " -M #{manifest}" if manifest
   python(path, output: true)
-end
-
-# Fetch app info from Steamworks
-def get_steam_appinfo(username: nil, password: nil, token: nil)
-  stdout, stderr, status = steamworks(APP_ID, username: username, password: password, token: token)
-  return if status.nil? || !status.success? || stdout.blank?
-  JSON.load(stdout)
-end
-
-# Fetch manifest metadata from Steamworks
-def get_steam_manifest(username: nil, password: nil, token: nil, branch: nil, depot: nil, manifest: nil)
-  stdout, stderr, status = steamworks(
-    APP_ID, username: username, password: password, token: token,
-    branch: branch, depot: depot, manifest: manifest
-  )
-  return if status.nil? || !status.success? || stdout.blank?
-  JSON.load(stdout)
 end
 
 # <---------------------------------------------------------------------------->

@@ -602,79 +602,30 @@ end
 def test_steam_info(event)
   token = ENV['SSAA_TOKEN'] || ENV["STEAM_TOKEN_#{DATA_STEAM_ID}"]
   perror("No refresh token found") if !token
-  embeds = []
-
-  # Fetch game info to look for updates
-  #info = get_steam_appinfo(token: token)
-  info = JSON.load(File.read('data.json'))
-
-  # # New branch
-  branch = info['branches'][0]
-  branch_uri = STEAMDB_URI_BRANCH % [APP_ID, branch['name']]
-  branch_link = mdurl(branch['name'], branch_uri, false)
-  build_uri = STEAMDB_URI_BUILD % [branch['build_id']]
-  build_link = mdurl(branch['build_id'].to_s, build_uri, false)
-  embeds << Discordrb::Webhooks::Embed.new(
-    title:     '🌿 New N++ Steam branch created',
-    url:       branch_uri,
-    color:     STEAMDB_COLOR_NEW,
-    timestamp: Time.now
-  )
-  embeds.last.add_field(inline: true, name: 'Name', value: branch_link)
-  embeds.last.add_field(inline: true, name: 'Build', value: build_link)
-  embeds.last.add_field(inline: true, name: 'Description', value: branch['description'] || 'None')
-
-  # # New depot
-  depot = branch['depots'][0]
-  depot_uri = STEAMDB_URI_DEPOT % [depot['id']]
-  depot_link = mdurl(depot['id'].to_s, depot_uri, false)
-  embeds << Discordrb::Webhooks::Embed.new(
-    title:     '📦 New N++ Steam depot created',
-    url:       depot_uri,
-    color:     STEAMDB_COLOR_NEW,
-    timestamp: Time.now
-  )
-  embeds.last.add_field(inline: true, name: 'ID', value: depot_link)
-  embeds.last.add_field(inline: true, name: 'Name', value: depot['name'] || 'None')
-
-  # New manifest
-  manifest = branch['manifests'].find{ |m| m['id'] == depot['manifest'] }
-  manifest_uri = STEAMDB_URI_MANIFEST % [depot['id'], manifest['id']]
-  manifest_link = mdurl(manifest['id'].to_s, manifest_uri, false)
-  embeds << Discordrb::Webhooks::Embed.new(
-    title:     '🔧 New N++ Steam patch submitted',
-    url:       manifest_uri,
-    timestamp: Time.now
-  )
-  embeds.last.add_field(inline: true, name: 'Branch', value: branch_link)
-  embeds.last.add_field(inline: true, name: 'Depot',  value: depot_link)
-  embeds.last.add_field(inline: true, name: 'Build',  value: build_link)
-
-  # Deleted branch
-  embeds << Discordrb::Webhooks::Embed.new(
-    title:     '🌿 N++ Steam branch deleted',
-    url:       branch_uri,
-    color:     STEAMDB_COLOR_DEL,
-    timestamp: Time.now
-  )
-  embeds.last.add_field(inline: true, name: 'Name', value: branch_link)
-  embeds.last.add_field(inline: true, name: 'Build', value: build_link)
-  embeds.last.add_field(inline: true, name: 'Description', value: branch['description'] || 'None')
-
-  # Deleted depot
-  depot = branch['depots'][0]
-  depot_uri = STEAMDB_URI_DEPOT % [depot['id']]
-  depot_link = mdurl(depot['id'].to_s, depot_uri, false)
-  embeds << Discordrb::Webhooks::Embed.new(
-    title:     '📦 N++ Steam depot deleted',
-    url:       depot_uri,
-    color:     STEAMDB_COLOR_DEL,
-    timestamp: Time.now
-  )
-  embeds.last.add_field(inline: true, name: 'ID', value: depot_link)
-  embeds.last.add_field(inline: true, name: 'Name', value: depot['name'] || 'None')
-
+  app = SteamApp.find_by(id: APP_ID)
+  perror("N++ Steam app isn't initialized, run `!steam_seed`") if !app || !app.name
+  branch = app.branches.first
+  perror("No branches found") if !branch
+  build = branch.build
+  perror("No builds found for branch #{branch.name}") if !build
+  depot = app.depots.first
+  perror("No depots founds") if !depot
+  manifest = depot.manifests.first
+  perror("No manifests found") if !manifest
+  embeds = [
+    branch.embed_new, depot.embed_new, build.embed_new,
+    manifest.embed_new, branch.embed_deleted, depot.embed_deleted
+  ]
   send_message(event, embeds: embeds)
+end
+
+# TODO: Seed other stuff in here (stats, achievements, etc), and send summary to Discord
+def seed_steam(event)
+  token = ENV['SSAA_TOKEN'] || ENV["STEAM_TOKEN_#{DATA_STEAM_ID}"]
+  perror("No refresh token found") if !token
+  app = SteamApp.find_or_create_by(id: APP_ID)
+  changes = app.fetch_info(token: token)
+  event << "Fetched info from Steam, no changes to report" if changes == 0
 end
 
 # Restart outte's process
@@ -1417,7 +1368,8 @@ def respond_special(event)
   return send_sql_list(event)            if cmd == 'sql_list'
   return send_sql_status(event)          if cmd == 'sql_status'
   return send_status(event)              if cmd == 'status'
-  return test_steam_info(event)          if cmd == 'steam'
+  return test_steam_info(event)          if cmd == 'steam_embeds'
+  return seed_steam(event)               if cmd == 'steam_seed'
   return submit_score(event)             if cmd == 'submit'
   return send_tasks(event)               if cmd == 'tasks'
   return send_test(event)                if cmd == 'test'

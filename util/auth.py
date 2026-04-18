@@ -175,12 +175,7 @@ class Bot(steam.Client):
         await ticket.activate()
 
         # Export ticket
-        ascii = serial(bytes(ticket)[4:])
-        if args.file:
-            with open(args.file, 'a') as f:
-                f.write(ascii + '\n')
-        else:
-            print(ascii)
+        save(serial(bytes(ticket)[4:]))
 
         if not args.connect:
             await end()
@@ -353,7 +348,8 @@ class Bot(steam.Client):
                             "max_size":       d.max_size,
                             "shared_install": d.shared_install,
                             "system_defined": d.system_defined,
-                            "manifest":       d.manifest.id
+                            "manifest":       d.manifest.id,
+                            "config":         {k: d.config.getall(k) for k in set(d.config.keys())}
 
                         } for d in b.depots],
                     "manifests":   [

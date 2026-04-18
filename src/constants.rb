@@ -102,6 +102,7 @@ CHANNEL_DEBUG          = 530162144843530240  # #debug-room
 # Limits
 DISCORD_CHAR_LIMIT     = 2000                # Message character limit
 DISCORD_FILE_LIMIT     = 10 * 1000 ** 2      # Attachment size limit
+DISCORD_EMBED_LIMIT    = 10                  # Embed count limit
 DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
 CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
 
@@ -532,8 +533,9 @@ STEAMDB_URI_MANIFEST = 'https://steamdb.info/depot/%d/history/?changeid=M:%d' # 
 STEAMDB_URI_PACKAGE  = 'https://steamdb.info/sub/%d/'                         # args: package_id
 STEAMDB_URI_BUILD    = 'https://steamdb.info/patchnotes/%d/'                  # args: build_id
 
-STEAMDB_COLOR_NEW = 0x00cb74 # Embed bar color for newly created braches or depots
-STEAMDB_COLOR_DEL = 0xf24e43 # Embed bar color for deleted branches or depots
+STEAMDB_COLOR_BRANCH = 0x32a852 # Bar color for branch embeds (new / deleted)
+STEAMDB_COLOR_DEPOT  = 0xeb4034 # Bar color for depot embeds (new / deleted)
+STEAMDB_COLOR_BUILD  = 0x237feb # Bar color for build embeds (new)
 
 # <---------------------------------------------------------------------------->
 # <------                    SPEEDRUN API VARIABLES                      ------>
@@ -604,6 +606,7 @@ PACKAGE_ID          = 94152      # N++'s Steam package ID
 DEPOT_WIN_ID        = 230271
 DEPOT_MACOS_ID      = 230272
 DEPOT_LINUX_ID      = 230273
+STEAM_BRANCH        = 'public'
 BOTMASTER_NPP_ID    = 54303      # Botmaster's N++ player ID
 OUTTE_ID            = 361131     # outte's N++ player ID
 OUTTE2_ID           = 409973     # outte's secondary N++ player

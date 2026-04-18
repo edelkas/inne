@@ -2,7 +2,7 @@
 # need to interact with:
 #   - Twitch.com:   Fetching N-related streams
 #   - Speedrun.com: Leaderboards, notifications for new/verified runs, etc.
-#   - Steam:        Generate authentication tickets for N++
+#   - Steam:        Auth tickets, apps, branches, depots, manifests, builds, etc.
 #   - RSS:          Track various feeds for N++ updates.
 #   - N++:          Our custom game server (NPPServer) for mappacks
 #   - Custom API:   Our custom API (APIServer) to request stats on command
@@ -1089,6 +1089,426 @@ class SteamTicket < ActiveRecord::Base
       self.send("#{name}=".to_sym, value)
     }
   end
+end
+
+# An app represents each product on Steam, such as N++ (230270).
+# https://partner.steamgames.com/doc/store/application
+# https://steamdb.info/app/230270/
+class SteamApp < ActiveRecord::Base
+  has_many :steam_branches,     foreign_key: :app_id
+  has_many :steam_depots,       foreign_key: :app_id
+  has_many :steam_builds,       foreign_key: :app_id
+  has_many :steam_achievements, foreign_key: :app_id
+  alias_method :branches,     :steam_branches
+  alias_method :depots,       :steam_depots
+  alias_method :builds,       :steam_builds
+  alias_method :achievements, :steam_achievements
+
+  # TODO: Seed in old data from SteamDB
+  # TODO: Add timeout to steamworks method, and add retries here, as it sometimes hangs
+  def fetch_info(username: nil, password: nil, token: nil)
+    # Request app info from Steamworks
+    dbg("Steamworks: Fetching app info #{id}")
+    #stdout, stderr, status = steamworks(id, username: username, password: password, token: token, info: true)
+    #return if status.nil? || !status.success? || stdout.blank?
+    stdout = File.read('data.json')
+    json = JSON.load(stdout)
+    new_stuff = []
+
+    # Update basic app info
+    info = json['info']
+    update(
+      changenum: info['changenum'],
+      name:      info['name'],
+      sha:       [info['sha']].pack('H*'),
+      date:      Time.parse(info['date']),
+      url:       info['url'],
+      developer: info['developers'].join(', '),
+      free:      info['free'],
+      os_win:    info['platforms']['windows'],
+      os_linux:  info['platforms']['linux'],
+      os_mac:    info['platforms']['mac']
+    )
+
+    # Update technical app info
+    json['branches'].each do |h_branch|
+      # Detect new branches and update info (mainly build_id and date)
+      branch = SteamBranch.find_by(app_id: id, name: h_branch['name'])
+      if !branch
+        branch = SteamBranch.create(app_id: id, name: h_branch['name'])
+        new_stuff << branch
+      end
+      branch.update(
+        description: h_branch['description'],
+        build_id:    h_branch['build_id'],
+        updated:     Time.parse(h_branch['date']),
+        private:     h_branch['private'],
+        exists:      true
+      )
+
+      # Detect new builds
+      build = SteamBuild.find_by(id: h_branch['build_id'])
+      if !build
+        build = SteamBuild.create(
+          id:          h_branch['build_id'],
+          app_id:      id,
+          branch_name: h_branch['name'],
+          date:        Time.parse(h_branch['date'])
+        )
+        new_stuff << build
+      end
+
+      # Parse depots
+      h_branch['depots'].each do |h_depot|
+        # Detect new depots
+        depot = SteamDepot.find_by(id: h_depot['id'])
+        if !depot
+          depot = SteamDepot.create(
+            id:         h_depot['id'],
+            name:       h_depot['name'],
+            app_id:     id,
+            max_size:   h_depot['max_size'],
+            shared:     h_depot['shared_install'],
+            system:     h_depot['system_defined'],
+            os_win:     h_depot['config']['oslist'].include?('windows'),
+            os_linux:   h_depot['config']['oslist'].include?('linux'),
+            os_mac:     h_depot['config']['oslist'].include?('macos'),
+            exists:     true
+          )
+          new_stuff << depot
+        end
+
+        # Detect new manifests
+        manifest = SteamManifest.find_by(id: h_depot['manifest'])
+        if !manifest
+          manifest = SteamManifest.create(id: h_depot['manifest'], depot_id: h_depot['id'])
+          manifest.fetch(username: username, password: password, token: token, branch: h_branch['name'])
+          manifest.update(date: Time.now)
+          new_stuff << manifest
+        end
+
+      end
+    end
+
+    # Detect removed branches
+    branch_names = json['branches'].map{ |branch| branch['name'] }
+    removed_branches = SteamBranch.where(app_id: id, exists: true).where.not(name: branch_names)
+    removed_branches.update_all(exists: false)
+    removed_branches.map!(&:embed_deleted)
+
+    # Detect remove depots
+    depot_ids = json['branches'].map{ |branch| branch['depots'].map{ |depot| depot['id'] } }.flatten.uniq.sort
+    removed_depots = SteamDepot.where(app_id: id, exists: true).where.not(id: depot_ids)
+    removed_depots.update_all(exists: false)
+    removed_depots.map!(&:embed_deleted)
+
+    # Report changes
+    new_stuff.each(&:reload)
+    new_stuff.map!(&:embed_new)
+    to_report = new_stuff + removed_branches + removed_depots
+    return 0 if to_report.empty?
+    channel = !TEST ? find_channel(id: CHANNEL_DEBUG) : botmaster.pm
+    to_report.each_slice(DISCORD_EMBED_LIMIT){ |embeds|
+      send_message(channel, embeds: embeds)
+      sleep(0.5)
+    }
+    to_report.size
+  rescue => e
+    lex(e, "Steamworks: Failed to fetch app info #{id}")
+  end
+end
+
+# Apps on Steam can be developed on multiple branches, just like git projects.
+# Branches can be public or private (password-protected), and there's always at
+# least one branch, the default "public" branch.
+# N++ currently has 3 public branches: public, test and localisation.
+# https://partner.steamgames.com/doc/store/application/branches
+# https://steamdb.info/app/230270/depots/
+class SteamBranch < ActiveRecord::Base
+  belongs_to :steam_app, foreign_key: :app_id
+  alias_method :app,  :steam_app
+  alias_method :app=, :steam_app=
+
+  def builds
+    SteamBuild.where(app_id: app_id, branch_name: name)
+  end
+
+  def build
+    SteamBuild.find_by(id: build_id)
+  end
+
+  def versions(depot_id)
+    SteamVersion.where(build_id: builds.pluck(:id), depot_id: depot_id).order(:build_id, :date)
+  end
+
+  def version(depot_id)
+    SteamVersion.where(build_id: build_id, depot_id: depot_id).order(date: :desc).first
+  end
+
+  def steamdb
+    STEAMDB_URI_BRANCH % [app_id, name]
+  end
+
+  def embed(title)
+    branch_link = mdurl(name, steamdb, false)
+    build_link = mdurl(build.id.to_s, build.steamdb, false)
+    embed = Discordrb::Webhooks::Embed.new(
+      title:     title,
+      url:       steamdb,
+      color:     STEAMDB_COLOR_BRANCH,
+      timestamp: Time.now
+    )
+    embed.add_field(inline: true, name: 'Name',        value: branch_link)
+    embed.add_field(inline: true, name: 'Build',       value: build_link)
+    embed.add_field(inline: true, name: 'Description', value: description || 'None')
+    embed
+  end
+
+  def embed_new
+    embed("🌿 New #{app.name} Steam branch created")
+  end
+
+  def embed_deleted
+    embed("🌿 #{app.name} Steam branch deleted")
+  end
+end
+
+# Apps on Steam can be divided into depots, for organization. Common uses are to
+# separate releases by architecture, OS or language. Thus, when fetching an app,
+# not all depots are necessary, only those specific to your setup.
+# N++ currently has 3 depots, of which you only need 1:
+# 230271 (Windows Base), 230272 (OSX Base) and 230273 (Linux Base).
+# https://partner.steamgames.com/doc/store/application/depots
+# https://steamdb.info/app/230270/depots/
+class SteamDepot < ActiveRecord::Base
+  belongs_to :steam_app, foreign_key: :app_id
+  alias_method :app,       :steam_app
+  alias_method :app=,      :steam_app=
+
+  # All _different_ versions of the depot in the given branch
+  def versions(branch_name = STEAM_BRANCH)
+    branch = SteamBranch.find_by(app_id: app.id, name: branch_name)
+    return [] if !branch
+    SteamVersion.where(depot_id: id, build_id: branch.builds.pluck(&:id))
+                .order(:build_id, :date)
+                .uniq{ |v| v.manifest_id }
+  end
+
+  # Current version of the depot in the given branch
+  def version(branch_name = STEAM_BRANCH)
+    versions(branch_name).last
+  end
+
+  # All builds of the given branch in which this depot was updated
+  def builds(branch_name = STEAM_BRANCH)
+    SteamBuild.where(id: versions(branch_name).map(&:build_id)).order(:id)
+  end
+
+  # Current build of the depot in the given branch
+  def build
+    builds(branch_name).last
+  end
+
+  # All depot's manifests in the given branch
+  def manifests(branch_name = STEAM_BRANCH)
+    SteamManifest.where(id: versions(branch_name).map(&:manifest_id)).order(:id)
+  end
+
+  # Current manifest of the depot in the given branch
+  def manifest(branch_name = STEAM_BRANCH)
+    manifests(branch_name).last
+  end
+
+  def steamdb
+    STEAMDB_URI_DEPOT % id
+  end
+
+  def os_icons
+    icons = []
+    icons << $emojis['os_win']   if os_win
+    icons << $emojis['os_linux'] if os_linux
+    icons << $emojis['os_mac']   if os_mac
+    icons.join
+  end
+
+  def embed(title)
+    depot_link = mdurl(id.to_s, steamdb, false)
+    embed = Discordrb::Webhooks::Embed.new(
+      title:     title,
+      url:       steamdb,
+      color:     STEAMDB_COLOR_DEPOT,
+      timestamp: Time.now
+    )
+    embed.add_field(inline: true, name: 'ID',   value: depot_link)
+    embed.add_field(inline: true, name: 'OS',   value: os_icons)
+    embed.add_field(inline: true, name: 'Size', value: manifest.size_raw)
+    embed
+  end
+
+  def embed_new
+    embed("📦 New #{app.name} Steam depot created")
+  end
+
+  def embed_deleted
+    embed("📦 #{app.name} Steam depot deleted")
+  end
+end
+
+# A manifest is a snapshot of a depot at a given point. It contains the list of
+# files and other related metadata, which unfortunately doesn't include the date.
+# Manifests can be reused in different branches, which simply means that the
+# depot is the same on both branches, but they are depot-specific.
+# https://partner.steamgames.com/doc/store/application/builds
+# https://steamdb.info/depot/230271/manifests/
+class SteamManifest < ActiveRecord::Base
+  has_many :steam_versions, foreign_key: :manifest_id
+  belongs_to :steam_depot, foreign_key: :depot_id
+  alias_method :versions, :steam_versions
+  alias_method :depot,    :steam_depot
+
+  # Fetch manifest metadata from Steamworks. For some reason we need to specify
+  # the branch, even though manifests are branch-agnostic.
+  def fetch(username: nil, password: nil, token: nil, branch: nil)
+    dbg("Steamworks: Fetching manifest #{id}")
+    return err("Cannot fetch manifest, depot unknown") if !depot
+    stdout, stderr, status = steamworks(
+      depot.app.id, username: username, password: password, token: token,
+      branch: branch, depot: depot.id, manifest: id
+    )
+    return if status.nil? || !status.success? || stdout.blank?
+    json = JSON.load(stdout)
+    update(
+      name:            json['name'],
+      count:           json['count'],
+      size_raw:        json['size_raw'],
+      size_compressed: json['size_compressed'],
+      compressed:      json['compressed']
+    )
+  rescue => e
+    lex(e, "Steamworks: Failed to fetch manifest #{id}")
+  end
+
+  def builds
+    SteamBuild.where(id: versions.pluck(:build_id)).order(:id)
+  end
+
+
+  def branches
+    SteamBranch.where(app_id: depot.app.id, name: builds.pluck(:branch_name))
+  end
+
+
+  def steamdb
+    STEAMDB_URI_MANIFEST % [depot.id, id]
+  end
+
+  def embed(title, color)
+    depot_link = mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false)
+    build_links = builds.map{ |build| mdurl(build.id.to_s, build.steamdb, false) }.join(', ')
+    branch_links = branches.map{ |branch| mdurl(branch.name, branch.steamdb, false) }.join(', ')
+    embed = Discordrb::Webhooks::Embed.new(
+      title:     title,
+      url:       steamdb,
+      color:     color,
+      timestamp: date
+    )
+    embed.add_field(inline: true, name: 'Branches',  value: branch_links)
+    embed.add_field(inline: true, name: 'Builds',    value: build_links)
+    embed.add_field(inline: true, name: 'Depot',     value: depot_link)
+    embed.add_field(inline: true, name: 'Filecount', value: count.to_s)
+    embed.add_field(inline: true, name: 'Size',      value: format_size(size_raw))
+    embed.add_field(inline: true, name: 'DL size',   value: format_size(size_compressed))
+    embed
+  end
+
+  def embed_new
+    embed("🔧 New #{app.name} Steam patch submitted", nil)
+  end
+end
+
+# A build is a snapshot of an entire branch at a given point, they are identified
+# by a global incremental counter (the BuildID). Thus, a build can be thought of
+# as a mapping between depots and manifests: it specifies what manifest each
+# depot had at that time. This is the closest to a "game version", although
+# patches can be even more granular: a new manifest could be pushed without
+# generating a new build, usually if it's minor.
+# https://partner.steamgames.com/doc/store/application/builds
+# https://steamdb.info/app/230270/patchnotes/
+class SteamBuild < ActiveRecord::Base
+  has_many :steam_versions, foreign_key: :build_id
+  belongs_to :steam_app, foreign_key: :app_id
+  alias_method :versions, :steam_versions
+  alias_method :app,      :steam_app
+  alias_method :app=,     :steam_app=
+
+  def branch
+    SteamBranch.find_by(app_id: app_id, name: branch_name)
+  end
+
+  def manifests
+    SteamManifest.where(id: SteamVersion.where(build_id: id).pluck(:manifest_id).uniq).order(:date)
+  end
+
+  def manifests_updated
+    all_ids = SteamVersion.where(build_id: id).pluck(:manifest_id).uniq
+    old_ids = SteamVersion.where("build_id < #{id} AND manifest_id IN (#{all_ids.join(',')})")
+                          .pluck(:manifest_id).uniq
+    SteamManifest.where(id: all_ids - old_ids).order(:date)
+  end
+
+  def depots
+    SteamDepot.where(id: SteamVersion.where(build_id: id).pluck(:depot_id).uniq).order(:id)
+  end
+
+  def depots_updated
+    SteamDepot.where(id: manifests_updated.pluck(:depot_id).uniq).order(:id)
+  end
+
+  def steamdb
+    STEAMDB_URI_BUILD % id
+  end
+
+  def embed(title)
+    branch_link = mdurl(branch.name, branch.steamdb, false)
+    depot_links = depots.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(', ')
+    upd_depot_links = depots_updated.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(', ')
+    manifest_links = manifests_updated.map{ |manifest| mdurl(manifest.id.to_s, manifest.steamdb, false) }.join(', ')
+    embed = Discordrb::Webhooks::Embed.new(
+      title:     title,
+      url:       steamdb,
+      color:     STEAMDB_COLOR_BUILD,
+      timestamp: Time.now
+    )
+    embed.add_field(inline: true,  name: 'Branch',  value: branch_link)
+    embed.add_field(inline: true,  name: 'Depots',  value: depot_links)
+    embed.add_field(inline: true,  name: 'Updated', value: upd_depot_links)
+    embed.add_field(inline: false, name: 'Patches', value: manifest_links)
+    embed
+  end
+
+  def embed_new
+    embed("⚙️ New #{app.name} Steam build published")
+  end
+end
+
+# This class doesn't map to any Steam object, it stores the mapping between
+# depots and manifests.
+class SteamVersion < ActiveRecord::Base
+  belongs_to :steam_depot,    foreign_key: :depot_id
+  belongs_to :steam_build,    foreign_key: :build_id
+  belongs_to :steam_manifest, foreign_key: :manifest_id
+  alias_method :depot,    :steam_depot
+  alias_method :build,    :steam_build
+  alias_method :manifest, :steam_manifest
+end
+
+# Represents the achievements of a game, self-explanatory. N++ currently has 33.
+# https://partner.steamgames.com/doc/features/achievements
+# https://steamdb.info/app/230270/stats/
+class SteamAchievement < ActiveRecord::Base
+  belongs_to :steam_app, foreign_key: :app_id
+  alias_method :app,  :steam_app
+  alias_method :app=, :steam_app=
 end
 
 # Wrapper to track RSS or Atom feeds, usually for N++-related news

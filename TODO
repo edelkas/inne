@@ -1,5 +1,6 @@
+- Track https://app.assembla.com/spaces/nplusplus/support/tickets
 - Add reminder for Steam refresh token expiration a few days prior
-- Use Player.send_request with outte++ for update_completions, and other related methods.
+- Use Player.send_request with outte++ for update_completions, scan_boards, get_pb, ...
 - API: Build cache in memory for commonly accessed values (e.g. last archive IDs, results of analysis, dumps, traces, etc)
 - Sanitizing archives will actually remove outte++2 players, leading to server requests failing. Perhaps we should separate it to a different category so that it's blacklisted from score archival but the player itself isn't deleted.
 - For average lead rankings, filter players based on number of 0ths, not total scores, otherwise a player with 1 0th can easily top them

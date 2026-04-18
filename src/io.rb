@@ -1326,6 +1326,14 @@ def format_timespan(time, prec = -1, pad: false, ms: false, iso: false, zero: fa
   str
 end
 
+# Format a size in bytes
+def format_size(size, prec = 2, bin: true)
+  b = bin ? 1024 : 1000
+  i = Math::log(size, b).to_i
+  return "#{size} B" if i == 0
+  '%.*f %s%sB' % [prec, size.to_f / b ** i, 'BKMGTPEZY'[i], bin ? 'i' : '']
+end
+
 # Obtain a custom Discord timestamp. Format:
 #   <t:TIMESTAMP:STYLE> or <t:TIMESTAMP>
 # Supported styles:
