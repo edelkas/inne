@@ -49,6 +49,13 @@ SQL_LIMIT   = 0.75 # Max ratio between open connections and max connections
 # Rails pool
 POOL_LIMIT = 0.9 # Ratio of used up connections before warning
 
+# Linux timeout utility exit codes (any other exit code is preserved)
+TIMEOUT_CODE_TIMEDOUT = 124 # Process was timed out before finishing (SIGTERM)
+TIMEOUT_CODE_ERROR    = 125 # timeout itself failed
+TIMEOUT_CODE_INVOKE   = 126 # The command couldn't be invoked
+TIMEOUT_CODE_NOTFOUND = 127 # The command couldn't be found
+TIMEOUT_CODE_KILLED   = 137 # The process was killed before finishing (SIGKILL)
+
 # <---------------------------------------------------------------------------->
 # <------                      NETWORK VARIABLES                         ------>
 # <---------------------------------------------------------------------------->
@@ -607,6 +614,7 @@ DEPOT_WIN_ID        = 230271
 DEPOT_MACOS_ID      = 230272
 DEPOT_LINUX_ID      = 230273
 STEAM_BRANCH        = 'public'
+STEAM_COOLDOWN      = 30         # Min seconds to wait between logins to Steamworks
 BOTMASTER_NPP_ID    = 54303      # Botmaster's N++ player ID
 OUTTE_ID            = 361131     # outte's N++ player ID
 OUTTE2_ID           = 409973     # outte's secondary N++ player

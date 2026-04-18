@@ -1105,13 +1105,11 @@ class SteamApp < ActiveRecord::Base
   alias_method :achievements, :steam_achievements
 
   # TODO: Seed in old data from SteamDB
-  # TODO: Add timeout to steamworks method, and add retries here, as it sometimes hangs
   def fetch_info(username: nil, password: nil, token: nil)
     # Request app info from Steamworks
     dbg("Steamworks: Fetching app info #{id}")
-    #stdout, stderr, status = steamworks(id, username: username, password: password, token: token, info: true)
-    #return if status.nil? || !status.success? || stdout.blank?
-    stdout = File.read('data.json')
+    stdout, stderr, status = steamworks(id, username: username, password: password, token: token, info: true)
+    return if status.nil? || !status.success? || stdout.blank?
     json = JSON.load(stdout)
     new_stuff = []
 
@@ -1178,15 +1176,21 @@ class SteamApp < ActiveRecord::Base
           new_stuff << depot
         end
 
-        # Detect new manifests
-        manifest = SteamManifest.find_by(id: h_depot['manifest'])
-        if !manifest
-          manifest = SteamManifest.create(id: h_depot['manifest'], depot_id: h_depot['id'])
+        # Detect new manifests, or manifests that we didn't previusly fetch
+        manifest = SteamManifest.find_or_create_by(id: h_depot['manifest'], depot_id: h_depot['id'])
+        if !manifest.count
           manifest.fetch(username: username, password: password, token: token, branch: h_branch['name'])
           manifest.update(date: Time.now)
           new_stuff << manifest
         end
 
+        # Detect new versions
+        version = SteamVersion.find_or_create_by(
+          build_id:    h_branch['build_id'],
+          depot_id:    h_depot['id'],
+          manifest_id: h_depot['manifest']
+        )
+        version.update(date: Time.now) unless version.date
       end
     end
 
@@ -1194,13 +1198,13 @@ class SteamApp < ActiveRecord::Base
     branch_names = json['branches'].map{ |branch| branch['name'] }
     removed_branches = SteamBranch.where(app_id: id, exists: true).where.not(name: branch_names)
     removed_branches.update_all(exists: false)
-    removed_branches.map!(&:embed_deleted)
+    removed_branches.all.to_a.map!(&:embed_deleted)
 
     # Detect remove depots
     depot_ids = json['branches'].map{ |branch| branch['depots'].map{ |depot| depot['id'] } }.flatten.uniq.sort
     removed_depots = SteamDepot.where(app_id: id, exists: true).where.not(id: depot_ids)
     removed_depots.update_all(exists: false)
-    removed_depots.map!(&:embed_deleted)
+    removed_depots.all.to_a.map!(&:embed_deleted)
 
     # Report changes
     new_stuff.each(&:reload)
@@ -1249,14 +1253,14 @@ class SteamBranch < ActiveRecord::Base
     STEAMDB_URI_BRANCH % [app_id, name]
   end
 
-  def embed(title)
+  def embed(title, timestamp = Time.now)
     branch_link = mdurl(name, steamdb, false)
     build_link = mdurl(build.id.to_s, build.steamdb, false)
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
       url:       steamdb,
       color:     STEAMDB_COLOR_BRANCH,
-      timestamp: Time.now
+      timestamp: timestamp
     )
     embed.add_field(inline: true, name: 'Name',        value: branch_link)
     embed.add_field(inline: true, name: 'Build',       value: build_link)
@@ -1265,11 +1269,12 @@ class SteamBranch < ActiveRecord::Base
   end
 
   def embed_new
-    embed("🌿 New #{app.name} Steam branch created")
+    date = SteamVersion.where(build_id: builds.pluck(:id)).minimum(:date)
+    embed("🌿 New Steam branch created", date)
   end
 
   def embed_deleted
-    embed("🌿 #{app.name} Steam branch deleted")
+    embed("🌿 Steam branch deleted")
   end
 end
 
@@ -1331,7 +1336,7 @@ class SteamDepot < ActiveRecord::Base
     icons.join
   end
 
-  def embed(title)
+  def embed(title, timestamp = Time.now)
     depot_link = mdurl(id.to_s, steamdb, false)
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
@@ -1346,11 +1351,12 @@ class SteamDepot < ActiveRecord::Base
   end
 
   def embed_new
-    embed("📦 New #{app.name} Steam depot created")
+    date = SteamVersion.where(depot_id: id).minimum(:date)
+    embed("📦 New Steam depot created", date)
   end
 
   def embed_deleted
-    embed("📦 #{app.name} Steam depot deleted")
+    embed("📦 Steam depot deleted")
   end
 end
 
@@ -1397,12 +1403,16 @@ class SteamManifest < ActiveRecord::Base
     SteamBranch.where(app_id: depot.app.id, name: builds.pluck(:branch_name))
   end
 
+  def size
+    compressed ? size_compressed : size_raw
+  end
 
   def steamdb
     STEAMDB_URI_MANIFEST % [depot.id, id]
   end
 
   def embed(title, color)
+    manifest_link = mdurl(id.to_s, steamdb, false)
     depot_link = mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false)
     build_links = builds.map{ |build| mdurl(build.id.to_s, build.steamdb, false) }.join(', ')
     branch_links = branches.map{ |branch| mdurl(branch.name, branch.steamdb, false) }.join(', ')
@@ -1413,16 +1423,16 @@ class SteamManifest < ActiveRecord::Base
       timestamp: date
     )
     embed.add_field(inline: true, name: 'Branches',  value: branch_links)
-    embed.add_field(inline: true, name: 'Builds',    value: build_links)
     embed.add_field(inline: true, name: 'Depot',     value: depot_link)
+    embed.add_field(inline: true, name: 'Builds',    value: build_links)
     embed.add_field(inline: true, name: 'Filecount', value: count.to_s)
-    embed.add_field(inline: true, name: 'Size',      value: format_size(size_raw))
-    embed.add_field(inline: true, name: 'DL size',   value: format_size(size_compressed))
+    embed.add_field(inline: true, name: 'DL size',   value: format_size(size))
+    embed.add_field(inline: true, name: 'Manifest',  value: manifest_link)
     embed
   end
 
   def embed_new
-    embed("🔧 New #{app.name} Steam patch submitted", nil)
+    embed("📜 New Steam patch submitted", nil)
   end
 end
 
@@ -1469,25 +1479,25 @@ class SteamBuild < ActiveRecord::Base
   end
 
   def embed(title)
+    build_link = mdurl(id.to_s, steamdb, false)
     branch_link = mdurl(branch.name, branch.steamdb, false)
-    depot_links = depots.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(', ')
-    upd_depot_links = depots_updated.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(', ')
+    depot_links = depots_updated.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(' ')
     manifest_links = manifests_updated.map{ |manifest| mdurl(manifest.id.to_s, manifest.steamdb, false) }.join(', ')
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
       url:       steamdb,
       color:     STEAMDB_COLOR_BUILD,
-      timestamp: Time.now
+      timestamp: date
     )
-    embed.add_field(inline: true,  name: 'Branch',  value: branch_link)
-    embed.add_field(inline: true,  name: 'Depots',  value: depot_links)
-    embed.add_field(inline: true,  name: 'Updated', value: upd_depot_links)
-    embed.add_field(inline: false, name: 'Patches', value: manifest_links)
+    embed.add_field(inline: true,  name: 'ID',             value: build_link)
+    embed.add_field(inline: true,  name: 'Branch',         value: branch_link)
+    embed.add_field(inline: true,  name: 'Updated depots', value: depot_links)
+    embed.add_field(inline: false, name: 'New patches',    value: manifest_links)
     embed
   end
 
   def embed_new
-    embed("⚙️ New #{app.name} Steam build published")
+    embed("⚙️ New Steam build published")
   end
 end
 

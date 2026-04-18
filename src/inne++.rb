@@ -169,6 +169,7 @@ def initialize_vars
   $twitch_token    = nil
   $twitch_streams  = {}
   $active_tasks    = {}
+  $last_steamworks = nil
   $memory_warned   = false
   $memory_warned_c = false
   $linux           = RbConfig::CONFIG['host_os'].match?(/linux/i)

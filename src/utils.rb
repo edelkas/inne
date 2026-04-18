@@ -50,6 +50,7 @@ require 'active_record'
 require 'damerau-levenshtein'
 require 'digest'
 require 'net/http'
+require 'timeout'
 require 'unicode/emoji'
 require 'zip'
 
@@ -790,11 +791,13 @@ class ThreadPool
   end
 end
 
-# Execute a shell command
+# Execute a blocking shell command
 #   stream - Redirect STDOUT/STDERR to Ruby's terminal so we can see
 #   output - Return the output (STDOUT/STDERR/status) as an array of strings
-def shell(cmd, stream: LOG_SHELL, output: false)
+#  timeout - Seconds before sending SIGTERM. SIGKILL will be sent at twice this.
+def shell(cmd, stream: LOG_SHELL, output: true, timeout: 0)
   cmd += ' > /dev/null 2>&1' if !stream && !output
+  cmd.prepend("timeout -k #{2 * timeout} #{timeout} ") if timeout > 0
   dbg("Shell: #{cmd}")
   output ? Open3.capture3(cmd) : system(cmd)
 rescue => e
@@ -802,10 +805,10 @@ rescue => e
 end
 
 # Execute a python script
-def python(cmd, stream: LOG_SHELL, output: false, fast: false)
+def python(cmd, stream: LOG_SHELL, output: false, fast: false, timeout: 0)
   interpreter = fast ? $tools[:python_fast] : $tools[:python]
   return err("No #{fast ? 'fast ' : ''}Python interpreter found") if !interpreter
-  shell("#{interpreter} #{cmd}", stream: stream, output: output)
+  shell("#{interpreter} #{cmd}", stream: stream, output: output, timeout: timeout)
 rescue => e
   lex(e, "Failed to run Python script.")
   nil
@@ -2517,7 +2520,9 @@ def steamworks(
     dry:      false, # Dry run, only connects and verifies supplied ticket
     info:     false, # Fetch app info
     silent:   true,  # Disable logging to STDOUT, except for output itself
-    verbose:  false  # Enable verbose logging to STDOUT
+    verbose:  false, # Enable verbose logging to STDOUT
+    timeout:  10,    # Timeout in seconds before aborting (the API sometimes hangs)
+    retries:  5      # Retries in case of timeout before desisting altogether
   )
   path = "#{PATH_STEAM_AUTH} #{app}"
   path << ' -d' if dry
@@ -2532,7 +2537,22 @@ def steamworks(
   path << " -B #{branch}"   if branch
   path << " -D #{depot}"    if depot
   path << " -M #{manifest}" if manifest
-  python(path, output: true)
+
+  attempts = 0
+  while (attempts += 1) <= retries
+    # Separate logins to Steamworks by at least 30 seconds
+    # TODO: Instead we should considering opening a single login in the background
+    elapsed = Time.now.to_f - $last_steamworks.to_f
+    if elapsed < STEAM_COOLDOWN
+      dbg("Steamworks cooldown: Waiting for %.1fs" % [STEAM_COOLDOWN - elapsed])
+      sleep(STEAM_COOLDOWN - elapsed)
+    end
+    $last_steamworks = Time.now
+
+    # Perform request, retry only in case of timeout
+    res = python(path, output: true, timeout: timeout)
+    return res if !res || res[2].exitstatus != TIMEOUT_CODE_TIMEDOUT
+  end
 end
 
 # <---------------------------------------------------------------------------->
