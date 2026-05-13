@@ -1108,7 +1108,7 @@ class SteamApp < ActiveRecord::Base
 
   def fetch_info(username: nil, password: nil, token: nil)
     # Request app info from Steamworks
-    log("Steamworks: Fetching app info #{id}")
+    dbg("Steamworks: Fetching app info #{id}")
     stdout, stderr, status = steamworks(id, username: username, password: password, token: token, info: true)
     return if status.nil? || !status.success? || stdout.blank?
     json = JSON.load(stdout)
@@ -2078,7 +2078,7 @@ class Feed
   # Default parser, should work for most standard RSS feeds
   def parse_rss(data)
     RSS::Parser.parse(data).items.map{ |item|
-      desc = HtmlToMarkdown.convert(item.description.gsub(/\n+/, "\n"))
+      desc = HtmlToMarkdown.convert(item.description.gsub(/\n+/, "\n")).content
       enc = item.enclosure
       image = enc && enc.type.split('/').first == 'image' ? enc.url : nil
       FeedItem.new(item.title, desc, nil, item.link, item.date, image)
