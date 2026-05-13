@@ -449,7 +449,7 @@ def send_scores(event, offset: nil, date_change: nil)
   ss        = msg =~ /screenscores/i || msg =~ /shotscores/i || msg =~ /scoreshot/i || msg =~ /scorescreen/i
   nav       = parse_nav(msg) && !ss && ['hs', 'sr'].include?(board)
   full      = parse_full(msg) && h.is_mappack? && !nav && !ss
-  use_v2    = SCORE_THUMBNAILS
+  use_v2    = SCORE_THUMBNAILS && !nav
   use_embed = (SCORE_EMBEDS && !msg[/\bmobile\b/i] || ss) && !use_v2
   date      = parse_date(msg)
   date      = [date, Archive::EPOCH].max if date && !h.is_mappack?

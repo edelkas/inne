@@ -101,6 +101,7 @@ def send_test(event)
   #lvl = Level.find_by(name: 'S-A-00-00')
   #count = lvl.parse_raw_scores("boards/json/S/#{lvl.name}.json")
   #succ("Parsed #{count} raw scores")
+  SteamDB.seed_updates(Zlib.inflate(File.read("#{DIR_DB}/steamdb_history.deflate")))
 end
 
 def send_dday_stats
@@ -604,17 +605,11 @@ def test_steam_info(event)
   perror("No refresh token found") if !token
   app = SteamApp.find_by(id: APP_ID)
   perror("N++ Steam app isn't initialized, run `!steam_seed`") if !app || !app.name
-  branch = app.branches.first
-  perror("No branches found") if !branch
-  build = branch.build
-  perror("No builds found for branch #{branch.name}") if !build
-  depot = app.depots.first
-  perror("No depots founds") if !depot
-  manifest = depot.manifests.first
-  perror("No manifests found") if !manifest
+  version = SteamBranchVersion.last
+  depot, manifest = version.build.mapping.first
   embeds = [
-    branch.embed_new, depot.embed_new, build.embed_new,
-    manifest.embed_new, branch.embed_deleted, depot.embed_deleted
+    version.branch.embed_new, depot.embed_new, version.embed_new,
+    manifest.embed_new, version.branch.embed_deleted, depot.embed_deleted
   ]
   send_message(event, embeds: embeds)
 end
@@ -625,7 +620,11 @@ def seed_steam(event)
   perror("No refresh token found") if !token
   app = SteamApp.find_or_create_by(id: APP_ID)
   changes = app.fetch_info(token: token)
-  event << "Fetched info from Steam, no changes to report" if changes == 0
+  event << "Fetched info from Steam, found #{changes} changes"
+  manifests = SteamManifest.where(count: nil).where.not(gid: nil).to_a
+  log("Found #{manifests.size} manifests that need to be fetched")
+  manifests.each{ |m| m.fetch(token: token) }
+  event << "Fetched #{manifests.count} public manifests"
 end
 
 # Restart outte's process

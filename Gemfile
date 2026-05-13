@@ -11,6 +11,7 @@ source 'https://rubygems.org' do
   gem 'puma'
   gem 'rss'
   gem 'html-to-markdown'
+  gem 'nokogiri'
 
   group :imaging do
     gem 'rmagick'

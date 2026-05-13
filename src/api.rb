@@ -17,6 +17,7 @@ require 'octicons'
 require 'puma'
 require 'rack'
 require 'rss'
+require 'set'
 require 'socket'
 
 module Twitch extend self
@@ -1104,7 +1105,6 @@ class SteamApp < ActiveRecord::Base
   alias_method :builds,       :steam_builds
   alias_method :achievements, :steam_achievements
 
-  # TODO: Seed in old data from SteamDB
   def fetch_info(username: nil, password: nil, token: nil)
     # Request app info from Steamworks
     dbg("Steamworks: Fetching app info #{id}")
@@ -1131,83 +1131,82 @@ class SteamApp < ActiveRecord::Base
     # Update technical app info
     json['branches'].each do |h_branch|
       # Detect new branches and update info (mainly build_id and date)
-      branch = SteamBranch.find_by(app_id: id, name: h_branch['name'])
-      if !branch
-        branch = SteamBranch.create(app_id: id, name: h_branch['name'])
-        new_stuff << branch
+      branch = SteamBranch.find_or_create_by(app_id: id, name: h_branch['name'], deleted: nil) do |b|
+        b.created = Time.parse(h_branch['date'])
+        new_stuff << b
         succ("New branch #{h_branch['name']} found")
       end
       branch.update(
-        description: h_branch['description'],
-        build_id:    h_branch['build_id'],
+        description: h_branch['description'] || branch.description,
+        official_id: h_branch['build_id'],
         updated:     Time.parse(h_branch['date']),
-        private:     h_branch['private'],
-        exists:      true
+        private:     h_branch['private']
       )
 
-      # Detect new builds
-      build = SteamBuild.find_by(id: h_branch['build_id'])
-      if !build
-        build = SteamBuild.create(
-          id:          h_branch['build_id'],
-          app_id:      id,
-          branch_name: h_branch['name'],
-          date:        Time.parse(h_branch['date'])
-        )
-        new_stuff << build
-        succ("New build #{h_branch['build_id']} for branch #{h_branch['name']} found")
-      end
-
       # Parse depots
-      h_branch['depots'].each do |h_depot|
-        # Detect new depots
-        depot = SteamDepot.find_by(id: h_depot['id'])
-        if !depot
-          depot = SteamDepot.create(
-            id:         h_depot['id'],
-            name:       h_depot['name'],
-            app_id:     id,
-            max_size:   h_depot['max_size'],
-            shared:     h_depot['shared_install'],
-            system:     h_depot['system_defined'],
-            os_win:     h_depot['config']['oslist'].include?('windows'),
-            os_linux:   h_depot['config']['oslist'].include?('linux'),
-            os_mac:     h_depot['config']['oslist'].include?('macos'),
-            exists:     true
-          )
-          new_stuff << depot
+      content = h_branch['depots'].map{ |h_depot|
+        # Detect depots that are either new or re-added to the app
+        depot = SteamDepot.find_or_create_by(id: h_depot['id'], removed: nil) do |d|
+          d.name     = h_depot['name'],
+          d.app_id   = id,
+          d.max_size = h_depot['max_size'],
+          d.shared   = h_depot['shared_install'],
+          d.system   = h_depot['system_defined'],
+          d.os_win   = h_depot['config']['oslist'].include?('windows'),
+          d.os_linux = h_depot['config']['oslist'].include?('linux'),
+          d.os_mac   = h_depot['config']['oslist'].include?('macos'),
+          d.added    = Time.now
+          new_stuff << d
           succ("New depot #{h_depot['id']} found")
         end
 
         # Detect new manifests, or manifests that we didn't previusly fetch
-        manifest = SteamManifest.find_or_create_by(id: h_depot['manifest'], depot_id: h_depot['id'])
-        if !manifest.count
-          manifest.fetch(username: username, password: password, token: token, branch: h_branch['name'])
-          manifest.update(date: Time.now)
-          new_stuff << manifest
+        manifest = SteamManifest.find_or_create_by(gid: h_depot['manifest'], depot_id: h_depot['id']) do |m|
+          m.date = Time.now
+          new_stuff << m
           succ("New manifest #{h_depot['manifest']} for depot #{h_depot['id']} found")
         end
+        manifest.fetch(username: username, password: password, token: token, branch: h_branch['name']) if !manifest.count
 
-        # Detect new versions
-        version = SteamVersion.find_or_create_by(
-          build_id:    h_branch['build_id'],
-          depot_id:    h_depot['id'],
-          manifest_id: h_depot['manifest']
+        [depot, manifest]
+      }.to_h
+
+      # Detect new builds
+      md5 = SteamBuild.hash(content.map{ |d, m| [d.id, m.gid] }.to_h)
+      build = SteamBuild.find_or_create_by(app_id: id, md5: md5)
+      if build.previously_new_record?
+        content.each{ |depot, manifest|
+          SteamBuildContent.create(build_id: build.id, depot_id: depot.id, manifest_id: manifest.id)
+        }
+        succ("New build found: #{md5.unpack1('H*').upcase}")
+      end
+
+      # Detect new branch versions
+      version = branch.version
+      is_new_content = version.build_id != build.id
+      is_new_build_id = version.official_id != h_branch['build_id']
+      if is_new_build_id || is_new_content
+        version = SteamBranchVersion.create(
+          branch_id:   branch.id,
+          build_id:    build.id,
+          official_id: h_branch['build_id'],
+          date:        Time.parse(h_branch['date'])
         )
-        version.update(date: Time.now) unless version.date
+        new_stuff << version if is_new_build_id
+        succ("New version on ID #{h_branch['build_id']} for branch #{h_branch['name']} found")
       end
     end
 
     # Detect removed branches
     branch_names = json['branches'].map{ |branch| branch['name'] }
-    removed_branches = SteamBranch.where(app_id: id, exists: true).where.not(name: branch_names)
-    removed_branches.update_all(exists: false)
+    removed_branches = SteamBranch.where(app_id: id, deleted: nil).where.not(name: branch_names)
+    removed_branches.update_all(deleted: Time.now)
     removed_branches.all.to_a.map!(&:embed_deleted)
 
-    # Detect remove depots
+    # Detect removed depots
     depot_ids = json['branches'].map{ |branch| branch['depots'].map{ |depot| depot['id'] } }.flatten.uniq.sort
-    removed_depots = SteamDepot.where(app_id: id, exists: true).where.not(id: depot_ids)
-    removed_depots.update_all(exists: false)
+    removed_depots = SteamDepot.where(app_id: id, removed: nil).where.not(id: depot_ids)
+    removed_depots.update_all(removed: Time.now)
     removed_depots.all.to_a.map!(&:embed_deleted)
 
     # Report changes
@@ -1224,6 +1223,10 @@ class SteamApp < ActiveRecord::Base
   rescue => e
     lex(e, "Steamworks: Failed to fetch app info #{id}")
   end
+
+  def default_branch
+    branches.find_by(name: STEAM_BRANCH)
+  end
 end
 
 # Apps on Steam can be developed on multiple branches, just like git projects.
@@ -1233,24 +1236,25 @@ end
 # https://partner.steamgames.com/doc/store/application/branches
 # https://steamdb.info/app/230270/depots/
 class SteamBranch < ActiveRecord::Base
-  belongs_to :steam_app, foreign_key: :app_id
-  alias_method :app,  :steam_app
-  alias_method :app=, :steam_app=
+  has_many :steam_branch_versions, -> { order(:date) }, foreign_key: :branch_id
+  belongs_to :steam_app,   foreign_key: :app_id
+  alias_method :versions, :steam_branch_versions
+  alias_method :app,      :steam_app
 
-  def builds
-    SteamBuild.where(app_id: app_id, branch_name: name)
+  # Fetch current version of the branch
+  def version
+    versions.last
   end
 
-  def build
-    SteamBuild.find_by(id: build_id)
+  # Versions where the build ID was changed
+  # TODO: For performance, we should do this with SQL (e.g. LAG)
+  def patches
+    versions.chunk_while{ |a, b| a.official_id == b.official_id }.map(&:first)
   end
 
-  def versions(depot_id)
-    SteamVersion.where(build_id: builds.pluck(:id), depot_id: depot_id).order(:build_id, :date)
-  end
-
-  def version(depot_id)
-    SteamVersion.where(build_id: build_id, depot_id: depot_id).order(date: :desc).first
+  # Fetch all depots included in this branch
+  def depots
+    version.build.depots
   end
 
   def steamdb
@@ -1259,26 +1263,27 @@ class SteamBranch < ActiveRecord::Base
 
   def embed(title, timestamp = Time.now)
     branch_link = mdurl(name, steamdb, false)
-    build_link = mdurl(build.id.to_s, build.steamdb, false)
+    build_link = mdurl(official_id.to_s, version.steamdb, false)
+    depot_links = depots.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(' ')
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
       url:       steamdb,
       color:     STEAMDB_COLOR_BRANCH,
       timestamp: timestamp
     )
-    embed.add_field(inline: true, name: 'Name',        value: branch_link)
-    embed.add_field(inline: true, name: 'Build',       value: build_link)
-    embed.add_field(inline: true, name: 'Description', value: description || 'None')
+    embed.add_field(inline: true,  name: 'Name',        value: branch_link)
+    embed.add_field(inline: true,  name: 'Build',       value: build_link)
+    embed.add_field(inline: true,  name: 'Depots',      value: depot_links)
+    embed.add_field(inline: false, name: 'Description', value: description || 'None')
     embed
   end
 
   def embed_new
-    date = SteamVersion.where(build_id: builds.pluck(:id)).minimum(:date)
-    embed("🌿 New Steam branch created", date)
+    embed("🌿 New Steam branch created", created || versions.minimum(:date))
   end
 
   def embed_deleted
-    embed("🌿 Steam branch deleted")
+    embed("🌿 Steam branch deleted", deleted)
   end
 end
 
@@ -1290,42 +1295,32 @@ end
 # https://partner.steamgames.com/doc/store/application/depots
 # https://steamdb.info/app/230270/depots/
 class SteamDepot < ActiveRecord::Base
+  has_many :steam_build_contents, foreign_key: :depot_id
   belongs_to :steam_app, foreign_key: :app_id
-  alias_method :app,       :steam_app
-  alias_method :app=,      :steam_app=
+  alias_method :contents, :steam_build_contents
+  alias_method :app,      :steam_app
 
-  # All _different_ versions of the depot in the given branch
-  def versions(branch_name = STEAM_BRANCH)
-    branch = SteamBranch.find_by(app_id: app.id, name: branch_name)
-    return [] if !branch
-    SteamVersion.where(depot_id: id, build_id: branch.builds.pluck(&:id))
-                .order(:build_id, :date)
-                .uniq{ |v| v.manifest_id }
+  # Calculates all individual changes of this depot in the given branch and
+  # returns them as (date, version_id, manifest_id) tuples.
+  def changes(branch: nil, encrypted: false)
+    SteamBranchVersion.joins("INNER JOIN steam_build_contents ON steam_build_contents.build_id = steam_branch_versions.build_id")
+                      .where("steam_branch_versions.branch_id = #{branch.id} AND steam_build_contents.depot_id = #{id}")
+                      .order(:date)
+                      .pluck(:date, :id, 'steam_build_contents.manifest_id')
+                      .chunk_while{ |a, b| a[2] == b[2] }
+                      .map(&:first)
   end
 
-  # Current version of the depot in the given branch
-  def version(branch_name = STEAM_BRANCH)
-    versions(branch_name).last
-  end
-
-  # All builds of the given branch in which this depot was updated
-  def builds(branch_name = STEAM_BRANCH)
-    SteamBuild.where(id: versions(branch_name).map(&:build_id)).order(:id)
-  end
-
-  # Current build of the depot in the given branch
-  def build
-    builds(branch_name).last
-  end
-
-  # All depot's manifests in the given branch
-  def manifests(branch_name = STEAM_BRANCH)
-    SteamManifest.where(id: versions(branch_name).map(&:manifest_id)).order(:id)
+  # All depot's manifests without duplicates, sorted by when they were first found, as a Relation.
+  def manifests(encrypted: false)
+    query = SteamManifest.where(depot_id: id).order(:date)
+    query = query.where.not(gid: nil) unless encrypted
+    query
   end
 
   # Current manifest of the depot in the given branch
-  def manifest(branch_name = STEAM_BRANCH)
-    manifests(branch_name).last
+  def manifest(branch)
+    branch.version.build.contents.find_by(depot_id: id).manifest
   end
 
   def steamdb
@@ -1340,7 +1335,8 @@ class SteamDepot < ActiveRecord::Base
     icons.join
   end
 
-  def embed(title, timestamp = Time.now)
+  def embed(title, timestamp = Time.now, branch: nil)
+    branch = app.default_branch unless branch
     depot_link = mdurl(id.to_s, steamdb, false)
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
@@ -1350,81 +1346,98 @@ class SteamDepot < ActiveRecord::Base
     )
     embed.add_field(inline: true, name: 'ID',   value: depot_link)
     embed.add_field(inline: true, name: 'OS',   value: os_icons)
-    embed.add_field(inline: true, name: 'Size', value: manifest.size_raw)
+    embed.add_field(inline: true, name: 'Size', value: format_size(manifest(branch).size_raw))
     embed
   end
 
   def embed_new
-    date = SteamVersion.where(depot_id: id).minimum(:date)
-    embed("📦 New Steam depot created", date)
+    embed("📦 New Steam depot added", added)
   end
 
   def embed_deleted
-    embed("📦 Steam depot deleted")
+    embed("📦 Steam depot removed", removed)
   end
 end
 
 # A manifest is a snapshot of a depot at a given point. It contains the list of
 # files and other related metadata, which unfortunately doesn't include the date.
 # Manifests can be reused in different branches, which simply means that the
-# depot is the same on both branches, but they are depot-specific.
+# depot is the same on both branches, but they are depot-specific. Manifests
+# can also be encrypted when present on private (password-requiring) branches.
+# Manifests are identified by a randomly generated 64bit integer GID, which is
+# a 128bit blob when encrypted. History-matching could perhaps be used to match
+# public and encrypted manifests, but I've given up on this idea because the
+# metadata (e.g. buildID) isn't consistent enough to be certain.
 # https://partner.steamgames.com/doc/store/application/builds
 # https://steamdb.info/depot/230271/manifests/
+# https://github.com/DoctorMcKay/node-steam-user/wiki/Steam-CDN-Client
 class SteamManifest < ActiveRecord::Base
-  has_many :steam_versions, foreign_key: :manifest_id
-  belongs_to :steam_depot, foreign_key: :depot_id
-  alias_method :versions, :steam_versions
+  has_many :steam_build_contents, foreign_key: :manifest_id
+  belongs_to :steam_depot,        foreign_key: :depot_id
+  alias_method :contents, :steam_build_contents
   alias_method :depot,    :steam_depot
 
   # Fetch manifest metadata from Steamworks. For some reason we need to specify
   # the branch, even though manifests are branch-agnostic.
   def fetch(username: nil, password: nil, token: nil, branch: nil)
-    dbg("Steamworks: Fetching manifest #{id}")
+    dbg("Steamworks: Fetching manifest #{gid}")
+    return err("Cannot fetch encrypted manifest") if encrypted?
     return err("Cannot fetch manifest, depot unknown") if !depot
+    if !branch
+      return err("Cannot fetch manifest, no known branches") if !branches.last
+      branch = branches.last.name
+    end
     stdout, stderr, status = steamworks(
       depot.app.id, username: username, password: password, token: token,
-      branch: branch, depot: depot.id, manifest: id
+      branch: branch, depot: depot.id, manifest: gid
     )
     return if status.nil? || !status.success? || stdout.blank?
     json = JSON.load(stdout)
     update(
-      name:            json['name'],
+      name:            name || json['name'],
       count:           json['count'],
       size_raw:        json['size_raw'],
-      size_compressed: json['size_compressed'],
-      compressed:      json['compressed']
+      size_compressed: json['size_compressed']
     )
   rescue => e
-    lex(e, "Steamworks: Failed to fetch manifest #{id}")
+    lex(e, "Steamworks: Failed to fetch manifest #{gid}")
   end
 
-  def builds
-    SteamBuild.where(id: versions.pluck(:build_id)).order(:id)
+  def encrypted?
+    gid.nil? && !encrypted_gid.nil?
   end
 
+  def versions
+    SteamBranchVersion.joins("INNER JOIN steam_build_contents ON steam_build_contents.build_id = steam_branch_versions.build_id")
+                      .where("steam_build_contents.manifest_id = #{id}")
+  end
 
   def branches
-    SteamBranch.where(app_id: depot.app.id, name: builds.pluck(:branch_name))
+    SteamBranch.where(id: versions.pluck(:branch_id))
+  end
+
+  def compressed?
+    size_compressed != size_raw
   end
 
   def size
-    compressed ? size_compressed : size_raw
+    compressed? ? size_compressed : size_raw
   end
 
   def steamdb
-    STEAMDB_URI_MANIFEST % [depot.id, id]
+    STEAMDB_URI_MANIFEST % [depot.id, gid]
   end
 
   def embed(title, color)
-    manifest_link = mdurl(id.to_s, steamdb, false)
+    manifest_link = mdurl(gid.to_s, steamdb, false)
     depot_link = mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false)
-    build_links = builds.map{ |build| mdurl(build.id.to_s, build.steamdb, false) }.join(', ')
+    build_links = versions.map{ |v| mdurl(v.official_id.to_s, v.steamdb, false) }.uniq.join(', ')
     branch_links = branches.map{ |branch| mdurl(branch.name, branch.steamdb, false) }.join(', ')
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
       url:       steamdb,
       color:     color,
-      timestamp: date
+      timestamp: date || Time.now
     )
     embed.add_field(inline: true, name: 'Branches',  value: branch_links)
     embed.add_field(inline: true, name: 'Depot',     value: depot_link)
@@ -1444,49 +1457,140 @@ end
 # by a global incremental counter (the BuildID). Thus, a build can be thought of
 # as a mapping between depots and manifests: it specifies what manifest each
 # depot had at that time. This is the closest to a "game version", although
-# patches can be even more granular: a new manifest could be pushed without
-# generating a new build, usually if it's minor.
+# patches can be even more granular: manifests can be changed without generating
+# a new build.
+#
+# Multiple branches can be pointed to the same build, in which case they should
+# identical at that point (bar metadata). However, since the buildID is just
+# metadata, on rare occasions you can see branches on the same build but with
+# different depots or manifests (e.g. 1812834). This happens even more if you
+# consider private branches, since encrypted manifests might have different GIDs
+# but actually be the same.
+#
+# Thus, instead of identifying builds by their official ID, I'm doing so by
+# hashing their contents (depot -> manifest mapping), even when their official
+# buildIDs match.
 # https://partner.steamgames.com/doc/store/application/builds
 # https://steamdb.info/app/230270/patchnotes/
 class SteamBuild < ActiveRecord::Base
-  has_many :steam_versions, foreign_key: :build_id
-  belongs_to :steam_app, foreign_key: :app_id
-  alias_method :versions, :steam_versions
+  has_many :steam_build_contents,  foreign_key: :build_id
+  has_many :steam_branch_versions, foreign_key: :build_id
+  belongs_to :steam_app,           foreign_key: :app_id
+  alias_method :contents, :steam_build_contents
+  alias_method :versions, :steam_branch_versions
   alias_method :app,      :steam_app
-  alias_method :app=,     :steam_app=
 
-  def branch
-    SteamBranch.find_by(app_id: app_id, name: branch_name)
+  # Hash the contents of a build. They should be provided as a hash mapping
+  # depot IDs to manifest GIDs. For public manifests the GID is a 64bit integer,
+  # for encrypted ones it's a 128bit binary string.
+  def self.hash(content)
+    md5(content.sort_by(&:first).map{ |d_id, m_id| "#{d_id}:#{m_id}" }.join(','))
   end
 
-  def manifests
-    SteamManifest.where(id: SteamVersion.where(build_id: id).pluck(:manifest_id).uniq).order(:date)
+  # Find surface changes (manifests added, changed or removed) as a hash keyed by depots
+  def self.diff(b1, b2)
+    map1 = b1.mapping
+    map2 = b2.mapping
+    keys = (map1.keys + map2.keys).uniq.sort_by{ |d| d.id }
+    keys.map{ |d| [d, {old: map1[d], new: map2[d]}] }.reject{ |d, c| c[:old] == c[:new] }.to_h
   end
 
-  def manifests_updated
-    all_ids = SteamVersion.where(build_id: id).pluck(:manifest_id).uniq
-    old_ids = SteamVersion.where("build_id < #{id} AND manifest_id IN (#{all_ids.join(',')})")
-                          .pluck(:manifest_id).uniq
-    SteamManifest.where(id: all_ids - old_ids).order(:date)
+  # Return contents as a hash, mapping depots to manifests
+  def mapping
+    contents.map{ |c| [c.depot, c.manifest] }.to_h
   end
 
+  # A private build has at least one encrypted manifest
+  def private?
+    !manifests.where(gid: nil).empty?
+  end
+
+  # All branches that used this build at some point
+  def branches
+    SteamBranch.where(id: versions.pluck(:branch_id))
+  end
+
+  # All depots included in this build
   def depots
-    SteamDepot.where(id: SteamVersion.where(build_id: id).pluck(:depot_id).uniq).order(:id)
+    SteamDepot.where(id: contents.pluck(:depot_id))
   end
 
-  def depots_updated
-    SteamDepot.where(id: manifests_updated.pluck(:depot_id).uniq).order(:id)
+  # All manifests present in this build
+  def manifests
+    SteamManifest.where(id: contents.pluck(:manifest_id))
+  end
+end
+
+# This class doesn't directly map to any Steam object. Rather, it stores the
+# mapping between depots and manifests. Its elements are essentially tuples
+# of the form (build_id, depot_id, manifest_id).
+class SteamBuildContent < ActiveRecord::Base
+  belongs_to :steam_build,    foreign_key: :build_id
+  belongs_to :steam_depot,    foreign_key: :depot_id
+  belongs_to :steam_manifest, foreign_key: :manifest_id
+  alias_method :build,    :steam_build
+  alias_method :depot,    :steam_depot
+  alias_method :manifest, :steam_manifest
+end
+
+# This class also doesn't map to any Steam object. It stores the version history
+# of each branch so that we can trace it. Its elements are essentially tuples
+# of the form (branch_id, build_id, official_id, date).
+class SteamBranchVersion < ActiveRecord::Base
+  belongs_to :steam_branch, foreign_key: :branch_id
+  belongs_to :steam_build,  foreign_key: :build_id
+  alias_method :branch, :steam_branch
+  alias_method :build,  :steam_build
+
+  # Previous version (chronologically) of this branch. Ignore transitional builds by default.
+  def previous(official = true)
+    SteamBranchVersion.where("branch_id = #{branch_id} AND date < '#{date}'")
+                      .order(date: :desc).first
+  end
+
+  # Next version (chronologically) of this branch. Ignore transitional builds by default.
+  def next(official = true)
+    SteamBranchVersion.where("branch_id = #{branch_id} AND date > '#{date}'")
+                      .order(:date).first
+  end
+
+  # Changes in this version
+  def diff
+    return {} unless prev = previous
+    SteamBuild.diff(prev.build, build)
+  end
+
+  # Whether this branch updat was a rollback according to SteamDB (i.e. the buildID
+  # is reduced). An actual build being reused doesn't necessarily count then.
+  def rollback?
+    return false unless prev = previous
+    official_id < prev.official_id
+  end
+
+  # Fetch the manifest for the given repo in this version
+  def manifest(depot)
+    build.contents.find_by(depot_id: depot.id)&.manifest
+  end
+
+  # Depots that were actually changed in this version
+  def depots
+    diff.keys
+  end
+
+  # Manifests that were actually changed in this version
+  def manifests
+    diff.values.map{ |c| c[:new] }.compact
   end
 
   def steamdb
-    STEAMDB_URI_BUILD % id
+    STEAMDB_URI_BUILD % official_id
   end
 
   def embed(title)
-    build_link = mdurl(id.to_s, steamdb, false)
+    build_link = mdurl(official_id.to_s, steamdb, false)
     branch_link = mdurl(branch.name, branch.steamdb, false)
-    depot_links = depots_updated.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(' ')
-    manifest_links = manifests_updated.map{ |manifest| mdurl(manifest.id.to_s, manifest.steamdb, false) }.join(', ')
+    depot_links = depots.map{ |depot| mdurl("#{depot.os_icons} #{depot.id}", depot.steamdb, false) }.join(' ')
+    manifest_links = manifests.map{ |manifest| mdurl(manifest.gid.to_s, manifest.steamdb, false) }.join(', ')
     embed = Discordrb::Webhooks::Embed.new(
       title:     title,
       url:       steamdb,
@@ -1505,17 +1609,6 @@ class SteamBuild < ActiveRecord::Base
   end
 end
 
-# This class doesn't map to any Steam object, it stores the mapping between
-# depots and manifests.
-class SteamVersion < ActiveRecord::Base
-  belongs_to :steam_depot,    foreign_key: :depot_id
-  belongs_to :steam_build,    foreign_key: :build_id
-  belongs_to :steam_manifest, foreign_key: :manifest_id
-  alias_method :depot,    :steam_depot
-  alias_method :build,    :steam_build
-  alias_method :manifest, :steam_manifest
-end
-
 # Represents the achievements of a game, self-explanatory. N++ currently has 33.
 # https://partner.steamgames.com/doc/features/achievements
 # https://steamdb.info/app/230270/stats/
@@ -1523,6 +1616,417 @@ class SteamAchievement < ActiveRecord::Base
   belongs_to :steam_app, foreign_key: :app_id
   alias_method :app,  :steam_app
   alias_method :app=, :steam_app=
+end
+
+# Encapsulates functionality to parse data from SteamDB, mainly for seeding the
+# Steam classes above for the first time
+module SteamDB extend self
+
+  # Parse SteamDB's updates list (https://steamdb.info/app/230270/history/)
+  def seed_updates(html, app_id: APP_ID)
+    # A bit unorthodox, but we only need this library here and almost never need
+    # to execute this function.
+    require 'nokogiri'
+
+    # Auxiliary struct to parse individual changes to any field. A change can be of 3 types:
+    # additions, modifications and deletions. The key identifies the field, followed by
+    # the old and new value. Additions only have new values, and deletions only have old values.
+    changeStruct = Struct.new(:type, :key, :old, :new, :valid)
+
+    # Hashes to temporarily store data before bulk-inserting into db
+    branches = Hash.new{ |hash, key|
+      branch = hash.find{ |k, v| v[:name] == key && v[:deleted].nil? }
+      next branch.last if branch
+      id = hash.size + 1
+      hash[id] = {
+        id: id, app_id: app_id, name: key, description: nil, official_id: nil,
+        created: nil, updated: nil, deleted: nil, private: false
+      }
+    }
+    depots = Hash.new{ |hash, key|
+      hash[key] = {
+        id: key, app_id: app_id, name: nil, max_size: nil, shared: false, system: false,
+        os_win: false, os_linux: false, os_mac: false, added: nil, removed: nil
+      }
+    }
+    manifests = Hash.new{ |hash, key|
+      manifest = {
+        id: hash.size + 1, gid: nil, encrypted_gid: nil, depot_id: nil,
+        name: nil, count: nil, size_raw: nil, size_compressed: nil, date: nil
+      }
+      manifest[key.is_a?(Integer) ? :gid : :encrypted_gid] = key
+      hash[key] = manifest
+    }
+    builds = Hash.new{ |hash, key| hash[key] = { id: hash.size + 1, app_id: app_id, md5: key } }
+    contents = []
+    versions = []
+
+    # Store current branch state (build ID, depot -> manifest mapping)
+    current_official_id = {}
+    current_manifests = Hash.new{ |hash, key| hash[key] = {} }
+
+    # Auxiliary function to parse each individual change (addition, modification, deletion)
+    # The argument should be a leaf li element.
+    parse_change = Proc.new do |block|
+      # Ensure change is of one of the valid types
+      change = changeStruct.new(nil, '', '', '', false)
+      ['diff-removed', 'diff-added', 'diff-modified'].each{ |klass|
+        change.type = klass[5..].to_sym if block.classes.include?(klass)
+      }
+      next change unless change.type
+
+      # Key identifies field being changed
+      key = block.at('span>i')
+      next change unless key
+      change.key = key.content.strip.chop
+
+      # Additions and modifications should have a new value
+      if change.type == :added || change.type == :modified
+        value = block.at('ins, .ins')
+        next change unless value
+        change.new = value.content.scrub('').strip
+      end
+
+      # Deletions and modifications should have an old value
+      if change.type == :removed || change.type == :modified
+        value = block.at('del, .del')
+        next change unless value
+        change.old = value.content.scrub('').strip
+      end
+
+      # Parsing successful
+      change.valid = true
+      next change
+    rescue => e
+      err("Failed to parse SteamDB change: #{block.path}")
+    else
+      alert("Invalid SteamDB change found: #{block.path}") if !change.valid
+      alert("Empty SteamDB change found: #{block.path}") if change.valid && change.old.empty? && change.new.empty?
+    end
+
+    # Sets and counters, for logging purposes
+    unknown_keys = Set.new
+    special_sets = Hash.new{ |hash, key| hash[key] = [] }
+    counters = Hash.new(0)
+
+    # Parse SteamDB history page
+    panels = Nokogiri::HTML(html).search('div.panel-history')
+    total = panels.size
+    panels.reverse_each.with_index do |panel, i|
+      dbg("Parsing history panel #{i + 1} / #{total}...", progress: true)
+      counters[:panels] += 1
+
+      # Skip changes that only update the changenumber itself
+      # Also skip changes outside of PICS since they only affect assets and such
+      changeid = panel['data-changeid']
+      is_pics = !changeid[/^U:/]
+      has_stuff = !panel.classes.include?('history-changelist-only')
+      next if !is_pics || !has_stuff
+      counters[:parsed_panels] += 1
+      datetime = Time.parse(panel.at('[datetime]')['datetime'])
+
+      # Parse list of changes
+      panel.at('ul.app-history').search('>li').each do |item_block|
+
+        # Ignore all items except Depot ones
+        counters[:items] += 1
+        next unless item_block.classes.include?('repo')
+        counters[:depot_items] += 1
+        item_block.at('ul.app-history').search('>li').each do |branch_block|
+          counters[:subitems] += 1
+
+          # Isolated depot changes
+          if !(branch_block.classes & ['diff-added', 'diff-modified', 'diff-removed']).empty?
+            # Again, only parse depot changes
+            counters[:leaf_subitems] += 1
+            change = parse_change[branch_block]
+            if !change&.valid || !change.key[/Depot\s+(\d+)/i]
+              special_sets[:other_leafs] << change.key
+              next
+            end
+            counters[:depot_leafs] += 1
+            depot = depots[$1.to_i]
+            depot[:added] = datetime unless depot[:added] && depot[:added] < datetime
+
+            # Parse addition or deletion
+            case change.key
+            when /name/i
+              depot[:name] = change.new unless change.new.empty?
+            when /config\/oslist/i
+              depot[:os_win]   = false if !!change.old[/windows/i]
+              depot[:os_linux] = false if !!change.old[/linux/i]
+              depot[:os_mac]   = false if !!change.old[/macos/i]
+              depot[:os_win]   = true  if !!change.new[/windows/i]
+              depot[:os_linux] = true  if !!change.new[/linux/i]
+              depot[:os_mac]   = true  if !!change.new[/macos/i]
+            when /config\/language/
+              # Ignore
+            when /depotfromapp/i
+              # Ignore
+            when /maxsize/i
+              depot[:max_size] = change.new.to_i unless depot[:max_size] && depot[:max_size] > change.new.to_i
+            when /systemdefined/i
+              depot[:system] = change.new.to_i == 1 ? true : change.old.to_i == 1 ? false : nil
+              alert("Invalid system setting for depot #{depot[:id]} found at #{branch_block.path}") if depot[:system].nil?
+            when /sharedinstall/i
+              depot[:shared] = change.new.to_i == 1 ? true : change.old.to_i == 1 ? false : nil
+              alert("Invalid shared setting for depot #{depot[:id]} found at #{branch_block.path}") if depot[:shared].nil?
+            else
+              unknown_keys << change.key
+            end
+            next
+          end
+
+          # Ignore changes that are neither depot changes or branch changes
+          branch_name = branch_block.at('.branch-name')
+          if !branch_name
+            counters[:other_subitems] += 1
+            next
+          end
+
+          # The following changes correspond to a given branch
+          counters[:branch_subitems] += 1
+          branch = branches[branch_name.content]
+          branch[:created] = datetime unless branch[:created] && branch[:created] < datetime
+          if branch_name.previous.content[/removed/i]
+            counters[:branch_subitems_removed] += 1
+            branch[:deleted] = datetime
+            next # If a branch is removed, we don't parse the individual attribute removals
+          elsif branch_name.previous.content[/added/i]
+            counters[:branch_subitems_added] += 1
+          else
+            counters[:branch_subitems_changed] += 1
+          end
+
+          official_id_edited = false
+          manifests_edited = false
+          old_official_id = current_official_id[branch[:id]]
+          old_manifests = current_manifests[branch[:id]].dup
+
+          # Branch changes are listed by attribute
+          branch_block.at('ul.app-history').search('>li').each do |field_block|
+            # Reject incorrectly pre-parsed changes
+            counters[:branch_changes] += 1
+            change = parse_change[field_block]
+            next unless change&.valid
+            counters[:branch_changes_valid] += 1
+
+            # Parse new value
+            case change.key
+            when /timeupdated/i                                # New branch timestamp
+              next if change.new.empty?
+              time = Time.parse(change.new)
+              branch[:created] = time unless branch[:created] && branch[:created] < time
+              branch[:updated] = time
+            when /buildid/i                                    # New branch build ID
+              official_id_edited = true
+              if change.new.empty?
+                current_official_id.delete(branch[:id]) if !change.old.empty?
+                next
+              end
+              current_official_id[branch[:id]] = change.new.to_i
+              branch[:official_id] = change.new.to_i
+            when /pwdrequired/i                                # Private branches
+              branch[:private] = change.new.to_i == 1 ? true : change.old.to_i == 1 ? false : nil
+              alert("Invalid private setting for branch #{branch[:name]} found at #{field_block.path}") if branch[:private].nil?
+            when /description/i
+              branch[:description] = change.new unless change.new.empty?
+            when /Depot\s+(\d+)\s+encrypted(_gid_2|\s+gid)/i   # Encrypted manifest ID (private branches)
+              manifests_edited = true
+              if change.new.empty?
+                current_manifests[branch[:id]].delete($1.to_i) if !change.old.empty?
+                next
+              end
+              depot = depots[$1.to_i]
+              gid = [change.new].pack('H*')
+              manifest = manifests[gid]
+              manifest[:depot_id] = depot[:id]
+              manifest[:date] = datetime unless manifest[:date] && manifest[:date] < datetime
+              current_manifests[branch[:id]][depot[:id]] = gid
+            when /encrypted/i                                  # Other fields for private branches
+              # Ignore
+            when /Depot\s+(\d+)\s+gid/i                        # New depot version, and maybe new manifest
+              manifests_edited = true
+              if change.new.empty?
+                current_manifests[branch[:id]].delete($1.to_i) if !change.old.empty?
+                next
+              end
+              depot = depots[$1.to_i]
+              gid = change.new.to_i
+              manifest = manifests[gid]
+              manifest[:depot_id] = depot[:id]
+              manifest[:date] = datetime unless manifest[:date] && manifest[:date] < datetime
+              current_manifests[branch[:id]][depot[:id]] = gid
+            when /Depot\s+(\d+)\s+size/i                       # New depot raw size
+              # To be fetched later
+            when /Depot\s+(\d+)\s+download/i                   # New depot compressed size
+              # To be fetched later
+            else
+              unknown_keys << change.key
+            end
+          end # field
+
+          # Detect actual manifest changes. A redundant change notably happened on 30 May 2023.
+          # The alert should logically never trigger, it's there for sanity.
+          current_manifests[branch[:id]] = current_manifests[branch[:id]].sort_by(&:first).to_h
+          manifests_changed = old_manifests != current_manifests[branch[:id]]
+          special_sets[:redundant_manifests] << datetime if manifests_edited && !manifests_changed
+          alert("Manifests changed without being edited") if !manifests_edited && manifests_changed
+
+          # Detect actual build ID changes.
+          official_id_changed = old_official_id != current_official_id[branch[:id]]
+          special_sets[:redundant_official_ids] << datetime if official_id_edited && !official_id_changed
+          alert("Build ID changed without being edited") if !official_id_edited && official_id_changed
+
+          # If branch build changed (either ID or manifests):
+          # - Both ID and manifest change: Regular build.
+          # - ID change without manifest changes: Repoint branch to preexisting build, or just patch metadata.
+          # - Manifest changes without ID change: Transitional build.
+          if official_id_edited || manifests_edited
+            counters[:builds] += 1
+
+            # Create new build or fetch preexisting one.
+            key = SteamBuild.hash(current_manifests[branch[:id]])
+            is_new_build = !builds.key?(key)
+            is_new_id = versions.none?{ |h| h[:official_id] == current_official_id[branch[:id]] }
+            build = builds[key]
+
+            # If build is new, track contents (depot -> manifest mapping)
+            if is_new_build
+              current_manifests[branch[:id]].sort_by(&:first).each{ |d, m|
+                contents << { build_id: build[:id], depot_id: d, manifest_id: manifests[m][:id] }
+              }
+            end
+
+            # Track new branch version
+            if official_id_changed || manifests_changed
+              id = current_official_id[branch[:id]]
+              special_sets[:rollbacks] << id if id.to_i < old_official_id.to_i
+              versions << {
+                branch_id:   branch[:id],
+                build_id:    build[:id],
+                official_id: id,
+                date:        datetime
+              }
+            end
+
+            # Stats and logs
+            if official_id_edited && manifests_edited
+              counters[:builds_regular] += 1
+            elsif !official_id_edited
+              special_sets[:transitional] << datetime
+            elsif !is_new_id
+              special_sets[:repointed] << current_official_id[branch[:id]]
+            else
+              special_sets[:metadata] << current_official_id[branch[:id]]
+            end
+          else
+            special_sets[:nonbuilds] << datetime
+          end
+
+        end # branch
+      end # depot
+    end # panel
+    puts
+
+    # Log results
+    format_slices = Proc.new{ |items, levels, width|
+      items.uniq.each_slice(width).map{ |slice| slice.join(', ') }.join("\n".ljust(2 * levels + 1, ' '))
+    }
+    format_times = Proc.new{ |times, levels|
+      format_slices[times.map{ |time| time.strftime('%e %B %Y – %H:%M:%S').rjust(28) }, levels, 4]
+    }
+    reused_ids = versions.group_by{ |h| h[:branch_id] }
+                     .map{ |branch_d, list|
+                       list.map{ |h| h[:official_id] }.chunk_while{ |a, b| a == b }.map(&:first)
+                     }.flatten.tally.select{ |_, c| c > 1 }
+    reused_ids_total = versions.map{ |h| h[:official_id] }.tally.select{ |_, c| c > 1 }
+    reused_builds = versions.map{ |h| h[:build_id] }.tally.select{ |_, c| c > 1 }
+    reused_builds_dif = versions.group_by{ |h| h[:build_id] }.map{ |build_id, list|
+      [build_id, list.map{ |h| h[:official_id] }.uniq]
+    }.select{ |build_id, ids| ids.size > 1 }.sort_by{ |build_id, ids| -ids.size }.to_h
+    dbg(
+      <<~LOG
+        Scanned the following elements:
+          #{counters[:panels]} panels.
+            #{counters[:parsed_panels]} parsed.
+          #{counters[:items]} items.
+            #{counters[:depot_items]} from depots.
+          #{counters[:subitems]} subitems.
+            #{counters[:leaf_subitems]} leaf changes.
+              #{counters[:depot_leafs]} depot leafs.
+              #{special_sets[:other_leafs].size} other leafs:
+                #{special_sets[:other_leafs].uniq.join(', ')}.
+            #{counters[:branch_subitems]} branch changes.
+              #{counters[:branch_subitems_added]} branch additions.
+              #{counters[:branch_subitems_changed]} branch modifications.
+              #{counters[:branch_subitems_removed]} branch removals.
+            #{counters[:other_subitems]} other changes.
+          #{counters[:branch_changes]} individual branch changes.
+            #{counters[:branch_changes_valid]} valid.
+        Build breakdown:
+          #{counters[:builds]} rebuilds.
+            #{counters[:builds_regular]} regular builds.
+            #{special_sets[:repointed].size} repointings:
+              #{special_sets[:repointed].join(', ')}.
+            #{special_sets[:metadata].size} metadata patches:
+              #{special_sets[:metadata].join(', ')}.
+            #{special_sets[:transitional].size} transitional builds on:
+              #{format_times[special_sets[:transitional], 3]}.
+          #{special_sets[:nonbuilds].size} nonbuilds (other changes) on:
+            #{format_times[special_sets[:nonbuilds], 2]}.
+          Interesting edge cases:
+            #{reused_builds.size} reused builds (#{reused_builds.values.sum} times).
+              #{reused_builds_dif.size} reused builds with different build IDs (#{reused_builds_dif.values.map(&:size).sum} times):
+                #{reused_builds_dif.sort_by(&:first).map{ |id, list| "#{id} (#{list.size})" }.join(', ')}.
+            #{reused_ids_total.size} reused build IDs (#{reused_ids_total.values.sum} times).
+              #{reused_ids.size} excluding transitional (#{reused_ids.values.sum} times):
+                #{format_slices[reused_ids.keys, 4, 16]}.
+            #{special_sets[:rollbacks].size} rollbacks:
+              #{special_sets[:rollbacks].join(', ')}.
+            #{special_sets[:redundant_manifests].size} redundant manifest changes on:
+              #{format_times[special_sets[:redundant_manifests], 3]}.
+            #{special_sets[:redundant_official_ids].size} redundant build ID changes on:
+              #{format_times[special_sets[:redundant_official_ids], 3]}.
+        Branch breakdown:
+          #{
+            branches.map{ |id, branch|
+              created = branch[:created].strftime('%F')
+              deleted = branch[:deleted]&.strftime('%F') || ' ' * 10
+              name = branch[:name].ljust(16)
+              content = current_manifests[id].sort_by(&:first).map{ |depot_id, manifest_gid|
+                m = manifests[manifest_gid]
+                "%d:%19.19s" % [depot_id, m[:gid] || m[:encrypted_gid].unpack1('H*').upcase]
+              }.join(', ')
+              "%s - %s | %s | %8d | %s" % [created, deleted, name, branch[:official_id], content]
+            }.join("\n  ")
+          }
+      LOG
+    )
+    log(
+      <<~LOG
+        Finished seeding from SteamDB history, found the following elements:
+          #{branches.size} branches
+          #{depots.size} depots
+          #{manifests.size} manifests
+          #{builds.size} builds
+          #{versions.size} branch versions
+          #{contents.size} build contents
+      LOG
+    )
+    alert("Found #{unknown_keys.size} unknown keys found:\n#{unknown_keys.join("\n  ")}") unless unknown_keys.empty?
+
+    # Insert all parsed data into database
+    SteamBranch.insert_all(branches.values)
+    SteamDepot.insert_all(depots.values)
+    SteamManifest.insert_all(manifests.values)
+    SteamBuild.insert_all(builds.values)
+    SteamBranchVersion.insert_all(versions)
+    SteamBuildContent.insert_all(contents)
+  rescue => e
+    lex(e, 'Failed to seed SteamDB history')
+  end
+
 end
 
 # Wrapper to track RSS or Atom feeds, usually for N++-related news
@@ -1974,7 +2478,6 @@ end
 # Custom API for browser access to specific outte functions
 class APIServer < Server
 
-  # TODO: Call handle_error on errors, properly log
   def initialize(**kwargs)
     super('API', API_PORT, cache: 100, **kwargs)
 
