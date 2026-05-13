@@ -898,6 +898,7 @@ def start_discord_tasks
 
   # Check for new N++-related RSS news every minute
   Feed.new('steam', RSS_STEAM_URI % APP_ID, TEST ? nil : CHANNEL_MAIN, title: "💥 New N++ update on Steam!")
+  Feed.new('assembla', ASSEMBLA_URI, TEST ? nil : CHANNEL_SUPPORT, title: "📋 New Assembla ticket submitted", type: 'assembla')
   Scheduler.add("Update RSS", freq: RSS_UPDATE_FREQUENCY, log: false) { update_rss } if DO_EVERYTHING  || UPDATE_RSS
 
   # Check for new N++ Steam patches every 5 minutes

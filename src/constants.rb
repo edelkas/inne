@@ -104,6 +104,7 @@ CHANNEL_CONTENT        = 197793786389200896  # #content-creation
 CHANNEL_SECRETS        = 217283494664077312  # #secrets
 CHANNEL_CTP_HIGHSCORES = 1137794057205198848 # #ctp-highscores
 CHANNEL_CTP_SECRETS    = 1137794113475969034 # #ctp-secrets
+CHANNEL_SUPPORT        = 218819289266913281  # #support
 CHANNEL_DEBUG          = 530162144843530240  # #debug-room
 
 # Limits
@@ -546,6 +547,9 @@ STEAMDB_URI_BUILD    = 'https://steamdb.info/patchnotes/%d/'                  # 
 STEAMDB_COLOR_BRANCH = 0x32a852 # Bar color for branch embeds (new / deleted)
 STEAMDB_COLOR_DEPOT  = 0xeb4034 # Bar color for depot embeds (new / deleted)
 STEAMDB_COLOR_BUILD  = 0x237feb # Bar color for build embeds (new)
+
+ASSEMBLA_URI        = 'https://app.assembla.com/spaces/cBY1XaS_Wr5y5eacwqjQXA/support/tickets/report.xml'
+ASSEMBLA_URI_TICKET = 'https://app.assembla.com/spaces/nplusplus/support/tickets/%d'
 
 # <---------------------------------------------------------------------------->
 # <------                    SPEEDRUN API VARIABLES                      ------>

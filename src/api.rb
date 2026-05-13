@@ -13,6 +13,7 @@ $load_time = Time.now
 require 'html_to_markdown'
 require 'json'
 require 'net/http'
+require 'nokogiri'
 require 'octicons'
 require 'puma'
 require 'rack'
@@ -1107,7 +1108,7 @@ class SteamApp < ActiveRecord::Base
 
   def fetch_info(username: nil, password: nil, token: nil)
     # Request app info from Steamworks
-    dbg("Steamworks: Fetching app info #{id}")
+    log("Steamworks: Fetching app info #{id}")
     stdout, stderr, status = steamworks(id, username: username, password: password, token: token, info: true)
     return if status.nil? || !status.success? || stdout.blank?
     json = JSON.load(stdout)
@@ -1380,7 +1381,7 @@ class SteamManifest < ActiveRecord::Base
   # Fetch manifest metadata from Steamworks. For some reason we need to specify
   # the branch, even though manifests are branch-agnostic.
   def fetch(username: nil, password: nil, token: nil, branch: nil)
-    dbg("Steamworks: Fetching manifest #{gid}")
+    log("Steamworks: Fetching manifest #{gid}")
     return err("Cannot fetch encrypted manifest") if encrypted?
     return err("Cannot fetch manifest, depot unknown") if !depot
     if !branch
@@ -1623,10 +1624,6 @@ module SteamDB extend self
 
   # Parse SteamDB's updates list (https://steamdb.info/app/230270/history/)
   def seed_updates(html, app_id: APP_ID)
-    # A bit unorthodox, but we only need this library here and almost never need
-    # to execute this function.
-    require 'nokogiri'
-
     # Auxiliary struct to parse individual changes to any field. A change can be of 3 types:
     # additions, modifications and deletions. The key identifies the field, followed by
     # the old and new value. Additions only have new values, and deletions only have old values.
@@ -2028,11 +2025,13 @@ module SteamDB extend self
 
 end
 
-# Wrapper to track RSS or Atom feeds, usually for N++-related news
+# Wrapper to track RSS or Atom feeds, usually for N++-related news. Also has
+# custom parsers to support other formats.
 class Feed
-  MAX_REPORT_AGE = 24 * 60 * 60 # Oldest runs to consider new (i.e. notifiable)
+  MAX_REPORT_AGE = 24 * 60 * 60 # Oldest news to notify
   DATABASE_KEY   = 'feed_%s_date'
 
+  FeedItem = Struct.new(:title, :description, :author, :link, :date, :image)
   @@feeds = {}
 
   def self.check
@@ -2051,12 +2050,13 @@ class Feed
     feed.post(item, botmaster.pm)
   end
 
-  def initialize(key, uri, channel_id = nil, title: nil)
+  def initialize(key, uri, channel_id = nil, title: nil, type: 'rss')
     @key     = key
     @uri     = uri
+    @type    = type
     @channel = channel_id ? find_channel(id: channel_id) : botmaster.pm
     @title   = title || "New #{key} update"
-    @data    = nil
+    @items   = []
     @updated = nil
     @@feeds[@key] = self
   end
@@ -2071,40 +2071,69 @@ class Feed
   end
 
   def [](i)
-    return unless @data&.items&.size.to_i > i
-    @data.items[i]
+    return unless @items.size > i
+    @items[i]
+  end
+
+  # Default parser, should work for most standard RSS feeds
+  def parse_rss(data)
+    RSS::Parser.parse(data).items.map{ |item|
+      desc = HtmlToMarkdown.convert(item.description.gsub(/\n+/, "\n"))
+      enc = item.enclosure
+      image = enc && enc.type.split('/').first == 'image' ? enc.url : nil
+      FeedItem.new(item.title, desc, nil, item.link, item.date, image)
+    }
+  end
+
+  # Parse Assembla's XML bug report list
+  # See https://app.assembla.com/spaces/nplusplus/support/tickets
+  def parse_assembla(data)
+    doc = Nokogiri::XML(data)
+    doc.search('ticket').take(10).map{ |ticket|
+      title = ticket.at('summary').content
+      description = ticket.at('description').content
+      author = doc.search('ticket').first.at('reporter>name').content
+      link = ASSEMBLA_URI_TICKET % [ticket.at('number').content.to_i]
+      date = Time.parse(ticket.at('updated-at').content)
+      FeedItem.new(title, description, author, link, date, nil)
+    }
+  end
+
+  def parse(data)
+    send("parse_#{@type}", data)
+  rescue
+    binding.pry
+    []
   end
 
   def update
     res = Net::HTTP.get_response(URI(@uri))
     return unless res.is_a?(Net::HTTPSuccess)
     @updated = Time.now
-    @data = RSS::Parser.parse(res.body)
+    @items = parse(res.body)
   rescue => e
     lex(e, "Failed to fetch update from #{@key} RSS feed")
   end
 
   def check
     update
-    return unless @data
     date = get_date
-    @data.items.select{ |item| item.date > date }.sort_by(&:date).each{ |item|
+    @items.select{ |item| item.date > date }.sort_by(&:date).each{ |item|
       report(item)
       sleep(1)
     }
   end
 
   def format(item)
-    enc = item.enclosure
-    thumb = enc && enc.type.split('/').first == 'image' ? enc.url : nil
-    desc = HtmlToMarkdown.convert(item.description.gsub(/\n+/, "\n"), heading_style: :atx)[:content]
-    desc = "# __#{item.title}__\n#{desc}"
+    desc = item.description.dup
+    desc.prepend("⤷ by: __#{item.author}__\n\n") if item.author
+    desc.prepend("## __#{item.title}__\n") if item.title
     Discordrb::Webhooks::Embed.new(
       title:       @title,
       description: desc[...1024],
       url:         item.link,
       timestamp:   item.date,
-      thumbnail:   thumb ? Discordrb::Webhooks::EmbedThumbnail.new(url: thumb) : nil
+      thumbnail:   item.image ? Discordrb::Webhooks::EmbedThumbnail.new(url: item.image) : nil
     )
   end
 
@@ -2121,14 +2150,14 @@ class Feed
   end
 
   def size
-    return 0 unless @data
-    @data.items.size
+    @items.size
   end
 
   def list
-    return unless @data
-    list = @data.items.map{ |item|
-      "- %s (from %s)" % [mdurl(item.title, item.link, false), format_timestamp(item.date, date: true)]
+    list = @items.map{ |item|
+      link = mdurl(item.title.to_s, item.link, false)
+      time = format_timestamp(item.date, date: true)
+      "- %s by %s on %s" % [link, item.author || '?', time]
     }.join("\n")
     "Latest news:\n#{list}"
   end
