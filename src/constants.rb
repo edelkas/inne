@@ -510,7 +510,7 @@ REPORT_UPDATE_FREQUENCY     =       24 * 60 * 60 # Not used (published after lot
 REPORT_UPDATE_SIZE          =   7 * 24 * 60 * 60
 SUMMARY_UPDATE_SIZE         =   1 * 24 * 60 * 60
 USERLEVEL_SCORE_FREQUENCY   =       24 * 60 * 60
-USERLEVEL_UPDATE_RATE       =                  5
+USERLEVEL_UPDATE_RATE       =                 10
 USERLEVEL_DATA_RATE         =        1 * 60 * 60
 USERLEVEL_HISTORY_FREQUENCY =       24 * 60 * 60
 USERLEVEL_REPORT_FREQUENCY  =       24 * 60 * 60
@@ -525,8 +525,9 @@ FRACTION_FREQUENCY          =                 60
 TWITCH_ROLE      = "Voyeur"    # Discord role to ping when a new stream happens
 TWITCH_COOLDOWN  = 2 * 60 * 60 # Cooldown to ping stream by the same user
 TWITCH_BLACKLIST = [           # Don't post stream by these users
-  425806947, # eblan4ikof
-  1055190989 # 3awilson
+  425806947,  # eblan4ikof
+  1055190989, # 3awilson
+  1490551040  # q101056109
 ]
 
 # <---------------------------------------------------------------------------->
@@ -986,7 +987,8 @@ HACKERS = {
   409973 => ["outte++2"],
   414614 => ["Λ"],
   424914 => [">:("],
-  428175 => ["Jake_"]
+  428175 => ["Jake_"],
+  433645 => ["Gan"]
 }
 
 CHEATERS = {

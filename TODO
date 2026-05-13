@@ -1,4 +1,5 @@
 - Track https://app.assembla.com/spaces/nplusplus/support/tickets
+- Detect prolongated Discord websocket breakages automatically and restart or something.
 - Add reminder for Steam refresh token expiration a few days prior
 - Use Player.send_request with outte++ for update_completions, scan_boards, get_pb, ...
 - API: Build cache in memory for commonly accessed values (e.g. last archive IDs, results of analysis, dumps, traces, etc)
