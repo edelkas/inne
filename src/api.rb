@@ -1172,7 +1172,7 @@ class SteamApp < ActiveRecord::Base
       }.to_h
 
       # Detect new builds
-      md5 = SteamBuild.hash(content.map{ |d, m| [d.id, m.gid] }.to_h)
+      md5 = SteamBuild._hash(content.map{ |d, m| [d.id, m.gid] }.to_h)
       build = SteamBuild.find_or_create_by(app_id: id, md5: md5)
       if build.previously_new_record?
         content.each{ |depot, manifest|
@@ -1389,7 +1389,7 @@ class SteamManifest < ActiveRecord::Base
     end
     stdout, stderr, status = steamworks(
       depot.app.id, username: username, password: password, token: token,
-      branch: branch, depot: depot.id, manifest: gid
+      branch: branch, depot: depot.id, manifest: gid, timeout: 20
     )
     return if status.nil? || !status.success? || stdout.blank?
     json = JSON.load(stdout)
@@ -1473,7 +1473,7 @@ end
 # https://partner.steamgames.com/doc/store/application/builds
 # https://steamdb.info/app/230270/patchnotes/
 class SteamBuild < ActiveRecord::Base
-  has_many :steam_build_contents,  foreign_key: :build_id
+  has_many :steam_build_contents,  foreign_key: :build_id, dependent: :destroy
   has_many :steam_branch_versions, foreign_key: :build_id
   belongs_to :steam_app,           foreign_key: :app_id
   alias_method :contents, :steam_build_contents
@@ -1483,14 +1483,14 @@ class SteamBuild < ActiveRecord::Base
   # Hash the contents of a build. They should be provided as a hash mapping
   # depot IDs to manifest GIDs. For public manifests the GID is a 64bit integer,
   # for encrypted ones it's a 128bit binary string.
-  def self.hash(content)
+  def self._hash(content)
     md5(content.sort_by(&:first).map{ |d_id, m_id| "#{d_id}:#{m_id}" }.join(','))
   end
 
   # Find surface changes (manifests added, changed or removed) as a hash keyed by depots
   def self.diff(b1, b2)
-    map1 = b1.mapping
-    map2 = b2.mapping
+    map1 = b1&.mapping || {}
+    map2 = b2&.mapping || {}
     keys = (map1.keys + map2.keys).uniq.sort_by{ |d| d.id }
     keys.map{ |d| [d, {old: map1[d], new: map2[d]}] }.reject{ |d, c| c[:old] == c[:new] }.to_h
   end
@@ -1556,8 +1556,7 @@ class SteamBranchVersion < ActiveRecord::Base
 
   # Changes in this version
   def diff
-    return {} unless prev = previous
-    SteamBuild.diff(prev.build, build)
+    SteamBuild.diff(previous&.build, build)
   end
 
   # Whether this branch updat was a rollback according to SteamDB (i.e. the buildID
@@ -1886,7 +1885,7 @@ module SteamDB extend self
             counters[:builds] += 1
 
             # Create new build or fetch preexisting one.
-            key = SteamBuild.hash(current_manifests[branch[:id]])
+            key = SteamBuild._hash(current_manifests[branch[:id]])
             is_new_build = !builds.key?(key)
             is_new_id = versions.none?{ |h| h[:official_id] == current_official_id[branch[:id]] }
             build = builds[key]
