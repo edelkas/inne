@@ -7,6 +7,37 @@ $load_time = Time.now
 
 require 'gruff'
 
+def send_admin_panel(event)
+  view = Discordrb::Webhooks::View.new
+  view.row{ |row|
+    row.button(label: 'Config log', custom_id: 'admin:logconf', style: :secondary)
+  }
+  send_message(event, components: view)
+end
+
+def admin_logconf(event)
+  event.show_modal(title: 'Configure logs', custom_id: 'admin:logconf') do |modal|
+    modal.label(id: 'label_level', label: 'Level') do |label|
+      label.radio_group(custom_id: 'level', required: false) do |group|
+        Log::LEVELS.each do |name, modes|
+          group.radio_button(value: name.to_s, label: name.to_s.capitalize, default: false)
+        end
+      end
+    end
+  end
+end
+
+def modal_logconf(event)
+  changes = parse_modal_values(event).map{ |name, value|
+    next if value.nil?
+    case name
+    when 'level'
+      Log.level(value.to_sym)
+    end
+  }.compact.map{ |line| "* #{line}." }.join("\n")
+  event.respond(content: "### __Modified log configuration__:\n#{changes}")
+end
+
 # Clean database (remove cheated archives, duplicates, orphaned demos, etc)
 # See Archive::sanitize for more details
 def sanitize_archives(event)
@@ -1323,7 +1354,7 @@ def respond_special(event)
   cmd.downcase!
   action_inc('special_commands')
 
-  return thread_continue(event)          if cmd == 'thread_continue'
+  return send_admin_panel(event)         if cmd == 'admin'
   return send_dday_stats(event)          if cmd == 'dday_stats'
   return send_debug(event)               if cmd == 'debug'
   return send_delete_score(event)        if cmd == 'delete_score'
@@ -1374,6 +1405,7 @@ def respond_special(event)
   return send_test(event)                if cmd == 'test'
   return send_color_test(event)          if cmd == 'test_color'
   return test_ntrace(event)              if cmd == 'test_ntrace'
+  return thread_continue(event)          if cmd == 'thread_continue'
   return send_unreaction(event)          if cmd == 'unreact'
   return update_completions(event)       if cmd == 'update_completions'
   return userlevel_completions(event)    if cmd == 'userlevel_completions'

@@ -497,7 +497,7 @@ def send_scores(event, offset: nil, date_change: nil)
   export = full && scores.count > 20
   use_embed = false if export
   use_v2 = false if export
-  name = use_embed || use_v2 ? h.name : h.format_name
+  name = use_embed ? h.name : h.format_name
   args = [
     nav ? 'navigating ' : '',
     format_full(full), format_frac(frac), format_board(board).pluralize,
@@ -558,7 +558,7 @@ def send_scores(event, offset: nil, date_change: nil)
   end
 
   # Send response
-  content = !use_embed ? header + body + footer : ''
+  content = !use_embed && !use_v2 ? header + body + footer : ''
   send_message(event, content: content, files: files, components: view, embeds: [embed], v2: use_v2)
 rescue => e
   lex(e, "Error sending scores.", event: event)

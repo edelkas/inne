@@ -1054,7 +1054,7 @@ def send_userlevel_cache(event)
     modal(
       event,
       title:       'I don\'t know who you are.',
-      custom_id:   'modal:identify',
+      custom_id:   'identify',
       label:       'Enter your N++ player name:',
       placeholder: 'Player name',
       required:    true

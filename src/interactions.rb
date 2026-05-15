@@ -372,8 +372,8 @@ def modal(
     placeholder: 'Placeholder'
   )
   event.show_modal(title: title, custom_id: custom_id) do |modal|
-    modal.row do |row|
-      row.text_input(
+    modal.label do |label|
+      label.text_input(
         style:       style,
         custom_id:   'name',
         label:       label,
@@ -385,6 +385,20 @@ def modal(
       )
     end
   end
+end
+
+def parse_modal_values(event)
+  event.components.map{ |component|
+    next unless component.is_a?(Discordrb::Components::Label)
+    c = component.component
+    multiple = [
+      Discordrb::Components::CheckboxGroup,
+      Discordrb::Components::FileUpload,
+      Discordrb::Components::SelectMenu
+    ]
+    is_list = multiple.include?(c.class)
+    [c.custom_id, is_list ? c.values : c.value]
+  }.compact.to_h
 end
 
 # Get a new builder based on a pre-existing component collection (i.e., for
@@ -578,6 +592,11 @@ def respond_interaction_button(event)
 
   # Otherwise, distinguish depending on the source message
   case keys[0]
+  when 'admin'
+    case keys[1]
+    when 'logconf'
+      admin_logconf(event)
+    end
   when 'aliases'
     case keys[1]
     when 'nav'
@@ -668,9 +687,13 @@ end
 
 def respond_interaction_modal(event)
   keys = event.custom_id.to_s.split(':') # Component parameters
-  return if keys[0] != 'modal'           # Only listen to modals
 
-  case keys[1]
+  case keys[0]
+  when 'admin'
+    case keys[1]
+    when 'logconf'
+      modal_logconf(event)
+    end
   when 'identify'
     modal_identify(event, name: event.value('name'))
   end

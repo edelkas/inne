@@ -1,4 +1,3 @@
-- Track https://app.assembla.com/spaces/nplusplus/support/tickets
 - Detect prolongated Discord websocket breakages automatically and restart or something.
 - Add reminder for Steam refresh token expiration a few days prior
 - Use Player.send_request with outte++ for update_completions, scan_boards, get_pb, ...
@@ -8,7 +7,7 @@
 - Change all occurrence of concurrent_edit by TmpMsg
 - Compute stars and cools on the fly when using archives.
 - Add dupe player removal in sanitization function, this requires carefully adjusting the player_id of the removed players in all tables that refer to it.
-- Add color diffs when navigating scores, and ability to specify date when querying scores.
+- Add color diffs when navigating scores.
 - We could scrap all replays, and regularly scrap the new ones given the IDs. Then we can:
   * Recover most scores using NSim.
   * Recover level scores from episode replays, again using NSim.
@@ -20,7 +19,6 @@
 - Add nv2  converter.
 - Add Userlevel -> Metanet and viceversa converters.
 - Reload Discordrb main branch from bundler, which allows to respond to interactions with attachments. Use this to implement screenshots when searching multiple pages of levels, or even when browsing userlevels. To prevent regenerating the screenshots when browsing, cache them in /tmp using some kind of hash for the name to identify the query, and clear them regularly (and when there are too many).
-- We can simplify paging: parse_page and compute_pages should be merged, also only pass the event itself instead of the message and the components separately, and use kwargs. Think about how to use the pager, but in a more flexible way that works for more contexts.
 - Persist task counters in db (using task_ prefix). Don't do it constantly, perhaps only sum them when shutting down.
 - Migrate highscoreable_type to integers from 0 to 2.
 - Add a special command to run arbitrary Ruby code, sent from Discord, and print the return inside a text block. Ensure to execute inside guards for exceptions. Perhaps even code a simple Debugger that can be started in a separate Thread, which waits for commands (e.g. using a Queue).
