@@ -2222,7 +2222,7 @@ class Server
 
     def log(server)
       lin("%s: %s %s %dB %s" % [server.name, ip, method, @body.bytesize, key])
-      return if !$log[:socket] || @body.empty? || !server.log_req
+      return if !Log.socket || @body.empty? || !server.log_req
       filename = "#{server.name.downcase}_req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
       File.binwrite(File.join(DIR_LOGS, filename), @body)
     end
@@ -2321,7 +2321,7 @@ class Server
     def log(server, time, cached = false)
       delta = Time.now - time
       lout("%s: %d %dB %dms %s" % [server.name, @status, @body.bytesize, 1000 * delta, cached ? '(cached)' : ''])
-      return if !$log[:socket] || @body.empty? || !server.log_res
+      return if !Log.socket || @body.empty? || !server.log_res
       if @body.encoding.name == 'UTF-8'
         dbg('Response body: ' + @body)
       else

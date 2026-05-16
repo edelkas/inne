@@ -78,6 +78,8 @@ end
 #   - Methods to config it on the fly from Discord
 module Log extend self
 
+  attr_reader :modes, :modes_file, :fancy, :socket
+
   MODES = {
     fatal: { long: 'FATAL', short: 'F', fmt: "\x1B[41m" }, # Red background
     error: { long: 'ERROR', short: '✗', fmt: "\x1B[31m" }, # Red
@@ -100,6 +102,7 @@ module Log extend self
   BOLD  = "\x1B[1m"
   RESET = "\x1B[0m"
 
+  @socket = SOCKET_LOG
   @fancy = LOG_FANCY
   @modes = LEVELS[LOG_LEVEL] || LEVELS[:normal]
   @modes_file = LEVELS[LOG_LEVEL_FILE] || LEVELS[:quiet]
@@ -125,23 +128,25 @@ module Log extend self
     inf("Failed to change logging level")
   end
 
-  def fancy
-    @fancy = !@fancy
-    @fancy ? inf("Enabled fancy logs") : inf("Disabled fancy logs")
+  def change_fancy(enabled = nil)
+    old_fancy = @fancy
+    @fancy = !enabled.nil? ? !!enabled : !@fancy
+    old_fancy == @fancy ? inf("Fancy logs were already #{@fancy}") : @fancy ? inf("Enabled fancy logs") : inf("Disabled fancy logs")
   rescue
     inf("Failed to change logging fanciness")
   end
 
-  def socket
-    $log[:socket] = !$log[:socket]
-    $log[:socket] ? inf("Enabled socket logs") : inf("Disabled socket logs")
+  def change_socket(enabled = nil)
+    old_socket = @socket
+    @socket = !enabled.nil? ? !!enabled : !@socket
+    old_socket == @socket ? inf("Socket logs were already #{@socket}") : @socket ? inf("Enabled socket logs") : inf("Disabled socket logs")
   rescue
     inf("Failed to change socket logging")
   end
 
   def set_modes(modes)
     @modes = modes.select{ |m| MODES.key?(m) }
-    inf("Set logging modes to #{@modes.join(', ')}.")
+    inf("Set logging modes to #{@modes.join(', ')}")
   rescue
     inf("Failed to set logging modes")
   end
@@ -165,10 +170,6 @@ module Log extend self
     inf(ret.join("; ").capitalize)
   rescue
     inf("Failed to change logging modes")
-  end
-
-  def modes
-    @modes
   end
 
   def format(text, mode, app = 'BOT', newline: true, pad: false, progress: false, fancy: true)

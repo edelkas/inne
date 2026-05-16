@@ -17,11 +17,40 @@ end
 
 def admin_logconf(event)
   event.show_modal(title: 'Configure logs', custom_id: 'admin:logconf') do |modal|
+
+    # Radio buttons to specify the logging level
     modal.label(id: 'label_level', label: 'Level') do |label|
       label.radio_group(custom_id: 'level', required: false) do |group|
         Log::LEVELS.each do |name, modes|
-          group.radio_button(value: name.to_s, label: name.to_s.capitalize, default: false)
+          group.radio_button(value: name.to_s, label: name.to_s.capitalize, default: modes.sort == Log.modes.sort)
         end
+      end
+    end
+
+    # Checkboxes to specify logging modes individually
+    modal.label(id: 'label_modes', label: 'Modes') do |label|
+      label.checkbox_group(custom_id: 'modes', required: false) do |group|
+        Log::MODES.each do |name, att|
+          group.checkbox(value: name.to_s, label: name.to_s.capitalize, default: Log.modes.include?(name))
+        end
+      end
+    end
+
+    # Checkboxes for additional properties
+    modal.label(id: 'label_settings', label: 'Other settings') do |label|
+      label.checkbox_group(custom_id: 'settings', required: false) do |group|
+        group.checkbox(
+          value:       'socket',
+          label:       'Log socket activity',
+          description: 'Log incoming requests and outgoing responses',
+          default:     Log.socket
+        )
+        group.checkbox(
+          value:       'fancy',
+          label:       'Fancy logs',
+          description: 'Unicode colorful logs for the terminal',
+          default:     Log.fancy
+        )
       end
     end
   end
@@ -33,8 +62,15 @@ def modal_logconf(event)
     case name
     when 'level'
       Log.level(value.to_sym)
+    when 'modes'
+      Log.set_modes(value.map(&:to_sym))
+    when 'settings'
+      [
+        Log.change_socket(value.include?('socket')),
+        Log.change_fancy(value.include?('fancy'))
+      ]
     end
-  }.compact.map{ |line| "* #{line}." }.join("\n")
+  }.compact.flatten.map{ |line| "* #{line}." }.join("\n")
   event.respond(content: "### __Modified log configuration__:\n#{changes}")
 end
 
@@ -572,9 +608,9 @@ def send_log_config(event)
     when :l
       Log.level((v || 'normal').to_sym)
     when :f
-      Log.fancy
+      Log.change_fancy
     when :s
-      Log.socket
+      Log.change_socket
     when :m
       Log.change_modes(v.to_s.split.map(&:to_sym))
     when :M
