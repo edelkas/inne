@@ -166,7 +166,7 @@ class UserlevelScore < ActiveRecord::Base
 
   # Count top20 scores for all userlevels and fill their completions field
   # Delicate pure SQL, doable in Rails?
-  def self.seed_completions(full = false)
+  def self.seed_completions
     query = %{
       UPDATE
         userlevels,

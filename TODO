@@ -1,3 +1,4 @@
+- Run update_completions regularly, perhaps daily, or even better use that account for the daily scores update, and report new scores in the daily summary.
 - Detect prolongated Discord websocket breakages automatically and restart or something.
 - Add reminder for Steam refresh token expiration a few days prior
 - API: Build cache in memory for commonly accessed values (e.g. last archive IDs, results of analysis, dumps, traces, etc)

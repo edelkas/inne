@@ -380,6 +380,7 @@ PAGE_SIZE      = 10    # Number of userlevels to show when browsing
 PART_SIZE      = 500   # Number of userlevels per file returned by the server when querying levels
 MIN_ID         = 22715 # ID of the very first userlevel, to exclude Metanet levels
 DEFAULT_GLOBAL = true  # Default to all userlevels in highscoring functions
+MIN_0_SCORES   = 18    # Required number of highscores to submit a zero score with outte
 
 # Offsets and sizes of the different binary formats used for levels
 SIZE_QUERY_HEADER_GLOBAL = 48 # Size of the initial header of a userlevel query

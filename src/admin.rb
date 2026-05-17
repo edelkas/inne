@@ -951,7 +951,7 @@ def submit_score(event)
       }
     else
       Downloadable.submit_zero_scores(
-        Userlevel.where('submitted = 0 AND completions >= 18'),
+        Userlevel.where("submitted = 0 AND completions >= #{MIN_0_SCORES}"),
         event: event,
         msgs: msgs
       )
@@ -1007,7 +1007,7 @@ def update_completions(event)
       }
     else
       delta += Downloadable.update_completions(
-        Userlevel.where('submitted = 1 OR completions >= 20'),
+        Userlevel.where("submitted = 1 OR completions >= #{MIN_0_SCORES}"),
         event: event, msgs: msgs, retries: retries, global: global
       )
     end
@@ -1018,8 +1018,7 @@ rescue => e
 end
 
 def userlevel_completions(event)
-  flags = parse_flags(event)
-  UserlevelScore.seed_completions(flags.key?(:full))
+  UserlevelScore.seed_completions
   succ("Seeded userlevel completions.", event: event)
 rescue => e
   lex(e, 'Failed to seed userlevel completions.', event: event)
