@@ -333,7 +333,7 @@ module Downloadable
       attempt = 0
       current = "#{name} [#{type} #{i} / #{count}]"
       count_old = h.completions.to_i
-      count_new = h.update_completions(log: false, discord: false, global: global)
+      count_new = h.update_completions(log: false, global: global)
 
       while !count_new
         acquire_connection # In case we spend too long here, we may've disconnected
@@ -341,7 +341,7 @@ module Downloadable
           concurrent_edit(event, msgs, "Stopped updating at #{current} (waiting for outte++).") if attempt == 0
           attempt += 1
           sleep(5)
-          count_new = h.update_completions(log: false, discord: false, global: global)
+          count_new = h.update_completions(log: false, global: global)
         else
           concurrent_edit(event, msgs, "Stopped updating at #{current} (timed out waiting for outte++).")
           return
@@ -366,75 +366,26 @@ module Downloadable
     res ? correct_ties(clean_scores(JSON.parse(res)['scores'])) : nil
   end
 
-  # Download personal score
-  def get_pb(steam_id, silent: false)
-    # Fetch scores
-    res = Net::HTTP.get_response(scores_uri(steam_id)) rescue nil
-    err_msg = "Failed to fetch scores for #{name}"
-
-    # Integrity checks
-    if !res.is_a?(Net::HTTPSuccess)
-      err("#{err_msg} (unsuccessful request #{res.code}).") unless silent
-      return :error
-    elsif res.body.blank?
-      err("#{err_msg} (empty response).") unless silent
-      return :empty
-    elsif res.body == METANET_INVALID_RES
-      err("#{err_msg} (inactive Steam ID).") unless silent
-      return :inactive
-    end
-
-    # Parse score from personal field
-    hash = JSON.parse(res.body)['userInfo'] rescue nil
-    if !hash
-      err("#{err_msg} (no score).") unless silent
-      return :none
-    end
-    hash
-  end
-
   # Get number of completions (basically a simpler get_scores query)
   #   global  - Use global boards rather than around mine
-  #   log     - Log download errors to the terminal
-  #   discord - Log download errors to Discord (since this function may be executed manually)
-  #   retries - Number of retries before giving up
-  #   stop    - Throw exception if all retries fail (otherwise, return nil)
-  def get_completions(global: false, log: false, discord: false, retries: 0, stop: false)
-    res = nil
-
-    # Make several attempts at retrieving the scores with outte++'s account
-    while !res && retries >= 0
-      # Fetch scores
-      res = Net::HTTP.get_response(scores_uri(OUTTE_STEAM_ID, qt: global ? 0 : 1))
-
-      # Received incorrect HTTP response
-      if !res || !(200..299).include?(res.code.to_i)
-        if retries != 0 || !stop
-          res = nil
-        else
-          perror("Unsuccessful HTTP request.", log: log, discord: discord)
-        end
-      end
-
-      # outte++'s isn't active
-      if res && res.body == METANET_INVALID_RES
-        if retries != 0 || !stop
-          res = nil
-        else
-          perror("outte++'s Steam ID not active.", log: log, discord: discord)
-        end
-      end
-
-      retries -= 1
+  #   log     - Log download errors to the terminal and Discord
+  #   stop    - Throw exception instead of returning nil
+  def get_completions(global: false, log: false, stop: false)
+    # Fetch scores
+    res = Player.find_by(metanet_id: OUTTE_ID).get_scores(self, qt: global ? 0 : 1)
+    if res.nil?
+      return if !stop
+      perror("Unsuccessful HTTP request.", log: log, discord: log)
+    elsif !res
+      return if !stop
+      perror("outte++'s Steam ID not active.", log: log, discord: log)
     end
 
     # Parse result (no result, no scores, or success)
-    return nil if !res
-    hash = JSON.parse(res.body)
-    pb = hash['userInfo']
+    pb = res['userInfo']
     if !pb
       return -1 if !stop
-      perror("outte++ doesn't have a score in #{name}.", log: log, discord: discord)
+      perror("outte++ doesn't have a score in #{name}.", log: log, discord: log)
     end
 
     # Return max rank between personal and whole leaderboard
@@ -442,7 +393,7 @@ module Downloadable
     #  - Returned ranks in the sores list might be null
     #  - The personal rank is sometimes incorrect. For example, for stories,
     #    it may actually incorrectly equal the episode rank instead.
-    max_rank = hash['scores'].map{ |s| s['rank'].to_i }.max.to_i
+    max_rank = res['scores'].map{ |s| s['rank'].to_i }.max.to_i
     my_rank = pb['my_rank'].to_i
     my_rank = 0 if self.class == Story && my_rank + 1 >= Episode.find_by(id: id).completions rescue 0
     [max_rank, my_rank].max + 1
@@ -586,12 +537,12 @@ module Downloadable
 
   # Update how many completions this highscoreable has, by downloading the scores
   # using outte++'s N++ account, which has a score of 0.000 in all of them
-  def update_completions(log: false, discord: false, retries: 0, stop: false, global: nil)
+  def update_completions(log: false, stop: false, global: nil)
     if !global.nil?
-      count = get_completions(global: global, log: log, discord: discord, retries: retries, stop: stop)
+      count = get_completions(global: global, log: log, stop: stop)
     else
-      count = get_completions(global: false, log: log, discord: discord, retries: retries, stop: stop)
-      count = get_completions(global: true, log: log, discord: discord, retries: retries, stop: stop) if count && completions && count < completions
+      count = get_completions(global: false, log: log, stop: stop)
+      count = get_completions(global: true, log: log, stop: stop) if count && completions && count < completions
     end
 
     return nil if !count
@@ -671,6 +622,7 @@ module Downloadable
   # TODO: Update the completions field of the highscoreable
   # worker - When multithreading, the ThreadPool::Thread that is running this method
   def scan_boards(metanet_id: OUTTE2_ID, worker: nil)
+    player = Player.find_by(metanet_id: metanet_id)
     data = {}
     global_gap = true
     holes = 0
@@ -691,7 +643,6 @@ module Downloadable
       score = round_score(cur_score / 1000.0)
       replay_count = TYPES[self.class.to_s][:size] rescue 1
       replays = [[]] * replay_count
-      player = Player.find_by(metanet_id: metanet_id)
       status = submit_score(score, replays, player, log: false, silent: true)
       if !status
         # Submission error (commonly timeout due to bad network), or multithreading
@@ -711,14 +662,17 @@ module Downloadable
       # Fetch scores around me
       res = nil
       begin
-        res = Net::HTTP.get_response(scores_uri(OUTTE2_STEAM_ID, qt: reached_top ? 0 : 1)) rescue nil
-        if !res.is_a?(Net::HTTPSuccess)
+        res = player.get_scores(self, qt: reached_top ? 0 : 1)
+        if res.nil?
           worker ? worker.idle(wait) : sleep(wait)
           raise
-        elsif res.body == METANET_INVALID_RES
-          worker.idle(wait) if worker
-          err("Failed to fetch scores (inactive Steam ID).") if !worker
-          quiet_breakpoint if !worker
+        elsif !res
+          if worker
+            worker.idle(wait)
+          else
+            err("Failed to fetch scores (inactive Steam ID).")
+            quiet_breakpoint
+          end
           raise
         end
       rescue
@@ -726,11 +680,10 @@ module Downloadable
       end
 
       # Fill data
-      hash = JSON.parse(res.body)
-      board = hash['scores']
+      board = res['scores']
       return err("No scores found.") if board.empty?
       board.each{ |s| data[s['replay_id']] = s }
-      (cur_id = hash['userInfo']['my_replay_id']) rescue -1
+      (cur_id = res['userInfo']['my_replay_id']) rescue -1
       data.reject!{ |id, s| s['user_id'] == metanet_id && id != cur_id }
 
       # Log progress
@@ -2569,17 +2522,20 @@ class Player < ActiveRecord::Base
   end
 
   # Downloads the scores for the specified highscoreable with this player's Steam ID
+  # Returns nil on error, and false on unauthenticated
   def get_scores(h, qt: 0, discord: false)
     return if !h.is_a?(Downloadable)
     id_key = (h.is_userlevel? ? 'level' : h.class.to_s.downcase) + '_id'
     res = send_request(:scores, args: { qt: qt, id_key => h.id }, discord: discord)
-    res ? JSON.parse(res) : nil
+    return res unless res
+    JSON.parse(res) rescue nil
   end
 
   # Fetches the player's score in the specified highscoreable
   def get_score(h, discord: false)
     # Download scores
     json = get_scores(h, discord: discord)
+    return unless json
     scores = h.correct_ties(h.clean_scores(json['scores']))
 
     # First, try to find personal score in global leaderboard.
@@ -2594,6 +2550,15 @@ class Player < ActiveRecord::Base
     err("Player #{name} (#{metanet_id}) has no server score in #{h.name}")
     perror("You have no #{h.name} score in the server") if discord
     nil
+  end
+
+  # Download personal score
+  def get_pb(h)
+    res = get_scores(h)
+    return :error if res.nil?
+    return :inactive if !res
+    return :none if !res.key?('userInfo')
+    res['userInfo']
   end
 
   # Fetches the player's replay given the type and ID

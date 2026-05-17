@@ -138,12 +138,13 @@ end
 def scan_boards(event = nil, page: nil)
   workers = ThreadPool.new(20)
   levels = Level.where(tab: :S).order(:id).offset(400).limit(100).all
+  player = Player.find_by(metanet_id: OUTTE2_ID)
   tasks = levels.map{ |h|
     Proc.new do |thread:|
       thread.status = h.name
       sleep(rand)
-      case h.get_pb(OUTTE2_STEAM_ID, silent: true)
-      when :inactive, :error, :empty
+      case player.get_pb(h)
+      when :inactive, :error
         sleep(10)
         raise
       when :none
@@ -979,7 +980,7 @@ def update_completions(event)
       perror("This highscoreable is not downloadable.") if !h.is_a?(Downloadable)
     end
     count_old = h.completions.to_i
-    count_new = h.update_completions(log: true, discord: true, retries: 0, stop: true, global: global)
+    count_new = h.update_completions(log: true, stop: true, global: global)
     name = h.is_userlevel? ? "userlevel #{h.id}" : h.name
     if count_new
       count_new = count_new.to_i
