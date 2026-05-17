@@ -2387,7 +2387,7 @@ class Player < ActiveRecord::Base
   # on command when we login with username and password and expires in ~200 days.
   def refresh_token
     return nil if !steam_id
-    ENV["STEAM_TOKEN_#{steam_id}"]
+    $steam_tokens[steam_id]&.[](:token)
   end
 
   # Authenticates the player by generating a Steam auth ticket and validating it

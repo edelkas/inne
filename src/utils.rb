@@ -2540,6 +2540,30 @@ def steamworks(
   end
 end
 
+# Parse a Steam refresh token (JWT) and verify validity
+def parse_steam_jwt(data, steam_id = nil, silent: true)
+  header, payload = data.split('.').take(2).map{ |p| JSON.parse(Base64.urlsafe_decode64(p)) }
+  lower = Time.at(payload['nbf'])
+  upper = Time.at(payload['exp'])
+  now = Time.now
+  correct =
+  active = lower <= now && now <= upper
+  date_format = '%F'
+  args = [
+    payload['sub'],
+    Time.at(payload['iat']).strftime(date_format),
+    lower.strftime(date_format),
+    upper.strftime(date_format),
+    payload['ip_subject']
+  ]
+  dbg("Token for %s: issued %s, valid from %s to %s, IP %s" % args) unless silent
+  {
+    valid: payload['iss'] == 'steam' && (!steam_id || payload['sub'].to_i == steam_id),
+    expired: lower > now || now > upper,
+    expires: upper
+  }
+end
+
 # <---------------------------------------------------------------------------->
 # <------                           GRAPHICS                             ------>
 # <---------------------------------------------------------------------------->
@@ -3054,6 +3078,21 @@ def set_channels(event = nil)
   log("Content channel:  #{$content_channel.name}")  if !$content_channel.nil?
   log("Speedrun channel: #{$speedrun_channel.name}") if !$speedrun_channel.nil?
   log("CTP channel:      #{$ctp_channel.name}")      if !$ctp_channel.nil?
+end
+
+# Verify available Steam refresh tokens and possibly warn the botmaster
+def verify_steam_tokens
+  $steam_tokens.each{ |steam_id, hash|
+    hash.merge!(parse_steam_jwt(hash[:token], steam_id))
+    next if hash[:warned]
+    str = "Steam token for #{steam_id}"
+    rem = hash[:expires] - Time.now
+    hash[:warned] = true
+    next err("#{str} is invalid", discord: true) if !hash[:valid]
+    next err("#{str} expired on #{hash[:expires].strftime('%F %T')}", discord: true) if rem < 0
+    next alert("#{str} expires in #{rem / 86400} days", discord: true) if rem < STEAM_TOKEN_GRACE * 86400
+    hash[:warned] = false
+  }
 end
 
 # Leave all the servers the bot is in which are not specifically white-listed

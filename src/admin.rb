@@ -669,8 +669,6 @@ end
 
 # Test Steam patch embeds
 def test_steam_info(event)
-  token = ENV['SSAA_TOKEN'] || ENV["STEAM_TOKEN_#{DATA_STEAM_ID}"]
-  perror("No refresh token found") if !token
   app = SteamApp.find_by(id: APP_ID)
   perror("N++ Steam app isn't initialized, run `!steam_seed`") if !app || !app.name
   version = SteamBranchVersion.last
@@ -684,7 +682,7 @@ end
 
 # TODO: Seed other stuff in here (stats, achievements, etc), and send summary to Discord
 def seed_steam(event)
-  token = ENV['SSAA_TOKEN'] || ENV["STEAM_TOKEN_#{DATA_STEAM_ID}"]
+  token = $steam_tokens[DATA_STEAM_ID]&.[](:token)
   perror("No refresh token found") if !token
   app = SteamApp.find_or_create_by(id: APP_ID)
   changes = app.fetch_info(token: token)

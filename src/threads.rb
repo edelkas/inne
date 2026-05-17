@@ -374,6 +374,9 @@ def update_status
   # Persist bot status (action counters, etc) to db
   GlobalProperty.status_persist
 
+  # Verify Steam refresh tokens are still valid and not expired
+  verify_steam_tokens
+
   # Finish
   $status_update = Time.now.to_i
 end
@@ -400,6 +403,13 @@ end
 # Monitor several N++-related RSS feeds (Steam, SteamDB) for news and send notices
 def update_rss
   Feed::check
+end
+
+# Monitor N++ patches on Steam
+def update_steam
+  token = $steam_tokens[DATA_STEAM_ID]&.[](:token)
+  return unless token
+  SteamApp.find_or_create_by(id: APP_ID).fetch_info(token: token)
 end
 
 # Update missing demos (e.g., if they failed to download originally)
@@ -902,9 +912,7 @@ def start_discord_tasks
   Scheduler.add("Update RSS", freq: RSS_UPDATE_FREQUENCY, log: false) { update_rss } if DO_EVERYTHING  || UPDATE_RSS
 
   # Check for new N++ Steam patches every 5 minutes
-  Scheduler.add("Update Steam patches", freq: STEAM_UPDATE_FREQUENCY, log: false) {
-    SteamApp.find_or_create_by(id: APP_ID).fetch_info(token: ENV["STEAM_TOKEN_#{DATA_STEAM_ID}"])
-  } if DO_EVERYTHING  || UPDATE_STEAM
+  Scheduler.add("Update Steam patches", freq: STEAM_UPDATE_FREQUENCY, log: false) { update_steam } if DO_EVERYTHING  || UPDATE_STEAM
 
   # Post lotd daily, eotw weekly and cotm monthly
   freq = TEST && TEST_LOTD ? -1 : LEVEL_UPDATE_FREQUENCY

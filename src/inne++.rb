@@ -198,6 +198,13 @@ def initialize_vars
   alert("No Python interpreter found, some features will not work.") if !$tools[:python]
   $tools[:python_fast] = ['pypy', 'pypy3'].find{ |s| system("#{s} --version > /dev/null 2>&1") }
 
+  # Parse available Steam refresh tokens
+  $steam_tokens = ENV.select{ |k, v| k =~ /^STEAM_TOKEN_\d+$/i }.map{ |k, v|
+    steam_id = k[/\d+/].to_i
+    res = parse_steam_jwt(v, steam_id, silent: false)
+    [steam_id, { id: steam_id, token: v, warned: false }.merge(res)]
+  }.to_h
+
   # Set environment variables
   ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
 
