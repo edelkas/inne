@@ -292,8 +292,7 @@ end
 module Downloadable
   # Submit zero scores to a list of Downloadables
   #   event: Send msgs to Discord if not nil
-  #   msgs:  Discord message to edit for progress report
-  def self.submit_zero_scores(list, event: nil, msgs: [nil])
+  def self.submit_zero_scores(list, event: nil)
     ul = list.first.is_userlevel?
     count = list.count
     good = 0
@@ -303,27 +302,26 @@ module Downloadable
       res = h.submit_zero_score
       if !res
         bad += 1
-        concurrent_edit(event, msgs, "Failed to submit zero score to #{name} (outte++ inactive?).") unless !event
+        TmpMsg.update(event, "Failed to submit zero score to #{name} (outte++ inactive?).") unless !event
         sleep(5)
       elsif res.key?('rank') && !res['rank'].nil? && res['rank'].to_i >= 0
         h.update(completions: res['rank'].to_i + 1) if !h.completions || h.completions < res['rank'].to_i + 1
         h.update(submitted: true) if ul
         good += 1
         dbg("Submitted zero score to #{name}: rank #{res['rank']}", progress: true)
-        concurrent_edit(event, msgs, "Submitted #{good} / #{count} zero scores (#{bad} failed)...") if good % 100 == 0 && event
+        TmpMsg.update(event, "Submitted #{good} / #{count} zero scores (#{bad} failed)...") if good % 100 == 0 && event
       else
         bad += 1
-        concurrent_edit(event, msgs, "Failed to submit zero score to #{name} (wrong hash?).") unless !event
+        TmpMsg.update(event, "Failed to submit zero score to #{name} (wrong hash?).") unless !event
       end
     }
   end
 
   # Update completions for a list of Downloadables
   #   event:   Send msgs to Discord if not nil
-  #   msgs:    Discord message to edit for progress report
   #   retries: Retries before moving on to next level (0 = infinite)
   #   global:  Use global boards (true), around mine (false) or default (nil)
-  def self.update_completions(list, event: nil, msgs: [nil], retries: 0, global: nil)
+  def self.update_completions(list, event: nil, retries: 0, global: nil)
     type = list.first.class.to_s.downcase
     ul = list.first.is_userlevel?
     count = list.count
@@ -338,18 +336,18 @@ module Downloadable
       while !count_new
         acquire_connection # In case we spend too long here, we may've disconnected
         if retries == 0 || attempt < retries
-          concurrent_edit(event, msgs, "Stopped updating at #{current} (waiting for outte++).") if attempt == 0
+          TmpMsg.update(event, "Stopped updating at #{current} (waiting for outte++).") if event && attempt == 0
           attempt += 1
           sleep(5)
           count_new = h.update_completions(log: false, global: global)
         else
-          concurrent_edit(event, msgs, "Stopped updating at #{current} (timed out waiting for outte++).")
+          TmpMsg.update(event, "Stopped updating at #{current} (timed out waiting for outte++).") if event
           return
         end
       end
 
       delta += [count_new - count_old, 0].max
-      concurrent_edit(event, msgs, "Updated #{current} (Gained: #{delta})...") if i % 100 == 0
+      TmpMsg.update(event, "Updated #{current} (Gained: #{delta})...") if event && i % 100 == 0
     }
     delta
   end
@@ -447,6 +445,7 @@ module Downloadable
 
   # TODO: Only update scores if replay_id is new, at least for userlevel scores, to prevent overwriting
   # the fields that we compute manually, such as date or fractional score.
+  # TODO: Keep completions up to date for userlevels, at least when there are fewer than 20 scores.
   def save_scores(updated)
     ActiveRecord::Base.transaction do
       # Save stars so we can reassign them again later

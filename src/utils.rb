@@ -1771,22 +1771,6 @@ class TmpMsg
   end
 end
 
-# Send or edit a Discord message in parallel
-# We actually send an array of messages, not only so that we can edit them all,
-# but mainly because that way we actually can edit the original message object.
-# (i.e. simulate pass-by-reference via encapsulation)
-def concurrent_edit(event, msgs, content)
-  Thread.new do
-    msgs.map!{ |msg|
-      msg.nil? ? send_message(event, content: content) : msg.edit(content)
-    }
-  rescue
-    msgs
-  end
-rescue
-  msgs
-end
-
 # Set the avatar to an image given the name
 def change_avatar(avatar)
   File::open(File.join(PATH_AVATARS, avatar)) do |f|

@@ -956,7 +956,7 @@ def submit_score(event)
         msgs: msgs
       )
     end
-    concurrent_edit(event, msgs, "Finished submitting all remaining zero scores.")
+    TmpMsg.update(event, "Finished submitting all remaining zero scores.")
   end
 rescue => e
   lex(e, 'Failed to submit score.', event: event)
@@ -1011,7 +1011,7 @@ def update_completions(event)
         event: event, msgs: msgs, retries: retries, global: global
       )
     end
-    concurrent_edit(event, msgs, "Finished updating completions, gained #{delta} ones.")
+    TmpMsg.update(event, "Finished updating completions, gained #{delta} ones.")
   end
 rescue => e
   lex(e, 'Failed to update completions.', event: event)
