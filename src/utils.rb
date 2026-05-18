@@ -604,6 +604,16 @@ module HTML extend self
   end
 end
 
+# Download a spreadsheet from Google Sheets
+def get_sheet(id)
+  url = GOOGLE_SHEETS_EXPORT % id + '?format=xlsx'
+  begin
+    res = Net::HTTP.get_response(URI.parse(url))
+    url = res['location']
+  end while res.is_a?(Net::HTTPRedirection)
+  res.is_a?(Net::HTTPSuccess) ? res.body : nil
+end
+
 # <---------------------------------------------------------------------------->
 # <------                   (SEC4) SYSTEM OPERATIONS                     ------>
 # <---------------------------------------------------------------------------->

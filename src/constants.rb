@@ -87,6 +87,10 @@ GITHUB_USER = 'edelkas'
 GITHUB_REPO = 'inne'
 GITHUB_LINK = "https://github.com/#{GITHUB_USER}/#{GITHUB_REPO}"
 
+# Google
+GOOGLE_SHEETS_EXPORT = 'https://docs.google.com/spreadsheets/d/%s/export'
+SHEET_ID_VIDEOS      = '12Os50amv9nSHR3u5sDqKiwDk1eRUY5lYLzyLgEUsldQ'     # N++ Video Library
+
 # <---------------------------------------------------------------------------->
 # <------                      DISCORD VARIABLES                         ------>
 # <---------------------------------------------------------------------------->

@@ -19,6 +19,7 @@ source 'https://rubygems.org' do
     gem 'damerau-levenshtein'
     gem 'html-to-markdown'
     gem 'nokogiri'
+    gem 'roo'
     gem 'rss'
     gem 'rubyzip'
     gem 'unicode-emoji'

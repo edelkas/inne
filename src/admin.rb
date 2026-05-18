@@ -166,10 +166,10 @@ def scan_boards(event = nil, page: nil)
 end
 
 def send_test(event)
-  #lvl = Level.find_by(name: 'S-A-00-00')
-  #count = lvl.parse_raw_scores("boards/json/S/#{lvl.name}.json")
-  #succ("Parsed #{count} raw scores")
-  SteamDB.seed_updates(Zlib.inflate(File.read("#{DIR_DB}/steamdb_history.deflate")))
+  data = get_sheet(SHEET_ID_VIDEOS)
+  file = tmp_file(data, 'sheet.xlsx', binary: true)
+  sheet = Roo::Excelx.new(file)
+  puts sheet.info
 end
 
 def send_dday_stats
