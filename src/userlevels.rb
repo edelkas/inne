@@ -1437,20 +1437,11 @@ def send_userlevel_stats(event)
   full      = parse_global(msg)
   counts    = player.range_h(0, 19, ties, full, nil, author_id)
                     .map{ |rank, scores| [rank, scores.length] }
-
-  histogram = AsciiCharts::Cartesian.new(
-    counts,
-    bar: true,
-    hide_zero: true,
-    max_y_vals: 15,
-    title: 'Histogram'
-  ).draw
-
+  histogram = make_histogram(counts)
   totals  = counts.map{ |rank, count|
     "#{Highscoreable.format_rank(rank)}: #{"   %5d" % count}"
   }.join("\n\t")
   overall = "Totals:    %5d" % counts.reduce(0){ |sum, c| sum += c[1] }
-
   full = format_global(full)
   event << format_header("#{full.capitalize} userlevels highscoring stats for #{player.name} #{format_author(author)} #{format_time}")
   event << format_block("          Scores\n\t#{totals}\n#{overall}\n#{histogram}")

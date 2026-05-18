@@ -33,7 +33,6 @@
 - Implement "index" (maybe "tally"): Outputs file with a list (like "list") of something, like all 0ths. With a parameter we specify what, for instance, 0th scores or 0th frames. With another parameter we specify the order, like the natural one, or by score in descending order...
 - Compare local scores (nprofile) vs server scores to find differences, a la NReality Score Comparer.
 - Add total <rank> score, and show total score and total 19th score gained daily and weekly.
-- Compile usage stats (number of pings, most used commands, data uploaded / downloaded, etc).
 - Screenscores for userlevels.
 - Add "maxed" and "maxable" to "list" and "how many".
 - Add "ownage" and others to "table".
@@ -46,7 +45,6 @@
 - Allow to add "rankings" to any userlevel query (browse) to instead perform rankings on the result set.
 - Add regex to functions (userlevel search, etc)
 - aliases: Make sure they cannot be repeated. Add edit/remove alias functions only for botmaster.
-- In spread function, if rank == 19, assume it means "last", so that it works in boards with hacked scores. Perhaps do that for 18 (2nd from last), etc. At some point the pattern needs to break, though. Just use clamp here.
 - Personal demo analysis function (for when a run is not in the global leaderboard)
 - Browse uncleared userlevels (levels with no completions)
 - Unmaxed missing (ignore maxes in missing)

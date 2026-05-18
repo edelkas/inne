@@ -4,7 +4,6 @@
 
 $load_time = Time.now
 
-require 'ascii_charts'
 require 'rmagick'
 require 'svggraph'
 require 'zip'
