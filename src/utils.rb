@@ -1,48 +1,48 @@
 # This file compiles a general library of diverse functions that can be useful
 # throughout the entire program:
-#
-#  1) Logging:
-#       A custom and configurable logging class, with different levels and modes,
-#       that can log timestamped text to the terminal, to a file, and to Discord.
-#  2) Exception handling:
-#       Defines a custom exception class, OutteError, which is printed to Discord
-#       whenever raised. Intended for user errors.
-#  3) Networking:
-#       Getting arbitrary data from N++'s server using Steam IDs, forwarding
-#       requests and acting as a middleman, building multipart POSTs, ...
-#  4) System operations:
-#       Forking, threading, inkoving the shell, getting memory information for
-#       maintenance, running Python scripts, etc.
-#  5) Benchmarking:
-#       Functions to benchmark code, perform memory profiling, etc.
-#  6) String manipulation:
-#       Converting between formats (ASCII, UTF8, ...), string escaping/unescaping,
-#       string sanitization (for filenames, SQL, ...), string truncation/padding,
-#       string distance (Damerau-Levenshtein), etc.
-#  7) Binary manipulation:
-#       Basically packing and unpacking binary data into/from strings.
-#  8) File manipulation:
-#       Helpers for parsing binary files and zipping/unzipping stuff.
-#  9) Discord related:
-#       Finding Discord users, channels, servers, emojis, etc. Pinging users,
-#       reacting or unreacting to comments, mentioning channels... Formatting
-#       strings (as code blocks, spoilers, ...), etc.
-# 10) N++ specific:
-#       Stuff like sanitizing parameters for N++ functions, finding maximum values
-#       for rankings, calculating episode splits, or computing a highscoreable's
-#       name from its ID.
-# 11) Graphics:
-#       Text-based and image-based graphics generation. Includes things such as
-#       progress bars, tables, histograms, and plots.
-# 12) Bot management:
-#       Permission system for commands with custom roles, setting the bot's main
-#       channels, leaving blacklisted servers, restarting the bot, etc.
-# 13) SQL:
-#       Acquire/release db connections, perform raw SQL queries, monitor SQL
-#       resources, check Rails version, etc.
-# 14) Maths:
-#       Operations (e.g. weighted averages), geometry (e.g. intersection and
-#       areas of rectangles), hashing (SHA1, MD5), etc.
+# (TOC)
+#  (SEC1) Logging:
+#         A custom and configurable logging class, with different levels and modes,
+#         that can log timestamped text to the terminal, to a file, and to Discord.
+#  (SEC2) Exception handling:
+#         Defines a custom exception class, OutteError, which is printed to Discord
+#         whenever raised. Intended for user errors.
+#  (SEC3) Networking:
+#         Getting arbitrary data from N++'s server using Steam IDs, forwarding
+#         requests and acting as a middleman, building multipart POSTs, ...
+#  (SEC4) System operations:
+#         Forking, threading, inkoving the shell, getting memory information for
+#         maintenance, running Python scripts, etc.
+#  (SEC5) Benchmarking:
+#         Functions to benchmark code, perform memory profiling, etc.
+#  (SEC6) String manipulation:
+#         Converting between formats (ASCII, UTF8, ...), string escaping/unescaping,
+#         string sanitization (for filenames, SQL, ...), string truncation/padding,
+#         string distance (Damerau-Levenshtein), etc.
+#  (SEC7) Binary manipulation:
+#         Basically packing and unpacking binary data into/from strings.
+#  (SEC8) File manipulation:
+#         Helpers for parsing binary files and zipping/unzipping stuff.
+#  (SEC9) Discord related:
+#         Finding Discord users, channels, servers, emojis, etc. Pinging users,
+#         reacting or unreacting to comments, mentioning channels... Formatting
+#         strings (as code blocks, spoilers, ...), etc.
+# (SEC10) N++ specific:
+#         Stuff like sanitizing parameters for N++ functions, finding maximum values
+#         for rankings, calculating episode splits, or computing a highscoreable's
+#         name from its ID.
+# (SEC11) Graphics:
+#         Text-based and image-based graphics generation. Includes things such as
+#         progress bars, tables, histograms, and plots.
+# (SEC12) Bot management:
+#         Permission system for commands with custom roles, setting the bot's main
+#         channels, leaving blacklisted servers, restarting the bot, etc.
+# (SEC13) SQL:
+#         Acquire/release db connections, perform raw SQL queries, monitor SQL
+#         resources, check Rails version, etc.
+# (SEC14) Maths:
+#         Operations (e.g. weighted averages), geometry (e.g. intersection and
+#         areas of rectangles), hashing (SHA1, MD5), etc.
 
 $load_time = Time.now
 
@@ -56,7 +56,7 @@ require 'zip'
 
 
 # <---------------------------------------------------------------------------->
-# <------                           LOGGING                              ------>
+# <------                       (SEC1) LOGGING                           ------>
 # <---------------------------------------------------------------------------->
 
 if LOG_SQL
@@ -318,7 +318,7 @@ def action_dec(key)
 end
 
 # <---------------------------------------------------------------------------->
-# <------                     EXCEPTION HANDLING                         ------>
+# <------                  (SEC2) EXCEPTION HANDLING                     ------>
 # <---------------------------------------------------------------------------->
 
 # Custom exception classes.
@@ -344,7 +344,7 @@ def perror(msg = '', log: false, discord: true, ephemeral: false)
 end
 
 # <---------------------------------------------------------------------------->
-# <------                          NETWORKING                            ------>
+# <------                      (SEC3) NETWORKING                         ------>
 # <---------------------------------------------------------------------------->
 
 # Get the required server endpoint to perform the desired request to N++ server
@@ -605,7 +605,7 @@ module HTML extend self
 end
 
 # <---------------------------------------------------------------------------->
-# <------                       SYSTEM OPERATIONS                        ------>
+# <------                   (SEC4) SYSTEM OPERATIONS                     ------>
 # <---------------------------------------------------------------------------->
 
 # Execute code block in another process
@@ -869,7 +869,7 @@ ensure
 end
 
 # <---------------------------------------------------------------------------->
-# <------                         BENCHMARKING                           ------>
+# <------                     (SEC5) BENCHMARKING                        ------>
 # <---------------------------------------------------------------------------->
 
 # Wrapper to benchmark a piece of code
@@ -910,7 +910,7 @@ rescue => e
 end
 
 # <---------------------------------------------------------------------------->
-# <------                      STRING MANIPULATION                       ------>
+# <------                  (SEC6) STRING MANIPULATION                    ------>
 # <---------------------------------------------------------------------------->
 
 # Convert a string to strict ASCII, replacing all invalid characters to underscores
@@ -1381,7 +1381,7 @@ class Doc
 end
 
 # <---------------------------------------------------------------------------->
-# <------                      BINARY MANIPULATION                       ------>
+# <------                  (SEC7) BINARY MANIPULATION                    ------>
 # <---------------------------------------------------------------------------->
 
 # Convert an integer into a little endian binary string of 'size' bytes and back
@@ -1413,7 +1413,7 @@ rescue
 end
 
 # <---------------------------------------------------------------------------->
-# <------                       FILE MANIPULATION                        ------>
+# <------                   (SEC8) FILE MANIPULATION                     ------>
 # <---------------------------------------------------------------------------->
 
 FMT_SIZES = {
@@ -1467,7 +1467,7 @@ def unzip(data)
 end
 
 # <---------------------------------------------------------------------------->
-# <------                        DISCORD RELATED                         ------>
+# <------                    (SEC9) DISCORD RELATED                      ------>
 # <---------------------------------------------------------------------------->
 
 # Discord API version currently in use by Discordrb
@@ -1847,7 +1847,7 @@ def fetch_attachments(event, filter: nil, limit_size: 5 * 1024 ** 2, limit_files
 end
 
 # <---------------------------------------------------------------------------->
-# <------                         N++ SPECIFIC                           ------>
+# <------                     (SEC10) N++ SPECIFIC                       ------>
 # <---------------------------------------------------------------------------->
 
 # Verifies if an arbitrary floating point can be a valid score
@@ -2565,7 +2565,7 @@ def parse_steam_jwt(data, steam_id = nil, silent: true)
 end
 
 # <---------------------------------------------------------------------------->
-# <------                           GRAPHICS                             ------>
+# <------                       (SEC11) GRAPHICS                         ------>
 # <---------------------------------------------------------------------------->
 
 # A nice looking progress bar. The style can be split, filled or ascii.
@@ -2997,7 +2997,7 @@ def build_octicon(name, size = 24, color = 'white')
 end
 
 # <---------------------------------------------------------------------------->
-# <------                        BOT MANAGEMENT                          ------>
+# <------                    (SEC12) BOT MANAGEMENT                      ------>
 # <---------------------------------------------------------------------------->
 
 # Permission system:
@@ -3129,7 +3129,7 @@ rescue => e
 end
 
 # <---------------------------------------------------------------------------->
-# <------                             SQL                                ------>
+# <------                         (SEC13) SQL                            ------>
 # <---------------------------------------------------------------------------->
 
 # This function needs to be called whenever we've spent a "long time" without
@@ -3201,7 +3201,7 @@ def create_enum(name, values, opts = {})
 end
 
 # <---------------------------------------------------------------------------->
-# <------                             MATHS                              ------>
+# <------                         (SEC14) MATHS                          ------>
 # <---------------------------------------------------------------------------->
 
 # Floating point precision. It's the minimum threshold to consider two floats different.
