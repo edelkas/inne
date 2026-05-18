@@ -1367,6 +1367,62 @@ def test_lotd(event)
   event << lotd_reminders(ctp: ctp, episode: true, story: true) if flags.key?(:reminder)
 end
 
+# Sort levels by object counts and other stats, and return screenies
+def send_object_counts(event)
+  flags = parse_flags(event)
+  levels = []
+  texts = []
+
+  # Fetch object counts (costly, so we log progress)
+  counts = MappackLevel.where(mappack_id: 0, mode: 0).all.map.with_index{ |l, i|
+    dbg(i, progress: true)
+    [l, l.object_counts]
+  }.to_h
+
+  # Find the 5 levels with most and least objects (total and types)
+  totals = counts.map{ |l, c| [l, c.sum] }.sort_by{ |l, c| [c, l.id] }
+  types = counts.map{ |l, c| [l, c.reject(&:zero?).size] }.sort_by{ |l, c| [c, l.id] }
+  (totals[-5, 5].reverse + totals[0, 5]).each{ |l, c|
+    levels << l
+    texts << "#{c} objects\n#{l.name.remove('MET-')}"
+  }
+  (types[-5, 5].reverse + types[0, 5]).each{ |l, c|
+    levels << l
+    texts << "#{c} object types\n#{l.name.remove('MET-')}"
+  }
+
+  # Find the 5 levels with most objects of each type
+  Map::OBJECTS.each{ |id, hash|
+    next if [Map::ID_NINJA, Map::ID_EXIT_SWITCH, Map::ID_DOOR_LOCKED_SWITCH, Map::ID_DOOR_TRAP_SWITCH].include?(id)
+    list = counts.select{ |l, c| c[id] > 0 }.sort_by{ |l, c| -c[id] }.take(5)
+    levels.push(*list.map(&:first))
+    texts.push(*list.map{ |l, c| "%d %s\n%s" % [c[id], hash[:name].pluralize, l.name.remove('MET-')] })
+  }.compact
+
+  # Generate screenshot (costly) and configure ImageMagick
+  dbg("\nGenerating screenshot...")
+  png = Magick::Image.from_blob(Map.screenshot(h: levels)).first
+  draw = Magick::Draw.new{ |d|
+    d.font = File.join(DIR_FONTS, 'sys', 'Sys.otf')
+    d.pointsize = 24
+    d.fill = 'black'
+    d.font_weight = Magick::BoldWeight
+    d.gravity = Magick::NorthWestGravity
+  }
+
+  # Overlay texts
+  texts.each_with_index{ |text, index|
+    row = index / 5
+    col = index % 5
+    w = png.columns / 5
+    h = png.rows * 5 / texts.size
+    x = col * w
+    y = row * h
+    draw.annotate(png, w, h, x + 8, y + 2, text)
+  }
+
+  send_message(botmaster.pm, files: [tmp_file(png.to_blob, 'res.png', binary: true)])
+end
 
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
@@ -1413,6 +1469,7 @@ def respond_special(event)
   return send_mappack_update(event)      if cmd == 'mappack_update'
   return send_meminfo(event)             if cmd == 'meminfo'
   return send_nprofile_gen(event)        if cmd == 'nprofile_gen'
+  return send_object_counts(event)       if cmd == 'object_counts'
   return send_reaction(event)            if cmd == 'react'
   return rename_author(event)            if cmd == 'rename_author'
   return test_report(event)              if cmd == 'report'
