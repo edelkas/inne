@@ -1873,33 +1873,6 @@ rescue => e
   lex(e, "Error sending lotd/eotw/cotm info.", event: event)
 end
 
-def send_videos(event)
-  videos = parse_videos(event)
-
-  # If we have more than one video, we probably shouldn't spam the channel too hard...
-  # so we'll make people be more specific unless we can narrow it down.
-  if videos.length == 1
-    event << videos[0].url
-    return
-  end
-
-  descriptions = videos.map(&:format_description).join("\n")
-  default = videos.where(challenge: ["G++", "?!"])
-
-  # If we don't have a specific challenge to look up, we default to sending
-  # one without challenges
-  if default.length == 1
-    # Send immediately, so the video link shows above the additional videos
-    send_message(event, content: default[0].url)
-    event << "\nI have some challenge videos for this level as well! You can ask for them by being more specific about challenges and authors, by saying '<challenge> video for <level>' or 'video for <level> by <author>':\n#{format_block(descriptions)}"
-    return
-  end
-
-  event << "You're going to have to be more specific! I know about the following videos for this level:\n#{format_block(descriptions)}"
-rescue => e
-  lex(e, "Error sending videos.", event: event)
-end
-
 def send_unique_holders(event)
   ranks = Score.holders
   ranks = ranks.map{ |r, c| "#{"%02d" % r} - #{"%3d" % c}" }.join("\n")
@@ -2457,7 +2430,6 @@ def respond(event)
   return send_analysis(event)        if msg =~ /analysis/i
   return send_level_name(event)      if msg =~ /\blevel name\b/i
   return send_level_id(event)        if msg =~ /\blevel id\b/i
-  return send_videos(event)          if msg =~ /\bvideo\b/i
   return send_challenges(event)      if msg =~ /\bchallenges\b/i
   return add_alias(event)            if msg =~ /\badd\s*(level|player)?\s*alias\b/i
   return send_demo_download(event)   if (msg =~ /\breplay\b/i || msg =~ /\bdemo\b/i) && msg =~ /\bdownload\b/i

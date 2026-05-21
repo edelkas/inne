@@ -612,6 +612,8 @@ def get_sheet(id)
     url = res['location']
   end while res.is_a?(Net::HTTPRedirection)
   res.is_a?(Net::HTTPSuccess) ? res.body : nil
+rescue => e
+  lex(e, "Failed to download Google sheet #{id}")
 end
 
 # <---------------------------------------------------------------------------->

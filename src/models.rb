@@ -2219,6 +2219,7 @@ end
 
 class Player < ActiveRecord::Base
   has_many :scores
+  has_many :videos
   has_many :player_aliases
   has_many :mappack_scores
   has_many :mappack_scores_tweaks
@@ -3135,19 +3136,15 @@ class GlobalProperty < ActiveRecord::Base
   end
 end
 
+# Videos from the N++ Video Library
 class Video < ActiveRecord::Base
+  belongs_to :player
   belongs_to :highscoreable, polymorphic: true
+  belongs_to :challenge
 
-  def format_challenge
-    return (challenge == "G++" || challenge == "?!") ? challenge : "#{challenge} (#{challenge_code})"
-  end
+  # Fetch sheet and parse new videos
+  def self.update
 
-  def format_author
-    return "#{author} (#{author_tag})"
-  end
-
-  def format_description
-    "#{format_challenge} by #{format_author}"
   end
 end
 
@@ -3190,6 +3187,7 @@ end
 class Challenge < ActiveRecord::Base
   include Challengish
   belongs_to :level
+  has_many :videos
 end
 
 class Archive < ActiveRecord::Base

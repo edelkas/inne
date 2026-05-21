@@ -7,6 +7,10 @@ $load_time = Time.now
 
 require 'gruff'
 
+def send_test(event)
+  Video.update
+end
+
 def send_admin_panel(event)
   view = Discordrb::Webhooks::View.new
   view.row{ |row|
@@ -163,13 +167,6 @@ def scan_boards(event = nil, page: nil)
     workers.log
   end
   succ("Finished scanning #{levels.size} boards (#{levels.first.name} to #{levels.last.name})")
-end
-
-def send_test(event)
-  data = get_sheet(SHEET_ID_VIDEOS)
-  file = tmp_file(data, 'sheet.xlsx', binary: true)
-  sheet = Roo::Excelx.new(file)
-  puts sheet.info
 end
 
 def send_dday_stats
