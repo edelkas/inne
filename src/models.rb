@@ -3144,12 +3144,81 @@ class Video < ActiveRecord::Base
 
   # Fetch sheet and parse new videos
   def self.update
+    # Fetch spreadsheet and parse it
+    data = get_sheet(SHEET_ID_VIDEOS)
+    file = tmp_file(data, 'sheet.xlsx', binary: true)
+    xlsx = Roo::Excelx.new(file)
 
+    # Read video authors
+    offset = 7
+    xlsx.sheet('Players>List').each_row_streaming(offset: offset).with_index do |row, i|
+      index = offset + i + 1
+      name = row[2].value
+      break unless name
+      code = row[1].value[/\[(.+)\]/, 1]
+      link_youtube = row[5].formula&.[](/"(.+?)"/, 1)
+      link_twitch = row[6].formula&.[](/"(.+?)"/, 1)
+      # TODO: Insert in db
+    rescue
+      alert("Failed to parse player #{name} on row #{index}")
+    end
+
+    # Read each relevant sheet
+    offset = 5
+    names = xlsx.sheets
+    (1..14).each do |sheet|
+      name = names[sheet]
+      type = sheet < 9 ? Level : sheet < 11 ? Episode : Story
+      h = nil
+
+      # Read each row
+      xlsx.sheet(sheet).each_row_streaming(offset: offset, pad_cells: true).with_index do |row, i|
+        # Ignore rows without content
+        index = offset + i + 1
+        place = "row #{index} from sheet #{name}"
+        symbol = row[4]&.value
+        next unless symbol
+
+        # Distinguish between G++ videos and regular challenge videos
+        challenge = nil
+        pattern = ID_PATTERNS[type.to_s][:vanilla][:dashed]
+        if symbol == '[]' || symbol == '!?'
+          h = type.find_by(name: row[1].value) if row[1]&.value =~ pattern
+          return err("Failed to find #{type.downcase} on #{place}") if !$1 || !h
+        elsif h.is_level?
+          challenge_code = row[1]&.value
+          next alert("No challenge code found for #{h.name} on #{place}") if !challenge_code
+          q = Challengish.parse(challenge_code).merge(level_id: h.id)
+          challenge = Challenge.find_by(q)
+          next alert("Challenge not found for #{h.name}: #{challenge_code}") if !challenge
+        else
+          next alert("Unsuitable objective found for #{h&.name} on #{place}")
+        end
+
+        # Parse individual videos
+        row[5..].each_with_index{ |cell, j|
+          author_code = cell.value&.[](/\[(.+)\]/, 1)
+          url = cell.formula&.[](/"(.+?)"/, 1)
+          next alert("Video without author or link on #{place}") if !author_code || !url
+          player = Player.find_by(code: author_code)
+          next alert("Video by unknown author #{author_code} on #{place}") if !player
+          Video.find_or_create_by(highscoreable: h, player: player, challenge: challenge)
+               .update(url: url)
+        }
+      rescue
+        alert("Failed to parse #{place}")
+      end # row
+    end # sheet
   end
 end
 
 # Implemented by Challenge and MappackChallenge
 module Challengish
+
+  # Turn challenge code into hash suitable for db query
+  def self.parse(code)
+    code.scan(/([GTOCE])(\+|-){2}/i).map{ |k, v| [k.downcase.to_sym, (v + '1').to_i] }.to_h
+  end
 
   def objs
     {
