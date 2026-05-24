@@ -8,7 +8,9 @@ $load_time = Time.now
 require 'gruff'
 
 def send_test(event)
-  Video.update
+  fn = 'sheet.xlsx'
+  File.binwrite(fn, get_sheet(SHEET_ID_VIDEOS)) if !File.file?(fn)
+  Video.update(fn)
 end
 
 def send_admin_panel(event)

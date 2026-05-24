@@ -607,11 +607,14 @@ end
 # Download a spreadsheet from Google Sheets
 def get_sheet(id)
   url = GOOGLE_SHEETS_EXPORT % id + '?format=xlsx'
+  dbg("Downloading Google sheet from #{url}...")
   begin
     res = Net::HTTP.get_response(URI.parse(url))
     url = res['location']
   end while res.is_a?(Net::HTTPRedirection)
-  res.is_a?(Net::HTTPSuccess) ? res.body : nil
+  return err("Couldn't fetch Google sheet #{id}") if !res.is_a?(Net::HTTPSuccess)
+  dbg("Received #{res.body.size} bytes from Google sheet #{id}")
+  res.body
 rescue => e
   lex(e, "Failed to download Google sheet #{id}")
 end

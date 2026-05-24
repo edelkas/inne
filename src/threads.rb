@@ -737,14 +737,6 @@ end
 
 # General driver for the function above
 def start_level_of_the_day(channel = nil, ctp: false, save: true, test: false)
-  # Ensure channel is available
-  channel = ctp ? $ctp_channel : $channel if !channel
-  while !channel
-    err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
-    sleep(5)
-    channel = ctp ? $ctp_channel : $channel
-  end
-
   # Flags
   lotd_day  = true
   eotw_day  = Time.now.sunday?
@@ -753,6 +745,15 @@ def start_level_of_the_day(channel = nil, ctp: false, save: true, test: false)
   post_lotd = test_lotd || ((ctp ? POST_CTP_LOTD : POST_LOTD) || DO_EVERYTHING) && lotd_day
   post_eotw = test_lotd || ((ctp ? POST_CTP_EOTW : POST_EOTW) || DO_EVERYTHING) && eotw_day
   post_cotm = test_lotd || ((ctp ? POST_CTP_COTM : POST_COTM) || DO_EVERYTHING) && cotm_day
+
+  # Ensure channel is available
+  return if !post_lotd && !post_eotw && !post_cotm
+  channel = ctp ? $ctp_channel : $channel if !channel
+  while !channel
+    err("#{ctp ? 'CTP h' : 'H'}ighscoring channel not found, not sending level of the day")
+    sleep(5)
+    channel = ctp ? $ctp_channel : $channel
+  end
 
   # Post each highscoreable, if enabled
   send_channel_next(channel, Level,   ctp: ctp, save: save) if post_lotd

@@ -11,6 +11,7 @@ $load_time = Time.now
 require 'active_record'
 require 'json'
 require 'net/http'
+require 'roo'
 require 'socket'
 require 'zlib'
 
@@ -2218,8 +2219,8 @@ class Score < ActiveRecord::Base
 end
 
 class Player < ActiveRecord::Base
+  has_one  :streamer
   has_many :scores
-  has_many :videos
   has_many :player_aliases
   has_many :mappack_scores
   has_many :mappack_scores_tweaks
@@ -3138,30 +3139,46 @@ end
 
 # Videos from the N++ Video Library
 class Video < ActiveRecord::Base
-  belongs_to :player
+  belongs_to :streamer
   belongs_to :highscoreable, polymorphic: true
   belongs_to :challenge
 
   # Fetch sheet and parse new videos
-  def self.update
+  def self.update(filename = nil)
     # Fetch spreadsheet and parse it
-    data = get_sheet(SHEET_ID_VIDEOS)
-    file = tmp_file(data, 'sheet.xlsx', binary: true)
+    if filename
+      return err("No file named #{filename}") unless File.file?(filename)
+      file = File.open(filename, 'rb')
+    else
+      data = get_sheet(SHEET_ID_VIDEOS)
+      file = tmp_file(data, 'sheet.xlsx', binary: true)
+    end
     xlsx = Roo::Excelx.new(file)
+    file.close
 
     # Read video authors
     offset = 7
-    xlsx.sheet('Players>List').each_row_streaming(offset: offset).with_index do |row, i|
+    streamers = xlsx.sheet('Players>List').each_row_streaming(offset: offset).with_index.map do |row, i|
       index = offset + i + 1
-      name = row[2].value
-      break unless name
+      name = row[2].value&.strip
+      next unless name
       code = row[1].value[/\[(.+)\]/, 1]
-      link_youtube = row[5].formula&.[](/"(.+?)"/, 1)
-      link_twitch = row[6].formula&.[](/"(.+?)"/, 1)
-      # TODO: Insert in db
-    rescue
-      alert("Failed to parse player #{name} on row #{index}")
+      streamer = Streamer.find_or_create_by(code: code)
+      streamer.update(
+        name:    name,
+        youtube: row[5].formula&.[](/"(.+?)"/, 1),
+        twitch:  row[7].formula&.[](/"(.+?)"/, 1)
+      )
+      if !streamer.player_id
+        matches = Player.where_like(:name, name)
+        streamer.player = matches.first if matches.count == 1
+      end
+      [code, streamer]
+    rescue => e
+      alert("Failed to parse player #{name} on row #{index}: #{e}")
     end
+    streamers = streamers.compact.to_h
+    binding.pry
 
     # Read each relevant sheet
     offset = 5
@@ -3175,7 +3192,9 @@ class Video < ActiveRecord::Base
       xlsx.sheet(sheet).each_row_streaming(offset: offset, pad_cells: true).with_index do |row, i|
         # Ignore rows without content
         index = offset + i + 1
-        place = "row #{index} from sheet #{name}"
+        values = row.compact.map(&:value).compact.join(', ')
+        place = "row #{index} from sheet #{name} (#{values})"
+        dbg("Parsing #{place}...", progress: true)
         symbol = row[4]&.value
         next unless symbol
 
@@ -3183,8 +3202,8 @@ class Video < ActiveRecord::Base
         challenge = nil
         pattern = ID_PATTERNS[type.to_s][:vanilla][:dashed]
         if symbol == '[]' || symbol == '!?'
-          h = type.find_by(name: row[1].value) if row[1]&.value =~ pattern
-          return err("Failed to find #{type.downcase} on #{place}") if !$1 || !h
+          h = type.find_by(name: row[1].value) if row[1]&.value.to_s =~ pattern
+          break err("Failed to find #{type.downcase} on #{place}") if !$1 || !h
         elsif h.is_level?
           challenge_code = row[1]&.value
           next alert("No challenge code found for #{h.name} on #{place}") if !challenge_code
@@ -3197,19 +3216,31 @@ class Video < ActiveRecord::Base
 
         # Parse individual videos
         row[5..].each_with_index{ |cell, j|
+          break if !cell || cell.empty?
           author_code = cell.value&.[](/\[(.+)\]/, 1)
+          next alert("Video without valid author code on #{place}") if !author_code
           url = cell.formula&.[](/"(.+?)"/, 1)
-          next alert("Video without author or link on #{place}") if !author_code || !url
-          player = Player.find_by(code: author_code)
-          next alert("Video by unknown author #{author_code} on #{place}") if !player
-          Video.find_or_create_by(highscoreable: h, player: player, challenge: challenge)
-               .update(url: url)
+          next alert("Video without link on #{place}") if !url
+          streamer = streamers[author_code]
+          next alert("Video by unknown author #{author_code} on #{place}") if !streamer
+          Video.find_or_create_by(highscoreable: h, streamer: streamer, challenge: challenge).update(url: url)
         }
-      rescue
-        alert("Failed to parse #{place}")
+      rescue => e
+        alert("Failed to parse #{place}: #{e}")
       end # row
+
+      puts
     end # sheet
+  rescue => e
+    lex(e, 'Failed to update video library')
   end
+end
+
+# A streamer is a player who creates content for the game, such as recording
+# videos for the N++ video library or broadcasting.
+class Streamer < ActiveRecord::Base
+  has_many :videos
+  belongs_to :player
 end
 
 # Implemented by Challenge and MappackChallenge
