@@ -88,8 +88,9 @@ GITHUB_REPO = 'inne'
 GITHUB_LINK = "https://github.com/#{GITHUB_USER}/#{GITHUB_REPO}"
 
 # Google
-GOOGLE_SHEETS_EXPORT = 'https://docs.google.com/spreadsheets/d/%s/export'
-SHEET_ID_VIDEOS      = '12Os50amv9nSHR3u5sDqKiwDk1eRUY5lYLzyLgEUsldQ'     # N++ Video Library
+GOOGLE_URL_SHEETS = 'https://docs.google.com/spreadsheets/d/%s/%s'     # id, action
+GOOGLE_API_SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/%s' # id
+SHEET_ID_VIDEOS   = '12Os50amv9nSHR3u5sDqKiwDk1eRUY5lYLzyLgEUsldQ'     # N++ Video Library
 
 # <---------------------------------------------------------------------------->
 # <------                      DISCORD VARIABLES                         ------>

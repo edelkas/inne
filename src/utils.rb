@@ -605,9 +605,23 @@ module HTML extend self
 end
 
 # Download a spreadsheet from Google Sheets
-def get_sheet(id)
-  url = GOOGLE_SHEETS_EXPORT % id + '?format=xlsx'
+def get_sheet(id, api: false)
+  # Build complete URL
+  params = {}
+  if api
+    url = GOOGLE_API_SHEETS % [id]
+    args = {
+      'fields' => 'properties,sheets(properties,data(rowData(values(formattedValue,hyperlink))))',
+      'key'    => $api_keys[:google][:sheets]
+    }
+  else
+    url = GOOGLE_URL_SHEETS % [id, 'export']
+    args = { 'format' => 'xlsx' }
+  end
+  url << '?' + args.map{ |k, v| "#{k}=#{v}" }.join('&')
   dbg("Downloading Google sheet from #{url}...")
+
+  # Attempt to fetch, we often we redirects so we follow the jumps
   begin
     res = Net::HTTP.get_response(URI.parse(url))
     url = res['location']

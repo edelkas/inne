@@ -206,6 +206,19 @@ def initialize_vars
     [steam_id, { id: steam_id, token: v, warned: false }.merge(res)]
   }.to_h
 
+  # Parse available API keys
+  $api_keys = ENV.map{ |k, v|
+    [$1.downcase, $2.downcase, v] if k =~ /^KEY_([A-Z0-9]+)_([A-Z0-9]+)$/i
+  }.compact.group_by{ |platform, api, key| platform }.map{ |platform, list|
+    [
+      platform.to_sym,
+      list.map{ |p, a, k|
+        dbg("Found key for #{p} #{a} API")
+        [a.to_sym, k]
+      }.to_h
+    ]
+  }.to_h
+
   # Set environment variables
   ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
 

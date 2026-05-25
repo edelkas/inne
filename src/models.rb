@@ -3178,7 +3178,6 @@ class Video < ActiveRecord::Base
       alert("Failed to parse player #{name} on row #{index}: #{e}")
     end
     streamers = streamers.compact.to_h
-    binding.pry
 
     # Read each relevant sheet
     offset = 5
