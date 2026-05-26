@@ -11,7 +11,6 @@ $load_time = Time.now
 require 'active_record'
 require 'json'
 require 'net/http'
-require 'roo'
 require 'socket'
 require 'zlib'
 
@@ -3144,30 +3143,38 @@ class Video < ActiveRecord::Base
   belongs_to :challenge
 
   # Fetch sheet and parse new videos
-  def self.update(filename = nil)
+  def self.update(filename: nil, silent: false)
     # Fetch spreadsheet and parse it
-    if filename
-      return err("No file named #{filename}") unless File.file?(filename)
-      file = File.open(filename, 'rb')
-    else
-      data = get_sheet(SHEET_ID_VIDEOS)
-      file = tmp_file(data, 'sheet.xlsx', binary: true)
-    end
-    xlsx = Roo::Excelx.new(file)
-    file.close
+    return err("No file named #{filename}") if filename && !File.file?(filename)
+    data = filename ? File.read(filename) : get_sheet(SHEET_ID_VIDEOS, api: true)
+    log("Updating video library...") unless silent
+    json = JSON.parse(data)
+    indexes = json['sheets'].map.with_index{ |sheet, i| [sheet['properties']['title'], i] }.to_h
+
+    # Basic sheet structure
+    header_players = 7
+    header_videos  = 5
+    sheet_players  = 'Players>List'
+    sheets_videos  = [
+      "Solo>Levels>Intro", "Solo>Levels>N++", "Solo>Levels>Ultimate", "Solo>Levels>Legacy",
+      "Solo>Levels>?",     "Solo>Levels>!",   "Solo>Levels>?!",       "Solo>Levels>!?",
+      "Solo>Episodes>N++", "Solo>Episodes>Ultimate",
+      "Hardcore>Intro",    "Hardcore>N++",    "Hardcore>Ultimate",    "Hardcore>Legacy"
+    ]
 
     # Read video authors
-    offset = 7
-    streamers = xlsx.sheet('Players>List').each_row_streaming(offset: offset).with_index.map do |row, i|
-      index = offset + i + 1
-      name = row[2].value&.strip
-      next unless name
-      code = row[1].value[/\[(.+)\]/, 1]
+    old_streamers = Streamer.pluck(:code)
+    streamers = json['sheets'][indexes[sheet_players]]['data'][0]['rowData'].drop(header_players).map.with_index do |r, i|
+      row = r['values']
+      code = row[1]['formattedValue']&.[](/\[(.+)\]/, 1)
+      next unless code
+      name = row[2]['formattedValue']&.strip
+      next alert("Player #{code} has no name") unless name
       streamer = Streamer.find_or_create_by(code: code)
       streamer.update(
         name:    name,
-        youtube: row[5].formula&.[](/"(.+?)"/, 1),
-        twitch:  row[7].formula&.[](/"(.+?)"/, 1)
+        youtube: row[5]&.[]('hyperlink'),
+        twitch:  row[7]&.[]('hyperlink')
       )
       if !streamer.player_id
         matches = Player.where_like(:name, name)
@@ -3175,61 +3182,97 @@ class Video < ActiveRecord::Base
       end
       [code, streamer]
     rescue => e
-      alert("Failed to parse player #{name} on row #{index}: #{e}")
+      alert("Failed to parse player #{name} on row #{i + header_players + 1}: #{e}")
     end
     streamers = streamers.compact.to_h
+    add_streamers = streamers.keys - old_streamers
+    del_streamers = old_streamers - streamers.keys
+    log(
+      "Found #{streamers.size} streamers: "\
+      "added #{add_streamers.size} (#{add_streamers.join(', ')}), "\
+      "removed #{del_streamers.size} (#{del_streamers.join(', ')})"
+    )
 
     # Read each relevant sheet
-    offset = 5
-    names = xlsx.sheets
-    (1..14).each do |sheet|
-      name = names[sheet]
-      type = sheet < 9 ? Level : sheet < 11 ? Episode : Story
+    counters = Hash.new{ |hash, key| hash[key] = Hash.new(0) }
+    errors = Hash.new(0)
+    unknown = Set.new
+    sheets_videos.each do |name|
+      type = !!name[/level/i] ? Level : !!name[/episode/i] ? Episode : Story
       h = nil
 
       # Read each row
-      xlsx.sheet(sheet).each_row_streaming(offset: offset, pad_cells: true).with_index do |row, i|
+      json['sheets'][indexes[name]]['data'][0]['rowData'].drop(header_videos).map.with_index do |r, i|
         # Ignore rows without content
-        index = offset + i + 1
-        values = row.compact.map(&:value).compact.join(', ')
-        place = "row #{index} from sheet #{name} (#{values})"
+        row = r['values']
+        place = "row #{i + header_videos + 1} from sheet #{name}"
         dbg("Parsing #{place}...", progress: true)
-        symbol = row[4]&.value
+        place << " (#{row.map{ |cell| cell['formattedValue'] }.compact.join(', ')})"
+        symbol = row[4]&.[]('formattedValue')
         next unless symbol
+        errors[:row] += 1
+        next alert("Invalid objective found on #{place}") if !symbol[/\[?[!?]*\]?/]
 
-        # Distinguish between G++ videos and regular challenge videos
+        # Parse highscoreable
+        h_name = row[1]['formattedValue']&.sub(/^H/, 'S')
+        h = type.find_by(name: h_name) if h_name.to_s =~ ID_PATTERNS[type.to_s][:vanilla][:dashed]
+        break err("Failed to find #{type.to_s.downcase} on #{place}") if !h
+
+        # Parse challenge
         challenge = nil
-        pattern = ID_PATTERNS[type.to_s][:vanilla][:dashed]
-        if symbol == '[]' || symbol == '!?'
-          h = type.find_by(name: row[1].value) if row[1]&.value.to_s =~ pattern
-          break err("Failed to find #{type.downcase} on #{place}") if !$1 || !h
-        elsif h.is_level?
-          challenge_code = row[1]&.value
-          next alert("No challenge code found for #{h.name} on #{place}") if !challenge_code
+        next alert("Unsuitable objective found for #{h.name} on #{place}") if type != Level && symbol != '!?'
+        if h.is_level? && symbol != '[]'
+          challenge_code = row[1, 3].map{ |cell| cell['formattedValue'] }.compact.join
+          next alert("No challenge code found for #{h.name} on #{place}") if challenge_code.empty?
           q = Challengish.parse(challenge_code).merge(level_id: h.id)
           challenge = Challenge.find_by(q)
           next alert("Challenge not found for #{h.name}: #{challenge_code}") if !challenge
-        else
-          next alert("Unsuitable objective found for #{h&.name} on #{place}")
         end
 
         # Parse individual videos
         row[5..].each_with_index{ |cell, j|
+          errors[:cell] += 1
           break if !cell || cell.empty?
-          author_code = cell.value&.[](/\[(.+)\]/, 1)
+          author_code = cell['formattedValue']&.[](/\[(.+)\]/, 1)
           next alert("Video without valid author code on #{place}") if !author_code
-          url = cell.formula&.[](/"(.+?)"/, 1)
+          url = cell['hyperlink']
           next alert("Video without link on #{place}") if !url
           streamer = streamers[author_code]
-          next alert("Video by unknown author #{author_code} on #{place}") if !streamer
+          if !streamer
+            unknown << author_code
+            next alert("Video by unknown author #{author_code} on #{place}")
+          end
           Video.find_or_create_by(highscoreable: h, streamer: streamer, challenge: challenge).update(url: url)
+          counters[type.to_s][symbol] += 1
+          errors[:cell] -= 1
         }
+        errors[:row] -= 1
       rescue => e
         alert("Failed to parse #{place}: #{e}")
       end # row
 
       puts
     end # sheet
+
+    # Log results
+    succ("Finished updating video library") unless silent
+    alert(
+      "Alerts:\n"\
+      "  #{unknown.size} unknown authors: #{unknown.join(', ')}\n"\
+      "  #{errors[:row]} skipped challenges\n"\
+      "  #{errors[:cell]} skipped videos"
+    )
+    cols = counters.keys
+    rows = counters.map{ |type, hash| hash.keys }.flatten.uniq.sort
+    table = rows.map{ |symbol|
+      row = cols.map{ |type|
+        counters[type][symbol]
+      }
+      [symbol, *row, row.sum]
+    }
+    table.push(:sep, ['Total', *table.transpose.drop(1).map(&:sum)])
+    table.prepend(['', 'Level', 'Episode', 'Story', 'Total'], :sep)
+    dbg("Video breakdown:\n#{make_table(table)}")
   rescue => e
     lex(e, 'Failed to update video library')
   end
