@@ -1484,7 +1484,7 @@ module Levelish
 
   def format_challenges
     pad = challenges.map{ |c| c.count }.max
-    challenges.map{ |c| c.format(pad) }.join("\n")
+    challenges.map{ |c| c.format(true, pad) }.join("\n")
   end
 
   # Dump demo header for communications with N++
@@ -3296,6 +3296,14 @@ module Challengish
     code.scan(/([GTOCE])(\+|-){2}/i).map{ |k, v| [k.downcase.to_sym, (v + '1').to_i] }.to_h
   end
 
+  # Ensure challenge posting is allowed in this channel
+  def self.check_channel(channel, discord: true)
+    return true if channel.type == channel_type(:dm) || CHANNELS_CHALLENGES.include?(channel.id)
+    mentions = CHANNELS_CHALLENGES.map{ |c| mention_channel(id: c) }.join(', ')
+    perror("No asking for challenges outside of #{mentions} or DMs!") if discord
+    false
+  end
+
   def objs
     {
       "G" => self.g,
@@ -3314,18 +3322,20 @@ module Challengish
     objs.select{ |k, v| v != 0 }.count
   end
 
-  def format_type
-    "[" + type * count + "]"
+  def format_type(color = false)
+    (color ? ANSI.yellow : '') + "[" + type * count + "]" + (color ? ANSI.clear : '')
   end
 
-  def format_objs
+  def format_objs(color = false)
+    good = color ? ANSI.good : ''
+    bad  = color ? ANSI.bad  : ''
     objs.map{ |k, v|
-      v == 1 ? ANSI.good + "#{k}++" : (v == -1 ? ANSI.bad + "#{k}--" : "")
-    }.join
+      v == 1 ? good + "#{k}++" : (v == -1 ? bad + "#{k}--" : "")
+    }.join + (color ? ANSI.clear : '')
   end
 
-  def format(pad)
-    ANSI.yellow + format_type + " " * [1, pad - count + 1].max + format_objs + ANSI.clear
+  def format(color = false, pad = count)
+    format_type(color) + " " * [1, pad - count + 1].max + format_objs(color)
   end
 end
 

@@ -309,7 +309,7 @@ rescue OutteError => e
   elsif is_auto
     event << msg
   else
-    send_message(event, content: msg, log: false, ephemeral: e.ephemeral)
+    send_message(event, content: msg, log: false, edit: false, ephemeral: e.ephemeral)
   end
 rescue => e
   # These exceptions are internal errors, so send warning to the channel and

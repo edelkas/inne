@@ -17,11 +17,23 @@ def initialize_components
   $components = create_components
 end
 
-# TODO: Add button accesory
-def view_add_section(texts: [], thumbnail: nil, description: nil, view: create_components())
+# Add a section to a view. The thumbnail and button accesories are mutually exclusive.
+def view_add_section(
+    texts:       [],         # Text elements (1-3) to show inside the section
+    thumbnail:   nil,        # Thumbnail File object
+    description: nil,        # Thumbnail description
+    button:      nil,        # Button label
+    custom_id:   nil,        # Button custom ID
+    style:       :primary,   # Button style (:primary, :secondary, :success, :danger, :link)
+    emoji:       nil,        # Button emoji
+    disabled:    false,      # Button enabled or disabled
+    url:         nil,        # Button URL for :link type ones
+    view:        create_components()
+  )
   view.section do |section|
     texts.each{ |text| section.text_display(content: text) unless text.strip.empty? }
     section.thumbnail(url: file_url(thumbnail), description: description) if thumbnail
+    section.button(style: style, label: button, emoji: emoji, custom_id: custom_id, disabled: disabled, url: url) if button
   end
 end
 
@@ -642,6 +654,8 @@ def respond_interaction_button(event)
     end
   when 'thumbnail'
     send_thumbnail(event, keys[1])
+  when 'videos'
+    send_videos(event, highscoreable: keys[1], challenge: keys[2])
   end
 end
 

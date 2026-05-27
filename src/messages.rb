@@ -1200,12 +1200,7 @@ end
 
 # Return list of challenges for specified level, ordered and formatted as in the game
 def send_challenges(event)
-  allowable_channels = [CHANNEL_SECRETS, CHANNEL_CTP_SECRETS]
-  if !(event.channel.type == channel_type(:dm) || allowable_channels.include?(event.channel.id))
-    mentions = allowable_channels.map{ |c| mention_channel(id: c) }.join(', ')
-    perror("No asking for challenges outside of #{mentions} or DMs!")
-  end
-
+  return unless Challengish.check_channel(event.channel)
   h = parse_highscoreable(event, mappack: true)
   perror("#{h.class.vanilla.to_s.pluralize.capitalize} don't have challenges!") if !h.is_level?
   perror("#{MODES[h.mode].capitalize} doesn't have challenges!") if h.mode != MODE_SOLO
@@ -1215,6 +1210,41 @@ def send_challenges(event)
   event << "Challenges for #{h.longname} (#{h.name}):\n#{format_block(challenges)}"
 rescue => e
   lex(e, "Error getting challenges.", event: event)
+end
+
+# Send the list of challenge videos for a given highscoreable
+# TODO: Add button to go back challenge list, and perhaps embed videos instead
+def send_videos(event, highscoreable: nil, challenge: nil)
+  return unless Challengish.check_channel(event.channel)
+
+  # Parse highscoreable
+  h = parse_highscoreable(event, msg: highscoreable)
+  perror("#{MODES[h.mode].capitalize} videos aren't supported yet") if h.mode != MODE_SOLO
+  videos = h.videos
+  perror("#{h.format_name} has no videos yet! :pensive:") if videos.empty?
+  view = create_components()
+
+  if !challenge # Send challenge list
+    view_add_text(content: "## 🎞️ __Videos for #{h.name}__", view: view)
+    challenges = [nil] + (h.is_level? ? h.challenges : [])
+    videos = videos.group_by{ |v| v.challenge }.to_h
+    challenges.each{ |challenge|
+      code = challenge ? challenge.format : h.is_level? ? '[] G++' : '!? N++'
+      text = "* **#{code}** (#{videos[challenge]&.size.to_i} videos)"
+      view_add_section(texts: [text], button: 'View', custom_id: "videos:#{h.name}:#{code}", view: view)
+    }
+  else          # Send video list
+    q = Challengish.parse(challenge).merge(level_id: h.id)
+    challenge = q.size > 1 ? Challenge.find_by(q) : nil
+    code = challenge ? challenge.format_objs : h.is_level? ? 'G++' : 'N++'
+    view_add_text(content: "## 🎞️ __Videos for #{h.name} (#{code})__", view: view)
+    Video.where(highscoreable: h, challenge: challenge).each{ |video|
+      text = "[#{video.streamer.code}] #{video.streamer.name}"
+      view_add_section(texts: [text], button: 'Watch', style: :link, url: video.url, view: view)
+    }
+  end
+
+  send_message(event, components: view, v2: true)
 end
 
 # Return list of matches for specific level name query
@@ -2431,6 +2461,7 @@ def respond(event)
   return send_level_name(event)      if msg =~ /\blevel name\b/i
   return send_level_id(event)        if msg =~ /\blevel id\b/i
   return send_challenges(event)      if msg =~ /\bchallenges\b/i
+  return send_videos(event)          if msg =~ /\bvideos\b/i
   return add_alias(event)            if msg =~ /\badd\s*(level|player)?\s*alias\b/i
   return send_demo_download(event)   if (msg =~ /\breplay\b/i || msg =~ /\bdemo\b/i) && msg =~ /\bdownload\b/i
   return send_download(event)        if msg =~ /\bdownload\b/i

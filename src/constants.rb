@@ -112,6 +112,8 @@ CHANNEL_CTP_SECRETS    = 1137794113475969034 # #ctp-secrets
 CHANNEL_SUPPORT        = 218819289266913281  # #support
 CHANNEL_DEBUG          = 530162144843530240  # #debug-room
 
+CHANNELS_CHALLENGES    = [CHANNEL_SECRETS, CHANNEL_CTP_SECRETS] # Where posting challenges is allowed
+
 # Limits
 DISCORD_CHAR_LIMIT     = 2000                # Message character limit
 DISCORD_FILE_LIMIT     = 10 * 1000 ** 2      # Attachment size limit
