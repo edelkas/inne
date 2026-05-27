@@ -3063,7 +3063,7 @@ class GlobalProperty < ActiveRecord::Base
   # database score update, etc)
   def self.get_next_update(type, ctp = false)
     key = "next_#{ctp ? 'ctp_' : ''}#{type.to_s.downcase}_update"
-    Time.parse(self.find_by(key: key).value)
+    Time.parse(self.find_by(key: key).value) rescue Time.now
   end
 
   # Set datetime for the next update of some property
@@ -3164,10 +3164,12 @@ class Video < ActiveRecord::Base
 
     # Read video authors
     old_streamers = Streamer.pluck(:code)
+    new_streamers = []
     streamers = json['sheets'][indexes[sheet_players]]['data'][0]['rowData'].drop(header_players).map.with_index do |r, i|
       row = r['values']
       code = row[1]['formattedValue']&.[](/\[(.+)\]/, 1)
       next unless code
+      next alert("Duplicate player #{code}") if new_streamers.include?(code)
       name = row[2]['formattedValue']&.strip
       next alert("Player #{code} has no name") unless name
       streamer = Streamer.find_or_create_by(code: code)
@@ -3180,18 +3182,19 @@ class Video < ActiveRecord::Base
         matches = Player.where_like(:name, name)
         streamer.player = matches.first if matches.count == 1
       end
+      new_streamers << code
       [code, streamer]
     rescue => e
       alert("Failed to parse player #{name} on row #{i + header_players + 1}: #{e}")
     end
     streamers = streamers.compact.to_h
-    add_streamers = streamers.keys - old_streamers
-    del_streamers = old_streamers - streamers.keys
+    add_streamers = new_streamers - old_streamers
+    del_streamers = old_streamers - new_streamers
     log(
       "Found #{streamers.size} streamers: "\
       "added #{add_streamers.size} (#{add_streamers.join(', ')}), "\
       "removed #{del_streamers.size} (#{del_streamers.join(', ')})"
-    )
+    ) unless silent
 
     # Read each relevant sheet
     counters = Hash.new{ |hash, key| hash[key] = Hash.new(0) }
@@ -3206,7 +3209,7 @@ class Video < ActiveRecord::Base
         # Ignore rows without content
         row = r['values']
         place = "row #{i + header_videos + 1} from sheet #{name}"
-        dbg("Parsing #{place}...", progress: true)
+        dbg("Parsing #{place}...", progress: true) unless silent
         place << " (#{row.map{ |cell| cell['formattedValue'] }.compact.join(', ')})"
         symbol = row[4]&.[]('formattedValue')
         next unless symbol
@@ -3231,8 +3234,8 @@ class Video < ActiveRecord::Base
 
         # Parse individual videos
         row[5..].each_with_index{ |cell, j|
-          errors[:cell] += 1
           break if !cell || cell.empty?
+          errors[:cell] += 1
           author_code = cell['formattedValue']&.[](/\[(.+)\]/, 1)
           next alert("Video without valid author code on #{place}") if !author_code
           url = cell['hyperlink']
@@ -3261,7 +3264,7 @@ class Video < ActiveRecord::Base
       "  #{unknown.size} unknown authors: #{unknown.join(', ')}\n"\
       "  #{errors[:row]} skipped challenges\n"\
       "  #{errors[:cell]} skipped videos"
-    )
+    ) unless silent
     cols = counters.keys
     rows = counters.map{ |type, hash| hash.keys }.flatten.uniq.sort
     table = rows.map{ |symbol|
@@ -3272,7 +3275,7 @@ class Video < ActiveRecord::Base
     }
     table.push(:sep, ['Total', *table.transpose.drop(1).map(&:sum)])
     table.prepend(['', 'Level', 'Episode', 'Story', 'Total'], :sep)
-    dbg("Video breakdown:\n#{make_table(table)}")
+    dbg("Video breakdown:\n#{make_table(table)}") unless silent
   rescue => e
     lex(e, 'Failed to update video library')
   end

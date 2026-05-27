@@ -852,6 +852,9 @@ def start_general_tasks
   # Monitor new scores and simulate them
   Scheduler.add("Compute fractions", freq: FRACTION_FREQUENCY, force: false, log: false) { compute_new_fractions } if DO_EVERYTHING || COMPUTE_FRACTIONS
 
+  # Fetch and parse the video library
+  Scheduler.add("Video library", freq: VIDEO_UPDATE_FREQUENCY, time: 'video') { Video.update(silent: true) } if DO_EVERYTHING || UPDATE_VIDEOS
+
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
   if SOCKETS && CLE_ON && !DO_NOTHING
     $servers['cle'] = NPPServer.new
