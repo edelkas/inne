@@ -35,22 +35,29 @@ def view_add_section(
     section.thumbnail(url: file_url(thumbnail), description: description) if thumbnail
     section.button(style: style, label: button, emoji: emoji, custom_id: custom_id, disabled: disabled, url: url) if button
   end
+  view
 end
 
 def view_add_text(content: '', id: nil, view: create_components())
   view.text_display(content: content, id: id)
+  view
 end
 
 def view_add_file(file: nil, id: nil, spoiler: false, view: create_components())
-  return if !file
+  return view if !file
   view.file(url: file_url(file), id: id, spoiler: spoiler)
+  view
 end
 
 def view_add_gallery(items: [], spoiler: false, id: nil, view: create_components())
-  return if items.empty?
+  return view if items.empty?
   view.media_gallery(id: id) do |gallery|
-    items.each{ |item| gallery.item(url: file_url(item), spoiler: spoiler) }
+    items.each{ |item|
+      url = item.is_a?(File) ? file_url(item) : item
+      gallery.item(url: url, spoiler: spoiler)
+    }
   end
+  view
 end
 
 def view_nav(event, page, count, view: nil, func: nil, size: 1)
@@ -655,7 +662,7 @@ def respond_interaction_button(event)
   when 'thumbnail'
     send_thumbnail(event, keys[1])
   when 'videos'
-    send_videos(event, highscoreable: keys[1], challenge: keys[2])
+    send_videos(event, highscoreable: keys[1], challenge_code: keys[2], streamer_code: keys[3])
   end
 end
 

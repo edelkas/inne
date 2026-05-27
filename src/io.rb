@@ -31,6 +31,10 @@ rescue => e
   ''
 end
 
+def is_dm(event)
+  event.channel.type == channel_type(:dm)
+end
+
 # This is used mainly for page navigation. We determine the current page,
 # and we also determine whether we need to add an offset to it (to navigate)
 # or reset it (when a different component, e.g. a select menu, was activated).
@@ -1522,6 +1526,13 @@ def send_message(
   # Only update message if it's a component event (no need to log)
   if edit && dest.is_a?(Discordrb::Events::ComponentEvent)
     content = dest.message.content + "\n" + content if append
+    # The v2 flag cannot be removed once set
+    if dest.message.flags[15] == 1
+      components = view_add_text(content: content) if !components
+      v2 = true
+      content = ''
+      embeds = []
+    end
     action_inc('edits')
     log_message(content, files, components, embeds, edit: true) if log
     return dest.update_message(content: content, embeds: embeds, components: components, has_components: v2, ephemeral: ephemeral)
