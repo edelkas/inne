@@ -115,11 +115,13 @@ CHANNEL_DEBUG          = 530162144843530240  # #debug-room
 CHANNELS_CHALLENGES    = [CHANNEL_SECRETS, CHANNEL_CTP_SECRETS] # Where posting challenges is allowed
 
 # Limits
-DISCORD_CHAR_LIMIT     = 2000                # Message character limit
-DISCORD_FILE_LIMIT     = 10 * 1000 ** 2      # Attachment size limit
-DISCORD_EMBED_LIMIT    = 10                  # Embed count limit
-DELETE_TIMELIMIT       = 5 * 60              # Seconds to delete an outte post
-CONFIRM_TIMELIMIT      = 30                  # Seconds to confirm a dialog
+DISCORD_CHAR_LIMIT      = 2000                # Message character limit
+DISCORD_FILE_LIMIT      = 10 * 1000 ** 2      # Attachment size limit
+DISCORD_EMBED_LIMIT     = 10                  # Embed count limit
+DELETE_TIMELIMIT        = 5 * 60              # Seconds to delete an outte post
+CONFIRM_TIMELIMIT       = 30                  # Seconds to confirm a dialog
+DISCORD_COMPONENT_LIMIT = 40                  # V2 components per message
+DISCORD_OPTIONS_LIMIT   = 25                  # Options per select menu
 
 # Enabled optional features
 RICH_RANKINGS    = false

@@ -1,11 +1,9 @@
 # This file handles outte's usage of Discord's interactions.
 # These can either be:
 #   - Application commands
-#   - Message components:
-#       * Buttons
-#       * Select menus
-#       * Text inputs
-# Currently, only buttons and select menus are being used.
+#   - Modal windows
+#   - Message components: Buttons, select menus and text inputs.
+#   - New (V2) components: Sections, containers, media galleries, etc.
 
 $load_time = Time.now
 
@@ -610,7 +608,7 @@ def respond_interaction_button(event)
   return send(keys[3], event, page: keys[2]) if keys[1] == 'nav'     && !!keys[3]
 
   # Otherwise, distinguish depending on the source message
-  case keys[0]
+  case keys[0].downcase
   when 'admin'
     case keys[1]
     when 'logconf'
@@ -662,7 +660,8 @@ def respond_interaction_button(event)
   when 'thumbnail'
     send_thumbnail(event, keys[1])
   when 'videos'
-    send_videos(event, highscoreable: keys[1], challenge_code: keys[2], streamer_code: keys[3])
+    edit = keys[0].downcase == keys[0]
+    send_videos(event, highscoreable: keys[1], challenge_code: keys[2], streamer_code: keys[3], edit: edit)
   end
 end
 
@@ -703,6 +702,8 @@ def respond_interaction_menu(event)
     else
       send_speedruns(event, keys[1].to_sym => val)
     end
+  when 'videos'
+    send_videos(event, highscoreable: keys[1], challenge_code: keys[2], streamer_code: val)
   end
 end
 

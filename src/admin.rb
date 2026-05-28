@@ -8,9 +8,6 @@ $load_time = Time.now
 require 'gruff'
 
 def send_test(event)
-  fn = 'sheet.json'
-  File.binwrite(fn, get_sheet(SHEET_ID_VIDEOS, api: true)) if !File.file?(fn)
-  Video.update(filename: fn)
 end
 
 def send_admin_panel(event)

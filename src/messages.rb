@@ -1207,18 +1207,23 @@ def send_challenges(event)
   perror("#{h.tab.to_s} don't have challenges!") if ["SI", "SL"].include?(h.tab.to_s)
   challenges = h.format_challenges
   perror("This level has no challenges.") if challenges.empty?
-  event << "Challenges for #{h.longname} (#{h.name}):\n#{format_block(challenges)}"
+  content = "## Challenges for #{h.format_name}:\n#{format_block(challenges)}"
+  view = create_components()
+  if h.is_vanilla? && !h.videos.empty?
+    view.row{ |row|
+      row.button(label: 'Videos', custom_id: "VIDEOS:#{h.name}", emoji: '🎞️', style: :primary)
+    }
+  end
+  send_message(event, content: content, components: view)
 rescue => e
   lex(e, "Error getting challenges.", event: event)
 end
 
 # Send the list of challenge videos for a given highscoreable
-# TODO:
-# - What happens if we have too many videos
-def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: nil)
+def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: nil, edit: nil)
   return unless Challengish.check_channel(event.channel)
   h, challenge, streamer, video, view = nil
-  v2, edit = true, true
+  v2 = true
   content = ''
 
   # Parse highscoreable
@@ -1243,32 +1248,69 @@ def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: n
   end
 
   if !challenge_code   # Send challenge list
+    edit = true if edit.nil?
     view = view_add_text(content: "## 🎞️ __Videos for #{h.name}__")
     challenges = [nil] + (h.is_level? ? h.challenges : [])
     videos = videos.group_by{ |v| v.challenge }.to_h
     challenges.each{ |challenge|
+      count = videos[challenge]&.size.to_i
       code = challenge ? challenge.format : h.is_level? ? '[] G++' : '!? N++'
-      text = "* **#{code}** (#{videos[challenge]&.size.to_i} videos)"
-      view_add_section(texts: [text], button: 'View', custom_id: "videos:#{h.name}:#{code}", style: :secondary, view: view)
+      text = "➤ `#{code}` (#{count} videos)"
+      view_add_section(
+        texts:     [text],
+        button:    'View',
+        custom_id: "videos:#{h.name}:#{code}",
+        style:     :secondary,
+        disabled:  count == 0,
+        view:      view
+      )
     }
   elsif !streamer_code # Send video list
+    edit = true if edit.nil?
     view = view_add_text(content: "## 🎞️ __Videos for #{challenge_code} in #{h.name}__")
-    Video.where(highscoreable: h, challenge: challenge).each{ |video|
-      streamer_code = video.streamer.code
-      text = "#{video.streamer.name} (#{streamer_code})"
-      view_add_section(texts: [text], button: 'Watch', custom_id: "videos:#{h.name}:#{challenge_code}:#{streamer_code}", style: :secondary, view: view)
+    videos = Video.where(highscoreable: h, challenge: challenge).map{ |video|
+      emoji = case video.url
+      when /youtu/i
+        $emojis['youtube']
+      when /twitch/i
+        $emojis['twitch']
+      when /odysee/i
+        $emojis['odysee']
+      end
+      {
+        label: "#{video.streamer.name} (#{video.streamer.code})",
+        id:    "videos:#{h.name}:#{challenge_code}:#{video.streamer.code}",
+        emoji: emoji
+      }
     }
-    view.row{ |r| r.button(label: 'Back to level', custom_id: "videos:#{h.name}", style: :primary) }
-  else                 # Send embedded video
-    content = "## 🎞️ [__Video by #{streamer.name} for #{challenge_code} in #{h.name}__](#{video.url})"
-    v2, edit = false, false
-    if is_dm(event)
-      view = create_components()
-      view.row{ |r|
-        r.button(label: 'Back to level', custom_id: "videos:#{h.name}", style: :primary)
-        r.button(label: 'Back to challenge', custom_id: "videos:#{h.name}:#{challenge_code}", style: :primary)
+    if videos.empty?
+      view_add_text(content: "This challenge has no videos yet, be the first one to upload one!", view: view)
+    elsif videos.size <= 10
+      videos.each{ |hash|
+        view_add_section(
+          texts:     [hash[:label]],
+          button:    'Watch',
+          custom_id: hash[:id],
+          style:     :secondary,
+          emoji:     hash[:emoji],
+          view:      view
+        )
+      }
+    else
+      view.row{ |row|
+        row.string_select(custom_id: "videos:#{h.name}:#{challenge_code}", placeholder: 'Select video', max_values: 1){ |menu|
+          alert("#{videos.size - DISCORD_OPTIONS_LIMIT} videos skipped in #{h.name}") if videos.size > DISCORD_OPTIONS_LIMIT
+          videos.take(DISCORD_OPTIONS_LIMIT).each{ |hash|
+            menu.option(label: hash[:label], value: hash[:id][/:([^:]+)$/, 1], emoji: hash[:emoji])
+          }
+        }
       }
     end
+    view.row{ |r| r.button(label: 'Back to level', custom_id: "videos:#{h.name}", style: :primary) }
+  else                 # Send embedded video
+    # The message must not be V2, since videos don't embed there, and thus it must be a new message.
+    content = "## 🎞️ [__Video by #{streamer.name} for #{challenge_code} in #{h.name}__](#{video.url})"
+    v2, edit = false, false
   end
 
   send_message(event, content: content, components: view, v2: v2, edit: edit)
