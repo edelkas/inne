@@ -22,6 +22,7 @@ module MonkeyPatches
     ::Array.class_eval do
       def rjust(n, x) Array.new([0, n - length].max, x) + self end
       def ljust(n, x) self + Array.new([0, n - length].max, x) end
+      def ^(arr) (self - arr) | (arr - self) end
     end
 
     # Stable sorting, i.e., ensures ties maintain their order

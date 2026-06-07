@@ -508,6 +508,38 @@ class Mappack < ActiveRecord::Base
     false
   end
 
+  # For mappacks containing already-published levels, find them and store the
+  # reference. For those that were truly unchanged, we'll forward scores to
+  # Metanet instead of storing them locally.
+  #   If 'exact' is true, we enforce that levels have the same hash, otherwise
+  # we simply check that they have the same tiles and objects, which should suffice
+  # because the servers don't check hashes for userlevels.
+  def seed_userlevels(mode: nil, start: nil, stop: nil, exact: false)
+    # Filter userlevel range to search
+    userlevels = Userlevel.all
+    userlevels = userlevels.where(mode: mode) if mode
+    userlevels = userlevels.where("`date` >= '#{start}'") if start
+    userlevels = userlevels.where("`date` < '#{stop}'") if stop
+
+    # Find matching userlevels. Sort by match quality, and then by date.
+    list = levels.where(userlevel: nil)
+    list.each_with_index{ |l, i|
+      dbg("Finding match for level #{i + 1} / #{list.length}...", progress: true)
+      matches = userlevels.where(title: l.longname)
+                          .map{ |u| [u, l.distance(u)] }
+                          .sort_by{ |u, d| [d, u.id] }
+      next if matches.size == 0
+      u, d = matches.first
+      forward = exact ? l._hash(c: true) == u._hash(c: true) : d == 0
+      l.update(userlevel: u, forward: forward)
+    }
+  end
+
+  # Report maps which couldn't be mapped to their corresponding userlevel
+  def nonmatching_userlevels
+    levels.where.not(userlevel: nil).where(forward: false)
+  end
+
   # Set some of the mappack's info on command, which isn't parsed from the files
   def set_info(name: nil, author: nil, date: nil, channel: nil, version: nil, enabled: false, public: false, fractional: false)
     self.update(name:       name)        if name
@@ -878,6 +910,7 @@ class MappackLevel < ActiveRecord::Base
   has_many :mappack_hashes,     as: :highscoreable,     dependent: :delete_all
   has_many :mappack_challenges, foreign_key: :level_id, dependent: :delete_all
   belongs_to :mappack
+  belongs_to :userlevel
   belongs_to :mappack_episode, foreign_key: :episode_id
   alias_method :scores,     :mappack_scores
   alias_method :episode,    :mappack_episode

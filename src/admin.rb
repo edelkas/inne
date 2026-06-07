@@ -425,6 +425,37 @@ rescue => e
   lex(e, "Error reading mappack challenges.", event: event)
 end
 
+def send_mappack_userlevels(event)
+  flags = parse_flags(event)
+  mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
+  perror("Mappack not found") if !mappack
+
+  # Find matching userlevels
+  if !flags.key?(:errors)
+    mode = flags[:mode].to_i
+    start = Time.find_zone("UTC").parse(flags[:start])
+    stop = Time.find_zone("UTC").parse(flags[:stop])
+    mappack.seed_userlevels(mode: mode, start: start, stop: stop)
+    total = mappack.levels.count
+    found = mappack.levels.where.not(userlevel: nil).count
+    identical = mappack.levels.where(forward: true).count
+    perror("Found #{found} / #{total} matches (#{identical} identical)")
+  end
+
+  # Find list of non-identical matches
+  list = mappack.nonmatching_userlevels
+  list = list.map.with_index{ |l, i|
+    dbg("Computing distance for level #{i + 1} / #{list.length}...", progress: true)
+    u = l.userlevel
+    [l.name, l.distance(u), u.id, u.title]
+  }.sort_by{ |name, distance, id, title| -distance }.map{ |attrs|
+    '%-14s (%4d): %6d (%s)' % attrs
+  }
+  list.size <= 20 ? event << format_block(list.join("\n")) : send_file(event, list.join("\n"), 'errors.txt')
+rescue => e
+  lex(e, "Error reading mappack challenges.", event: event)
+end
+
 def send_highscore_plot(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
@@ -1463,6 +1494,7 @@ def respond_special(event)
   return send_mappack_scores(event)      if cmd == 'mappack_scores'
   return send_mappack_seed(event)        if cmd == 'mappack_seed'
   return send_mappack_update(event)      if cmd == 'mappack_update'
+  return send_mappack_userlevels(event)  if cmd == 'mappack_userlevels'
   return send_meminfo(event)             if cmd == 'meminfo'
   return send_nprofile_gen(event)        if cmd == 'nprofile_gen'
   return send_object_counts(event)       if cmd == 'object_counts'

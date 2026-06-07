@@ -329,6 +329,7 @@ class Userlevel < ActiveRecord::Base
   include Map
   include Levelish
   alias_attribute :name, :title
+  has_many :mappack_levels
   has_many :userlevel_scores
   belongs_to :userlevel_author, foreign_key: :author_id
   alias_method :author,  :userlevel_author

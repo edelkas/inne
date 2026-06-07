@@ -83,6 +83,7 @@ module Map
   OBJECT_COUNT = 40
 
   # Objects that do not admit sprite rotations at all
+  # Note: Shove thwumps admit sprite rotation for when they are in toggling state
   ID_LIST_FIXED = [
     ID_NINJA,       ID_MINE,               ID_GOLD,             ID_EXIT,
     ID_EXIT_SWITCH, ID_DOOR_LOCKED_SWITCH, ID_DOOR_TRAP_SWITCH, ID_FLOORGUARD,
@@ -92,6 +93,19 @@ module Map
 
   # Objects that admit diagonal sprite rotations
   ID_LIST_DIAG  = [ID_LAUNCHPAD, ID_ONEWAY, ID_LASER_TURRET]
+
+  # Objects that use the 4th byte (orientation)
+  ID_LIST_4TH_BYTE = [
+    ID_DOOR_REGULAR, ID_DOOR_LOCKED,    ID_DOOR_TRAP,   ID_LAUNCHPAD,
+    ID_ONEWAY,       ID_DRONE_CHAINGUN, ID_DRONE_LASER, ID_DRONE_ZAP,
+    ID_DRONE_CHASER, ID_THWUMP,         ID_MICRODRONE
+  ]
+
+  # Objects that use the 5th byte (mode)
+  ID_LIST_5TH_BYTE = [
+    ID_DRONE_CHAINGUN, ID_DRONE_LASER, ID_DRONE_ZAP, ID_DRONE_CHASER,
+    ID_LASER_TURRET,   ID_MICRODRONE, ID_LASER_TURRET
+  ]
 
   # Objects for which collisions are supported
   ID_LIST_COLLIDABLE = [
@@ -847,6 +861,15 @@ module Map
     Map.decode_objects(object_data(version: version))
   end
 
+  # Apply a few fixes to object data
+  def normalized_objects
+    objects.map{ |o|
+      o[3] = 0 if !ID_LIST_4TH_BYTE.include?(o[0])
+      o[4] = 0 if !ID_LIST_5TH_BYTE.include?(o[0])
+      o
+    }.stable_sort_by{ |o| o[0] == 7 ? 6 : o[0] == 9 ? 8 : o[0] }
+  end
+
   # Return object counts
   def object_counts(version: nil)
     Map.object_counts(objects(version: version))
@@ -919,6 +942,14 @@ module Map
     sha1(PWD + map_data[0xB8..-1], c: c)
   rescue
     nil
+  end
+
+  # Compute the "distance" between two maps as a way to measure how different they are
+  def distance(map, tiles: true, objects: true)
+    distance = 0
+    distance += DamerauLevenshtein.distance(self.tiles.flatten.join, map.tiles.flatten.join, 1, ROWS * COLUMNS) if tiles
+    distance += (normalized_objects ^ map.normalized_objects).size if objects
+    distance
   end
 
   # <-------------------------------------------------------------------------->
