@@ -1232,6 +1232,19 @@ class MappackScore < ActiveRecord::Base
     # Verify additional mappack-wise requirements
     return if !mappack.check_requirements(demos)
 
+    # Level also published as a userlevel, patch level ID and score and forward to Metanet
+    # It's important to do it here because it happens after:
+    # - Tweaking, so episodes continue working normally.
+    # - Patching corrupt scores, so we don't send those to Metanet.
+    if h.is_level? && h.userlevel && h.forward
+      return res.to_json if corrupt
+      req.body = req.body.sub(/level_id.+?\K\d+/m, h.userlevel.id.to_s)
+                         .sub(/score.+?\K\d+/m, (1000 * score_hs / 60.0).round.to_s)
+      res = forward(req)
+      _thread(release: true){ h.userlevel.update_scores(fast: true) } if res
+      return res&.sub(/level_id.+?\K\d+/m, h.inner_id.to_s)
+    end
+
     # Conmpute fractional score using NSim
     patched = false
     if frac
@@ -1366,9 +1379,16 @@ class MappackScore < ActiveRecord::Base
     # Find highscoreable
     h = "Mappack#{type[:name]}".constantize.find_by(mappack: mappack, inner_id: sid)
     if h.nil?
+      # Highscoreable not from this mappack, forward to Metanet
       return forward(req) if CLE_FORWARD
       alert("Getting scores: #{type[:name]} #{name} for mappack '#{code}' not found")
       return
+    elsif h.is_level? && h.userlevel && h.forward
+      # Level also published as a userlevel, swap level ID and forward to Metanet
+      req.query.merge!({'level_id' => h.userlevel.id.to_s})
+      res = forward(req)
+      _thread(release: true){ h.userlevel.update_scores(fast: true) } if res
+      return res&.sub(/level_id.+?\K\d+/m, h.inner_id.to_s)
     end
     frac = mappack.fractional && h.is_level?
     name = h.name

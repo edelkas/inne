@@ -2172,80 +2172,10 @@ class Server
 
   attr_reader :name, :log_req, :log_res
 
-  # Wrapper for a request (Rack environment)
-  class Request
-
-    attr_reader :headers, :body, :query, :parts
-
-    def initialize(env)
-      @env   = env
-      @req   = Rack::Request.new(env)
-      @query = @req.GET
-      @body  = ''
-      @parts = {}
-
-      # Parse HTTP headers manually from env because Rack's helpers suck
-      @headers = env.select{ |k, _| k.start_with?('HTTP_') }
-                    .transform_keys{ |k| k.sub(/^HTTP_/, '').tr('_', '-').downcase }
-      @headers['content-type'] = env['CONTENT_TYPE'] if env['CONTENT_TYPE']
-      @headers['content-length'] = env['CONTENT_LENGTH'] if env['CONTENT_LENGTH']
-      return if @headers['content-length'].to_i <= 0
-
-      # Read body and parse form parts if available
-      @body = @req.body.read
-      return unless @req.form_data?
-      @req.body.rewind
-      @req.POST.each{ |k, v|
-        if v.is_a?(Hash)
-          @parts[k] = v[:tempfile].read
-          v[:tempfile].close
-        else
-          @parts[k] = v
-        end
-      }
-    end
-
+  # Functionality common to requests and responses
+  module Message
     def [](name)
       @headers[name.tr('_', '-').downcase]
-    end
-
-    def method()       @env['REQUEST_METHOD'].upcase    end
-    def path()         @env['PATH_INFO']                end
-    def query_string() @env['QUERY_STRING']             end
-    def ip()           @env['REMOTE_ADDR']              end
-    def route()        path.split('/').reject(&:empty?) end
-    def root()         route.first.to_s                 end
-
-    def key
-      path + (!query_string.empty? ? '?' + query_string : '')
-    end
-
-    def log(server)
-      lin("%s: %s %s %dB %s" % [server.name, ip, method, @body.bytesize, key])
-      return if !Log.socket || @body.empty? || !server.log_req
-      filename = "#{server.name.downcase}_req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
-      File.binwrite(File.join(DIR_LOGS, filename), @body)
-    end
-
-    def clear
-      @headers.clear
-      @body.clear
-      @env.clear
-    rescue => e
-      # We must handle exceptions here to prevent them from leaking to Puma
-      lex(e, 'Failed to clear HTTP request')
-    end
-  end
-
-  # Wrapper for a response
-  class Response
-    attr_reader :body, :headers, :cache
-
-    def initialize(status, body = '', headers = {}, cache: DEFAULT_CACHE)
-      @status  = status
-      @headers = headers
-      @body    = body
-      @cache   = cache
     end
 
     def []=(name, value)
@@ -2256,6 +2186,82 @@ class Server
       @body = value
       @body = @body.to_json if @body.is_a?(Hash)
       @headers['Content-Length'] = @body.bytesize.to_s
+    end
+
+    def boundary
+      @headers['Content-Type'].to_s[/\Amultipart\/.*?boundary=\"?([^\";,]+)\"?/, 1]
+    end
+  end
+
+  # Wrapper for a request (Rack environment)
+  class Request
+    include Message
+    attr_reader :method, :path, :headers, :body, :query, :parts
+
+    def initialize(env)
+      req     = Rack::Request.new(env)
+      @ip     = env['REMOTE_ADDR']
+      @method = env['REQUEST_METHOD'].upcase
+      @path   = env['PATH_INFO']
+      @query  = req.GET.dup
+      @body   = ''
+      @parts  = {}
+
+      # Parse HTTP headers manually from env because Rack's helpers suck
+      @headers = env.select{ |k, _| k.start_with?('HTTP_') }
+                    .transform_keys{ |k| k.sub(/^HTTP_/, '').tr('_', '-').downcase }
+      @headers['content-type'] = env['CONTENT_TYPE'] if env['CONTENT_TYPE']
+      @headers['content-length'] = env['CONTENT_LENGTH'] if env['CONTENT_LENGTH']
+      return if @headers['content-length'].to_i <= 0
+
+      # Read body and parse form parts if available
+      @body = req.body.read
+      return unless req.form_data?
+      req.body.rewind
+      req.POST.each{ |k, v|
+        if v.is_a?(Hash)
+          @parts[k] = v[:tempfile].read
+          v[:tempfile].close
+        else
+          @parts[k] = v
+        end
+      }
+    end
+
+    def query_string() Rack::Utils.build_query(@query)   end
+    def route()        @path.split('/').reject(&:empty?) end
+    def root()         route.first.to_s                  end
+
+    def key
+      @path + (!query_string.empty? ? '?' + query_string : '')
+    end
+
+    def log(server)
+      lin("%s: %s %s %dB %s" % [server.name, @ip, @method, @body.bytesize, key])
+      return if !Log.socket || @body.empty? || !server.log_req
+      filename = "#{server.name.downcase}_req_#{sanitize_filename(root)}_#{Time.now.strftime('%Y-%m-%d-%H-%M-%S-%L')}"
+      File.binwrite(File.join(DIR_LOGS, filename), @body)
+    end
+
+    def clear
+      @headers.clear
+      @body.clear
+    rescue => e
+      # We must handle exceptions here to prevent them from leaking to Puma
+      lex(e, 'Failed to clear HTTP request')
+    end
+  end
+
+  # Wrapper for a response
+  class Response
+    include Message
+    attr_reader :body, :headers, :cache
+
+    def initialize(status, body = '', headers = {}, cache: DEFAULT_CACHE)
+      @status  = status
+      @headers = headers
+      @body    = body
+      @cache   = cache
     end
 
     def cache=(cache)
