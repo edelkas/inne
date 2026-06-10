@@ -1175,13 +1175,14 @@ def send_random(event)
   msg     = parse_message(event)
   type    = parse_type(msg, default: Level)
   tabs    = parse_tabs(msg)
-  amount  = [msg[/\d+/].to_i || 1, NUM_ENTRIES].min
+  amount  = msg[/\d+/].to_i.clamp(1, NUM_ENTRIES)
   mappack = parse_mappack(event: event)
 
   # Retrieve list of maps
   type = type.mappack if mappack
   maps = mappack ? type.where(mappack: mappack) : type
   maps = tabs.empty? ? maps.all : maps.where(tab: tabs)
+  maps = maps.sample(amount)
 
   # Format and send response
   if amount > 1
@@ -1189,10 +1190,9 @@ def send_random(event)
     type = format_type(type).downcase.pluralize
     mappack = format_mappack(mappack)
     event << format_header("Random selection of #{amount} #{tabs} #{type} #{mappack}")
-    event << format_block(maps.sample(amount).map(&:name).join("\n"))
+    send_file(event, Map.screenshot(h: maps, titles: maps.map(&:name)), 'sample.png', true)
   else
-    map = maps.sample
-    send_screenshot(event, map)
+    send_screenshot(event, maps.first)
   end
 rescue => e
   lex(e, "Error getting random sample.", event: event)
