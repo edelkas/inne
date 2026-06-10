@@ -1693,6 +1693,41 @@ module Map
     txt2gif(text, image, gif[:font], x, y, colors[:legend], align: :right)
   end
 
+  # Overlay titles (or any text) on the PNG screenshot. Since ChunkyPNG doesn't
+  # support text, we resort to ImageMagick as an intermediary. Thus, this
+  # returns a NEW image, it doesn't modify it in place.
+  def self.render_titles(image, titles, cols, ppc: PPC)
+    # Convert to Magick
+    image = Magick::Image.from_blob(image.to_blob(:fast_rgb)).first
+
+    # Configure text
+    draw = Magick::Draw.new{ |d|
+      d.font = File.join(DIR_FONTS, 'sys', 'Sys.otf')
+      d.pointsize = 10 * ppc
+      d.fill = 'black'
+      d.font_weight = Magick::BoldWeight
+      d.gravity = Magick::NorthWestGravity
+    }
+
+    # Overlay text
+    titles.each_with_index{ |text, index|
+      row = index / cols
+      col = index % cols
+      w = image.columns / cols
+      h = image.rows * cols / titles.size
+      x = col * w
+      y = row * h
+      draw.annotate(image, w, h, x + 8, y + 2, text)
+    }
+
+    # Convert back to ChunkyPNG
+    ChunkyPNG::Image.from_datastream(
+      ChunkyPNG::Datastream.from_blob(
+        image.to_blob{ |img| img.format = 'PNG' }
+      )
+    )
+  end
+
   # Calculates the bounding box of an object's sprite based on the object data
   # and the image's scale. It is returned in image coords, not game coords.
   def self.find_object_bbox(o, atlas, ppc)
@@ -1911,6 +1946,11 @@ module Map
       render_objects(objects, image, ppc: ppc, frame: frame, cols: cols, atlas: object_atlas)
       render_tiles(  tiles  , image, ppc: ppc, frame: frame, cols: cols, palette_idx: palette_idx, atlas: tile_atlas)
       render_borders(tiles  , image, ppc: ppc, frame: frame, cols: cols, palette_idx: palette_idx)
+    end
+
+    # Overlay titles. Creates a new image, costly since we use Magick.
+    if info[:titles].size == (list ? h.size : 5 ** h.type_id)
+      image = render_titles(image, info[:titles], cols, ppc: ppc)
     end
 
     # Return the whole context
@@ -2136,6 +2176,7 @@ module Map
       step:       ANIMATION_STEP_NORMAL,  # How many frames per frame to trace
       delay:      ANIMATION_DELAY_NORMAL, # Time between frames, in 1/100ths sec
       texts:      [],                     # Texts for the legend
+      titles:     [],                     # Texts to overlay on the screenshots
       spoiler:    false,                  # Whether the screenshot should be spoilered in Discord
       v:          nil,                    # Version of the map data to use (nil = latest)
       event:      nil                     # Originating event for this request
@@ -2162,7 +2203,7 @@ module Map
       context_png  = nil
       context_gif  = nil
       context_info = parse_trace(nsim, texts, h, ppc: ppc, v: v, anim: anim, trace: trace)
-                    .merge(inputs: inputs, blank: blank, vertical: vertical)
+                    .merge(inputs: inputs, blank: blank, vertical: vertical, titles: titles)
       res = nil
       bench(:step, 'Parsing', pad_str: 12, pad_num: 9) if BENCH_IMAGES
 

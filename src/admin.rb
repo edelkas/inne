@@ -429,6 +429,7 @@ def send_mappack_userlevels(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found") if !mappack
+  screenies = flags.key?(:screenshots)
 
   # Find matching userlevels
   if !flags.key?(:errors)
@@ -443,15 +444,30 @@ def send_mappack_userlevels(event)
   end
 
   # Find list of non-identical matches
+  levels = []
+  texts = []
   list = mappack.nonmatching_userlevels
   list = list.map.with_index{ |l, i|
     dbg("Computing distance for level #{i + 1} / #{list.length}...", progress: true)
     u = l.userlevel
-    [l.name, l.distance(u), u.id, u.title]
-  }.sort_by{ |name, distance, id, title| -distance }.map{ |attrs|
-    '%-14s (%4d): %6d (%s)' % attrs
+    [l, u, l.distance(u)]
+  }.sort_by{ |level, userlevel, distance| -distance }.map{ |l, u, d|
+    if screenies
+      levels << u << l
+      texts << "ID: #{u.id}\n#{u.title}" << "#{l.name}\nDistance: #{d}"
+    end
+    '%-14s (%4d): %6d (%s)' % [l.name, d, u.id, u.title]
   }
-  list.size <= 20 ? event << format_block(list.join("\n")) : send_file(event, list.join("\n"), 'errors.txt')
+
+  # Generate screenshots
+  if screenies
+    dbg("\nGenerating screenshot...")
+    png = Map.screenshot(h: levels, titles: texts)
+  end
+
+  files = [tmp_file(list.join("\n"), 'list.txt')]
+  files << tmp_file(png, 'screenies.png', binary: true) if screenies
+  send_message(event, files: files)
 rescue => e
   lex(e, "Error reading mappack challenges.", event: event)
 end
