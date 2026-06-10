@@ -611,7 +611,7 @@ def get_sheet(id, api: false)
   if api
     url = GOOGLE_API_SHEETS % [id]
     args = {
-      'fields' => 'properties,sheets(properties,data(rowData(values(formattedValue,hyperlink))))',
+      'fields' => 'properties,sheets(properties,data(rowData(values(formattedValue,hyperlink,note))))',
       'key'    => $api_keys[:google][:sheets]
     }
   else

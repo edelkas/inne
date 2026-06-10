@@ -3148,26 +3148,24 @@ class Video < ActiveRecord::Base
     # Fetch spreadsheet and parse it
     return err("No file named #{filename}") if filename && !File.file?(filename)
     data = filename ? File.read(filename) : get_sheet(SHEET_ID_VIDEOS, api: true)
+    return err("No sheet to parse") unless data
     log("Updating video library...") unless silent
     json = JSON.parse(data)
     indexes = json['sheets'].map.with_index{ |sheet, i| [sheet['properties']['title'], i] }.to_h
 
     # Basic sheet structure
-    header_players = 7
+    header_players = 6
     header_videos  = 5
     sheet_players  = 'Players>List'
-    sheets_videos  = [
-      "Solo>Levels>Intro", "Solo>Levels>N++", "Solo>Levels>Ultimate", "Solo>Levels>Legacy",
-      "Solo>Levels>?",     "Solo>Levels>!",   "Solo>Levels>?!",       "Solo>Levels>!?",
-      "Solo>Episodes>N++", "Solo>Episodes>Ultimate",
-      "Hardcore>Intro",    "Hardcore>N++",    "Hardcore>Ultimate",    "Hardcore>Legacy"
-    ]
+    sheets_videos  = indexes.keys.select{ |k| k =~ /^(solo|hardcore)/i }
+    dbg("Found #{sheets_videos.size} video sheets to parse")
 
     # Read video authors
     old_streamers = Streamer.pluck(:code)
     new_streamers = []
     streamers = json['sheets'][indexes[sheet_players]]['data'][0]['rowData'].drop(header_players).map.with_index do |r, i|
       row = r['values']
+      next unless row&.size.to_i >= 3
       code = row[1]['formattedValue']&.[](/\[(.+)\]/, 1)
       next unless code
       next alert("Duplicate player #{code}") if new_streamers.include?(code)
@@ -3278,7 +3276,7 @@ class Video < ActiveRecord::Base
     table.prepend(['', 'Level', 'Episode', 'Story', 'Total'], :sep)
     dbg("Video breakdown:\n#{make_table(table)}") unless silent
   rescue => e
-    lex(e, 'Failed to update video library')
+    lex(e, 'Failed to update video library', discord: true)
   end
 end
 
