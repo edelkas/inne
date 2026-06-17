@@ -2085,7 +2085,7 @@ class Score < ActiveRecord::Base
     players = Player.where(id: scores.map(&:first))
                     .pluck(:id, "IF(`display_name` IS NULL, `name`, `display_name`)")
                     .to_h
-    ret = scores.map{ |s| [players[s[0]], s[1], s[2]] }
+    ret = scores.map{ |s| [players[s[0]] || 'Deleted player', s[1], s[2]] }
 
     # Zeroes are only permitted in a few rankings, and negatives nowhere
     ret.reject!{ |s| s[1] <= 0  } unless [:avg_rank, :avg_lead, :gp, :gm].include?(ranking)
@@ -3697,6 +3697,10 @@ class RawScore < ActiveRecord::Base
 end
 
 class RawScore < ActiveRecord::Base
+end
+
+class ScoreCorrection < ActiveRecord::Base
+  belongs_to :highscoreable, polymorphic: true
 end
 
 # This class logs all messages sent by outte, and who it is in response to

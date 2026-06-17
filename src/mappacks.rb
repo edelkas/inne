@@ -909,6 +909,7 @@ class MappackLevel < ActiveRecord::Base
   has_many :mappack_scores,     as: :highscoreable
   has_many :mappack_hashes,     as: :highscoreable,     dependent: :delete_all
   has_many :mappack_challenges, foreign_key: :level_id, dependent: :delete_all
+  has_one :score_correction, as: :highscoreable
   belongs_to :mappack
   belongs_to :userlevel
   belongs_to :mappack_episode, foreign_key: :episode_id
@@ -917,6 +918,7 @@ class MappackLevel < ActiveRecord::Base
   alias_method :episode=,   :mappack_episode=
   alias_method :hashes,     :mappack_hashes
   alias_method :challenges, :mappack_challenges
+  alias_method :correction, :score_correction
   create_enum(:tab, TABS_NEW.map{ |k, v| [k, v[:mode] * 7 + v[:tab]] }.to_h)
 
   def self.mappack
@@ -1238,8 +1240,10 @@ class MappackScore < ActiveRecord::Base
     # - Patching corrupt scores, so we don't send those to Metanet.
     if h.is_level? && h.userlevel && h.forward
       return res.to_json if corrupt
+      new_score = score_hs / 60.0
+      new_score -= 2.0 * h.correction.gold.to_i if h.correction
       req.body = req.body.sub(/level_id.+?\K\d+/m, h.userlevel.id.to_s)
-                         .sub(/score.+?\K\d+/m, (1000 * score_hs / 60.0).round.to_s)
+                         .sub(/score.+?\K\d+/m, (1000 * new_score).round.to_s)
       res = forward(req)
       _thread(release: true){ h.userlevel.update_scores(fast: true) } if res
       return res&.sub(/level_id.+?\K\d+/m, h.inner_id.to_s)
@@ -1388,6 +1392,12 @@ class MappackScore < ActiveRecord::Base
       req.query.merge!({'level_id' => h.userlevel.id.to_s})
       res = forward(req)
       _thread(release: true){ h.userlevel.update_scores(fast: true) } if res
+      if res && h.correction&.gold
+        res = JSON.parse(res)
+        res['scores'].each{ |entry| entry['score'] += 2000 * h.correction.gold }
+        res['userInfo']['my_score'] += 2000 * h.correction.gold if res['userInfo']
+        res = res.to_json
+      end
       return res&.sub(/level_id.+?\K\d+/m, h.inner_id.to_s)
     end
     frac = mappack.fractional && h.is_level?

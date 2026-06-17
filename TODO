@@ -1,4 +1,5 @@
-
+- Blacklist should probably be handled in the db, not in the source. Also, blacklisted names should be removed.
+- "screenshot palette "classic" s-e-05-04" triggers CLA mappack
 - Video library: Account for players with multiple videos in the same highscoreable. Also, account for notes.
 - Overlay texts over screenies via RMagick (e.g. search results)
 - When an ID is detected, but no command matched, we can show generic info about that highscoreable, including a row of buttons with different common functions: scores, screenshot, analysis, trace, anim, challenges, videos...

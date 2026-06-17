@@ -430,44 +430,50 @@ def send_mappack_userlevels(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found") if !mappack
   screenies = flags.key?(:screenshots)
+  content = ""
+  files = []
 
   # Find matching userlevels
-  if !flags.key?(:errors)
+  if flags.key?(:seed)
     mode = flags[:mode].to_i
     start = Time.find_zone("UTC").parse(flags[:start])
     stop = Time.find_zone("UTC").parse(flags[:stop])
     mappack.seed_userlevels(mode: mode, start: start, stop: stop)
-    total = mappack.levels.count
-    found = mappack.levels.where.not(userlevel: nil).count
-    identical = mappack.levels.where(forward: true).count
-    perror("Found #{found} / #{total} matches (#{identical} identical)")
+    content << "Seeded userlevel forwards. "
+  end
+
+  # Manually add matches
+  if flags.key?(:manual)
+    ids = flags[:manual].split(' ')
+    mappack.levels.where(userlevel_id: ids).update_all(forward: true)
   end
 
   # Find list of non-identical matches
-  levels = []
-  texts = []
-  list = mappack.nonmatching_userlevels
-  list = list.map.with_index{ |l, i|
-    dbg("Computing distance for level #{i + 1} / #{list.length}...", progress: true)
-    u = l.userlevel
-    [l, u, l.distance(u)]
-  }.sort_by{ |level, userlevel, distance| -distance }.map{ |l, u, d|
-    if screenies
-      levels << u << l
-      texts << "ID: #{u.id}\n#{u.title}" << "#{l.name}\nDistance: #{d}"
-    end
-    '%-14s (%4d): %6d (%s)' % [l.name, d, u.id, u.title]
-  }
-
-  # Generate screenshots
-  if screenies
-    dbg("\nGenerating screenshot...")
-    png = Map.screenshot(h: levels, titles: texts)
+  if flags.key?(:errors)
+    levels = []
+    texts = []
+    list = mappack.nonmatching_userlevels
+    list = list.map.with_index{ |l, i|
+      dbg("Computing distance for level #{i + 1} / #{list.length}...", progress: true)
+      u = l.userlevel
+      [l, u, l.distance(u)]
+    }.sort_by{ |level, userlevel, distance| -distance }.map{ |l, u, d|
+      levels << u << l if screenies
+      texts << "ID: #{u.id}\n#{u.title}" << "#{l.name}\nDistance: #{d}" if screenies
+      '%-14s (%4d): %6d (%s)' % [l.name, d, u.id, u.title]
+    }
+    png = Map.screenshot(h: levels, titles: texts) if screenies
+    files << tmp_file(list.join("\n"), 'list.txt')
+    files << tmp_file(png, 'screenies.png', binary: true) if screenies
   end
 
-  files = [tmp_file(list.join("\n"), 'list.txt')]
-  files << tmp_file(png, 'screenies.png', binary: true) if screenies
-  send_message(event, files: files)
+  # Send mappack userlevel status
+  total = mappack.levels.count
+  found = mappack.levels.where.not(userlevel: nil).count
+  forwarded = mappack.levels.where(forward: true).count
+  content << "Found #{found} / #{total} matches (#{forwarded} forwarded)"
+
+  send_message(event, content: content, files: files)
 rescue => e
   lex(e, "Error reading mappack challenges.", event: event)
 end
@@ -1467,6 +1473,16 @@ def send_object_counts(event)
   send_message(botmaster.pm, files: [tmp_file(png.to_blob, 'res.png', binary: true)])
 end
 
+# Add a certain gold count correction that will be applied to scores of highscoreables
+# that were edited at some point and have incorrect scores as a consequence.
+def add_score_correction(event)
+  flags = parse_flags(event)
+  h = parse_highscoreable(event, mappack: true)
+  perror("You need to specify a gold count with `-gold`") unless flags[:gold]
+  ScoreCorrection.find_or_create_by(highscoreable: h).update(gold: flags[:gold].to_i)
+  event << "Added %+d gold correction to %s" % [flags[:gold], h.format_name]
+end
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -1489,6 +1505,7 @@ def respond_special(event)
 
   return send_admin_panel(event)         if cmd == 'admin'
   return send_dday_stats(event)          if cmd == 'dday_stats'
+  return add_score_correction(event)     if cmd == 'correct_score'
   return send_debug(event)               if cmd == 'debug'
   return send_delete_score(event)        if cmd == 'delete_score'
   return fill_gold_counts(event)         if cmd == 'fill_gold'
