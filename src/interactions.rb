@@ -546,6 +546,12 @@ def register_command(cmd, update = false, server_id: nil)
       cmd.boolean(:userlevel, 'Search in userlevels')
       cmd.string(:author, 'Map author name or ID (userlevels only)')
     end
+  when :video
+    $bot.register_application_command(:video, 'Show videos for a particular challenge', server_id: server_id) do |cmd|
+      cmd.string(:level, 'Name or ID of the level, episode or story', required: true)
+      cmd.string(:challenge, 'Challenge code (e.g. G++T--)')
+      cmd.string(:player, 'Code or name of the video author')
+    end
   end
   succ("%s %s command: %s" % [update ? 'Updated' : 'Registered', server_id ? 'guild' : 'global', cmd])
 rescue => e
@@ -750,6 +756,8 @@ def respond_application_command(event)
     else
       send_screenshot(event, **opt.symbolize_keys)
     end
+  when :video
+    send_videos(event, highscoreable: opt['level'], challenge_code: opt['challenge'], streamer_code: opt['player'])
   else
     perror("Unrecognized application command.")
   end

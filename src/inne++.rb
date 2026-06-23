@@ -323,7 +323,7 @@ end
 # Handle a new command, by crafting a response and sending it appropriately
 def handle_command(event, &func)
   # Return if responding is disabled, unless we're the botmaster
-  return if !RESPOND && event.user.id != BOTMASTER_ID
+  return if !RESPOND && !is_botmaster?(event)
   special = false
 
   # Parse the command and log it
@@ -331,7 +331,7 @@ def handle_command(event, &func)
   when Discordrb::Events::MessageEvent
     msg = parse_message(event)
     remove_mentions!(msg)
-    special = msg[0] == '!' && event.user.id == BOTMASTER_ID
+    special = msg[0] == '!' && is_botmaster?(event)
     if special
       log_msg = "Special command: #{msg}"
     elsif event.channel.type == 1
@@ -383,7 +383,7 @@ def setup_bot
 
   # Parse all messages, and optionally respond
   $bot.message do |event|
-    next if !RESPOND && event.user.id != BOTMASTER_ID
+    next if !RESPOND && !is_botmaster?(event)
     msg = parse_message(event)
     remove_mentions!(msg)
 

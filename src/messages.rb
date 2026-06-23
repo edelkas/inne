@@ -1200,7 +1200,7 @@ end
 
 # Return list of challenges for specified level, ordered and formatted as in the game
 def send_challenges(event)
-  return unless Challengish.check_channel(event.channel)
+  return unless is_botmaster?(event) || Challengish.check_channel(event.channel)
   h = parse_highscoreable(event, mappack: true)
   perror("#{h.class.vanilla.to_s.pluralize.capitalize} don't have challenges!") if !h.is_level?
   perror("#{MODES[h.mode].capitalize} doesn't have challenges!") if h.mode != MODE_SOLO
@@ -1221,7 +1221,7 @@ end
 
 # Send the list of challenge videos for a given highscoreable
 def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: nil, edit: nil)
-  return unless Challengish.check_channel(event.channel)
+  return unless is_botmaster?(event) || Challengish.check_channel(event.channel)
   h, challenge, streamer, video, view = nil
   v2 = true
   content = ''
@@ -1234,17 +1234,34 @@ def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: n
 
   # Parse challenge
   if challenge_code
-    q = Challengish.parse(challenge_code).merge(level_id: h.id)
-    challenge = q.size > 1 ? Challenge.find_by(q) : nil
+    q = Challengish.parse_code(challenge_code).merge(level_id: h.id)
+    count = q.count{ |k, v| k.length == 1 && v != 0 }
+    if count == 1 && q[:g] == 1 # Regular G++ isn't an actual challenge
+      q[:g] = 0
+      count -= 1
+    end
+    challenge = count > 0 ? Challenge.find_by(q) : nil
+    perror("#{h.name} has no #{challenge_code} challenge!") if count > 0 && !challenge
     challenge_code = challenge ? challenge.format_objs : h.is_level? ? 'G++' : 'N++'
   end
 
-  # Parse streamer and video
+  # Parse streamer and video (TODO: pagination)
   if streamer_code
     streamer = Streamer.find_by(code: streamer_code)
-    perror("Streamer #{streamer_code} not found") if !streamer
-    video = Video.find_by(highscoreable: h, challenge: challenge, streamer: streamer)
-    perror("No video by #{streamer.name} for #{challenge_code} in #{h.name}") if !video
+    streamer = Streamer.find_matches(:name, streamer_code) unless streamer
+    case streamer
+    when Streamer
+      video = Video.find_by(highscoreable: h, challenge: challenge, streamer: streamer)
+      perror("#{streamer.name} has no #{h.name} #{challenge_code} video.") if !video
+    when ActiveRecord::Relation
+      list = format_block(streamer.pluck(:name).join("\n"))
+      perror("Multiple players matching `#{streamer_code}` have videos, who did you mean?\n#{list}")
+    when Array
+      list = format_block(streamer.join("\n"))
+      perror("No players matching `#{streamer_code}` have videos. Did you mean...\n#{list}")
+    else
+      perror("Player #{streamer_code} has no published videos!") if !streamer
+    end
   end
 
   if !challenge_code   # Send challenge list
@@ -1254,12 +1271,12 @@ def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: n
     videos = videos.group_by{ |v| v.challenge }.to_h
     challenges.each{ |challenge|
       count = videos[challenge]&.size.to_i
-      code = challenge ? challenge.format : h.is_level? ? '[] G++' : '!? N++'
+      code = challenge ? challenge.format : h.is_level? ? '[] G++' : '[!?] N++'
       text = "➤ `#{code}` (#{count} videos)"
       view_add_section(
         texts:     [text],
         button:    'View',
-        custom_id: "videos:#{h.name}:#{code}",
+        custom_id: "videos:#{h.name}:#{code.sub(/\[.*\]/, '').strip}",
         style:     :secondary,
         disabled:  count == 0,
         view:      view
@@ -1371,7 +1388,7 @@ end
 def send_mappacks(event, page: nil)
   msg = parse_message(event)
   short = !!msg[/short/i]
-  priv = !!msg[/private/i] && event.user.id == BOTMASTER_ID
+  priv = !!msg[/private/i] && is_botmaster?(event)
   klass = priv ? Mappack.all : Mappack.where(public: true)
   count = klass.count
   counts = MappackLevel.group(:mappack_id).count
@@ -2491,7 +2508,7 @@ def respond_reaction(event)
   return report_message(event)     if EMOJIS_TO_DELETE.include?(emoji)
 
   # Botmaster exclusive reaction commands
-  return if event.user.id != BOTMASTER_ID
+  return if !is_botmaster?(event)
   return Twitch::ban_stream(event) if emoji == EMOJI_TO_BAN
 end
 

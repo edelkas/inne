@@ -1517,6 +1517,10 @@ rescue => e
   nil
 end
 
+def is_botmaster?(event)
+  event.user.id == BOTMASTER_ID
+end
+
 # Get a specific component from a message, by type and ID
 def get_component(msg, type: nil, id: nil)
   components = msg.components.map{ |row| row.components }.flatten
@@ -3047,12 +3051,12 @@ def check_permission(event, role)
   case role
   when 'botmaster'
     {
-      granted: event.user.id == BOTMASTER_ID,
+      granted: is_botmaster?(event),
       allowed: ['botmasters']
     }
   else
     {
-      granted: Role.exists(event.user.id, role) || event.user.id == BOTMASTER_ID,
+      granted: Role.exists(event.user.id, role) || is_botmaster?(event),
       allowed: role.pluralize #names
     }
   end

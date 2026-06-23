@@ -1115,8 +1115,8 @@ end
 # The botmaster can delete any message any time
 def delete_message(event)
   msg = event.message
-  return if Time.now - msg.timestamp > DELETE_TIMELIMIT && event.user.id != BOTMASTER_ID
-  return if !Message.find_by(id: msg.id, user_id: event.user.id) && event.user.id != BOTMASTER_ID
+  return if Time.now - msg.timestamp > DELETE_TIMELIMIT && !is_botmaster?(event)
+  return if !Message.find_by(id: msg.id, user_id: event.user.id) && !is_botmaster?(event)
   lin(
     "[#{event.user.name}] deleted message #{msg.id} (#{msg.content[0, 24]}) in [#{msg.channel.name}] by reacting with #{event.emoji.to_s}")
   msg.delete

@@ -67,6 +67,22 @@ module MonkeyPatches
         str = "%" + str + "%" if partial
         self.where("LOWER(#{field}) LIKE (?)", str)
       end
+
+      # Finds exact, partial or approximate matches. Returns:
+      #   - An object if a single match (may be approximate) is found.
+      #   - A relation if multiple partial matches are found.
+      #   - An array if multiple approximate matches are found.
+      def self.find_matches(field, str, strings = nil)
+        return self if field.empty? || str.empty?
+        matches = self.where_like(field, str)
+        return matches.first if matches.size == 1
+        return matches if matches.size > 1
+        strings = pluck(field) unless strings
+        matches = string_distance_list_mixed(str, strings)
+        return find_by(field => matches.first) if matches.size == 1
+        return matches if matches.size > 1
+        nil
+      end
     end
 
     # Allow raw SQL queries for pluck, order, etc
@@ -1478,8 +1494,9 @@ module Levelish
 
   def format_name(bold: false)
     bd = bold ? '**' : ''
+    author_name = author || userlevel&.author&.name if is_mappack?
     str = "#{verbatim(longname)} (#{bd}#{name.remove('MET-')}#{bd})"
-    str += " by #{verbatim(author)}" if author rescue ''
+    str += " by #{verbatim(author_name)}" if author_name
     str
   end
 
@@ -3226,7 +3243,7 @@ class Video < ActiveRecord::Base
         if h.is_level? && symbol != '[]'
           challenge_code = row[1, 3].map{ |cell| cell['formattedValue'] }.compact.join
           next alert("No challenge code found for #{h.name} on #{place}") if challenge_code.empty?
-          q = Challengish.parse(challenge_code).merge(level_id: h.id)
+          q = Challengish.parse_code(challenge_code).merge(level_id: h.id)
           challenge = Challenge.find_by(q)
           next alert("Challenge not found for #{h.name}: #{challenge_code}") if !challenge
         end
@@ -3291,8 +3308,17 @@ end
 module Challengish
 
   # Turn challenge code into hash suitable for db query
-  def self.parse(code)
-    code.scan(/([GTOCE])(\+|-){2}/i).map{ |k, v| [k.downcase.to_sym, (v + '1').to_i] }.to_h
+  def self.parse_code(code)
+    'GTOCE'.chars.map{ |char|
+      sign = code[/#{char}((\++)|(-+))/i]&.[](-1)
+      val = sign ? (sign + '1').to_i : 0
+      [char.downcase.to_sym, val]
+    }.to_h
+  end
+
+  # Format db hash as standard string
+  def self.format_code(hash)
+    hash.map{ |k, v| v == 1 ? "#{k}++" : v == -1 ? "#{k}--" : "" }.join.upcase
   end
 
   # Ensure challenge posting is allowed in this channel
