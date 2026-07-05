@@ -3161,6 +3161,7 @@ class Video < ActiveRecord::Base
   belongs_to :challenge
 
   # Fetch sheet and parse new videos
+  # TODO: Support notes, multiple videos per challenge and streamer, and video deletion
   def self.update(filename: nil, silent: false)
     # Fetch spreadsheet and parse it
     return err("No file named #{filename}") if filename && !File.file?(filename)
@@ -3213,8 +3214,10 @@ class Video < ActiveRecord::Base
     ) unless silent
 
     # Read each relevant sheet
+    old_count = Video.count
     counters = Hash.new{ |hash, key| hash[key] = Hash.new(0) }
     errors = Hash.new(0)
+    new_vids = Hash.new(0)
     unknown = Set.new
     sheets_videos.each do |name|
       type = !!name[/level/i] ? Level : !!name[/episode/i] ? Episode : Story
@@ -3261,7 +3264,9 @@ class Video < ActiveRecord::Base
             unknown << author_code
             next alert("Video by unknown author #{author_code} on #{place}")
           end
-          Video.find_or_create_by(highscoreable: h, streamer: streamer, challenge: challenge).update(url: url)
+          Video.find_or_create_by(highscoreable: h, streamer: streamer, challenge: challenge){ |video|
+            new_vids[streamer.name] += 1
+          }.update(url: url)
           counters[type.to_s][symbol] += 1
           errors[:cell] -= 1
         }
@@ -3273,25 +3278,46 @@ class Video < ActiveRecord::Base
       puts
     end # sheet
 
-    # Log results
-    succ("Finished updating video library") unless silent
-    alert(
-      "Alerts:\n"\
-      "  #{unknown.size} unknown authors: #{unknown.join(', ')}\n"\
-      "  #{errors[:row]} skipped challenges\n"\
-      "  #{errors[:cell]} skipped videos"
-    ) unless silent
-    cols = counters.keys
-    rows = counters.map{ |type, hash| hash.keys }.flatten.uniq.sort
-    table = rows.map{ |symbol|
-      row = cols.map{ |type|
-        counters[type][symbol]
+    # Log results unless silent
+    if !silent
+      succ("Finished updating video library")
+      alert(
+        "Alerts:\n"\
+        "  #{unknown.size} unknown authors: #{unknown.join(', ')}\n"\
+        "  #{errors[:row]} skipped challenges\n"\
+        "  #{errors[:cell]} skipped videos"
+      )
+      cols = counters.keys
+      rows = counters.map{ |type, hash| hash.keys }.flatten.uniq.sort
+      table = rows.map{ |symbol|
+        row = cols.map{ |type|
+          counters[type][symbol]
+        }
+        [symbol, *row, row.sum]
       }
-      [symbol, *row, row.sum]
-    }
-    table.push(:sep, ['Total', *table.transpose.drop(1).map(&:sum)])
-    table.prepend(['', 'Level', 'Episode', 'Story', 'Total'], :sep)
-    dbg("Video breakdown:\n#{make_table(table)}") unless silent
+      table.push(:sep, ['Total', *table.transpose.drop(1).map(&:sum)])
+      table.prepend(['', 'Level', 'Episode', 'Story', 'Total'], :sep)
+      dbg("Video breakdown:\n#{make_table(table)}")
+    end
+
+    # Send DM notification when new videos get added
+    new_count = Video.count
+    if new_count != old_count || !new_vids.empty?
+      msg = "Found #{new_vids.values.sum} new video library entries by #{new_vids.size} players:\n"
+      pad_name = new_vids.keys.map(&:length).max
+      pad_count = new_vids.values.max.to_s.length
+      list = new_vids.sort_by{ |name, count| -count }
+                     .map{ |name, count| "%-*s - %*d" % [pad_name, name, pad_count, count] }
+                     .join("\n")
+      files = []
+      if new_vids.count <= 20
+        msg << format_block(list)
+      else
+        files << tmp_file(list, "new_vids.txt")
+      end
+      msg << "Before: **%d** videos. After: **%d** videos." % [old_count, new_count]
+      send_message(botmaster.pm, content: msg, files: files)
+    end
   rescue => e
     lex(e, 'Failed to update video library', discord: true)
   end

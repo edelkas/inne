@@ -1220,6 +1220,7 @@ rescue => e
 end
 
 # Send the list of challenge videos for a given highscoreable
+# TODO: G++ is currently defaulted to nil, but for episodes/stories it could make sense to keep it
 def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: nil, edit: nil)
   return unless is_botmaster?(event) || Challengish.check_channel(event.channel)
   h, challenge, streamer, video, view = nil
@@ -1241,7 +1242,7 @@ def send_videos(event, highscoreable: nil, challenge_code: nil, streamer_code: n
       count -= 1
     end
     challenge = count > 0 ? Challenge.find_by(q) : nil
-    perror("#{h.name} has no #{challenge_code} challenge!") if count > 0 && !challenge
+    perror("#{h.name} has no #{Challengish.format_code(q)} challenge!") if count > 0 && !challenge
     challenge_code = challenge ? challenge.format_objs : h.is_level? ? 'G++' : 'N++'
   end
 
