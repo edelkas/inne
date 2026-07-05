@@ -552,7 +552,7 @@ def send_userlevel_report(channel = nil, histories: true, date: nil)
   if report1.length + report2.length + 1 <= DISCORD_CHAR_LIMIT
     send_message(channel, content: report1 + "\n" + report2)
   else
-    send_message(channel, content: report2)
+    send_message(channel, content: report1)
     sleep(0.25)
     send_message(channel, content: report2)
   end
