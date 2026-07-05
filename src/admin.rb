@@ -168,9 +168,11 @@ def scan_boards(event = nil, page: nil)
   succ("Finished scanning #{levels.size} boards (#{levels.first.name} to #{levels.last.name})")
 end
 
-def send_dday_stats
+def send_dday_stats(event)
+  flags = parse_flags(event)
+  year = flags[:year] || Time.now.year
   maps = Userlevel.joins("INNER JOIN `userlevel_authors` ON `userlevel_authors`.`id` = `author_id`")
-                  .where(date: Time.utc(2025, 7, 4) .. Time.utc(2025, 7, 4, 23, 59, 59))
+                  .where(date: Time.utc(year, 7, 4) .. Time.utc(year, 7, 4, 23, 59, 59))
   data = maps.pluck(:date, :author_id, '`name`')
   count = data.size
   times = data.group_by{ |date, author, name| date.hour }
@@ -194,68 +196,73 @@ def send_dday_stats
   }
   authors_by_date.prepend(["Others", by_hour])
   authors_cum = authors_by_date.map{ |name, list|
-    sums = list.inject([0]){ |memo, (hour, count)| memo << memo.last.to_i + count }
-    [name, sums]
+    asums = list.inject([0]){ |memo, (hour, count)| memo << memo.last.to_i + count }
+    [name, asums]
   }
   n = 8
+  graphs = []
+  generate = Proc.new do |fn, klass, lab=true, &block|
+    dbg("Rendering #{fn}...")
+    g = klass.new
+    block[g]
+    g.labels = (n + 1).times.map{ |i| [3 * i, (3 * i).to_s] }.to_h if lab
+    g.write(fn)
+    graphs << fn
+  rescue => e
+    lex(e, "Failed to render #{fn}")
+  end
 
   # Maps per hour
-  g = Gruff::Line.new
-  g.title = "Maps per hour (#{count} total)"
-  g.data('Maps', times)
-  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
-  g.show_vertical_markers = true
-  g.marker_x_count = n
-  g.hide_dots = true
-  g.hide_legend = true
-  g.write('rate.png')
+  generate['rate.png', Gruff::Line] do |g|
+    g.title = "Maps per hour (#{count} total)"
+    g.data('Maps', [0] + times)
+    g.show_vertical_markers = true
+    g.marker_x_count = n
+    g.hide_dots = true
+    g.hide_legend = true
+  end
 
   # Cumulative maps per hour
-  g = Gruff::Line.new
-  g.title = "Cumulative maps per hour (#{count} total)"
-  g.data('Maps', sums)
-  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
-  g.show_vertical_markers = true
-  g.marker_x_count = n
-  g.hide_dots = true
-  g.hide_legend = true
-  g.write('cum.png')
+  generate['cum.png', Gruff::Line] do |g|
+    g.title = "Cumulative maps per hour (#{count} total)"
+    g.data('Maps', sums)
+    g.hide_dots = true
+    g.hide_legend = true
+  end
 
   # Histogram by author
-  g = Gruff::Histogram.new
-  g.title = 'Histogram Graph'
-  g.labels = { 0 => '' }
-  authors.each{ |name, count| g.data(name.to_sym, [count]) }
-  #g.write('bar.png')
+  generate['bar.png', Gruff::SideBar, false] do |g|
+    g.title = 'Histogram Graph'
+    g.labels = authors.map.with_index{ |a, i| [i, a[0]]  }.to_h
+    g.data(:Maps, authors.map(&:last))
+    g.marker_count = n
+  end
 
   # Pie chart
-  g = Gruff::Pie.new
-  g.title = "Author distribution (100% total)"
-  authors.each{ |name, count| g.data(name.to_sym, [count]) }
-  g.write('pie.png')
+  generate['pie.png', Gruff::Pie, false] do |g|
+    g.title = "Author distribution (100% total)"
+    authors.each{ |name, count| g.data(name.to_sym, [count]) }
+  end
 
   # Stacked area
-  g = Gruff::StackedArea.new
-  g.title = "Author maps per hour (#{count} total)"
-  authors_by_date.each{ |name, list| g.data(name.to_sym, list.values) }
-  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
-  g.write('stacked_rate.png')
+  generate['stacked_rate.png', Gruff::StackedArea] do |g|
+    g.title = "Author maps per hour (#{count} total)"
+    authors_by_date.each{ |name, list| g.data(name.to_sym, list.values) }
+    g.marker_count = n
+  end
 
   # Cumulative stacked area
-  g = Gruff::StackedArea.new
-  g.title = "Cumulative author maps per hour (#{count} total)"
-  authors_cum.each{ |name, list| g.data(name.to_sym, list) }
-  g.labels = n.times.map{ |i| [3 * i, (3 * i).to_s] }.to_h
-  g.write('stacked_cum.png')
+  generate['stacked_cum.png', Gruff::StackedArea] do |g|
+    g.title = "Cumulative author maps per hour (#{count} total)"
+    authors_cum.each{ |name, list| g.data(name.to_sym, list) }
+    g.marker_count = n
+  end
 
   # Format message
-  send_file(event, authors_all.map{ |name, count| "%16s - %3d" % [name, count] }.join("\n"))
-  #send_file(event, File.binread('stacked_cum.png'), 'stacked_cum.png', true)
-  #send_file(event, File.binread('stacked_rate.png'), 'stacked_rate.png', true)
-  #send_file(event, File.binread('pie.png'), 'pie.png', true)
-  #send_file(event, File.binread('bar.png'), 'bar.png', true)
-  #send_file(event, File.binread('rate.png'), 'rate.png', true)
-  #send_file(event, File.binread('cum.png'), 'cum.png', true)
+  list = authors_all.map{ |name, count| "%16s - %3d" % [name, count] }.join("\n")
+  files = graphs.map{ |fn| File.open(fn) } + [tmp_file(list, 'dday_authors.txt')]
+  send_message(event, files: files)
+  FileUtils.rm_rf(graphs)
 end
 
 def send_color_test(event)
