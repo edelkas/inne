@@ -436,16 +436,17 @@ def send_mappack_userlevels(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found") if !mappack
-  screenies = flags.key?(:screenshots)
+  should_seed = flags.key?(:seed) && !(flags.key?(:start) && flags.key?(:stop))
+  perror("You need to provide a time range (with `-start` and `-stop`) in order to seed") if should_seed
+  start = Time.find_zone("UTC").parse(flags[:start]) if flags.key?(:start)
+  stop = Time.find_zone("UTC").parse(flags[:stop]) if flags.key?(:stop)
   content = ""
   files = []
 
   # Find matching userlevels
   if flags.key?(:seed)
     mode = flags[:mode].to_i
-    start = Time.find_zone("UTC").parse(flags[:start])
-    stop = Time.find_zone("UTC").parse(flags[:stop])
-    mappack.seed_userlevels(mode: mode, start: start, stop: stop)
+    mappack.seed_userlevels(mode: mode, start: start, stop: stop, min_id: flags[:min_id], max_id: flags[:max_id])
     content << "Seeded userlevel forwards. "
   end
 
@@ -455,11 +456,27 @@ def send_mappack_userlevels(event)
     mappack.levels.where(userlevel_id: ids).update_all(forward: true)
   end
 
+  # Add automatic gold corrections. It assumes all added gold is forced, and
+  # all removed gold is impossible.
+  if flags.key?(:gold)
+    list = mappack.nonmatching_userlevels(start: start, stop: stop)
+    list.each_with_index{ |l, i|
+      dbg("Computing object differences for level #{i + 1} / #{list.length}...", progress: true)
+      add_objects = l.normalized_objects - l.userlevel.normalized_objects
+      del_objects = l.userlevel.normalized_objects - l.normalized_objects
+      next if (add_objects | del_objects).map(&:first).any?{ |id| id != Map::ID_GOLD }
+      l.update(forward: true)
+      next if add_objects.empty?
+      ScoreCorrection.find_or_create_by(highscoreable: l).update(gold: add_objects.size)
+    }
+  end
+
   # Find list of non-identical matches
   if flags.key?(:errors)
+    screenies = flags.key?(:screenshots)
     levels = []
     texts = []
-    list = mappack.nonmatching_userlevels
+    list = mappack.nonmatching_userlevels(start: start, stop: stop)
     list = list.map.with_index{ |l, i|
       dbg("Computing distance for level #{i + 1} / #{list.length}...", progress: true)
       u = l.userlevel

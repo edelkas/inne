@@ -514,7 +514,7 @@ class Mappack < ActiveRecord::Base
   #   If 'exact' is true, we enforce that levels have the same hash, otherwise
   # we simply check that they have the same tiles and objects, which should suffice
   # because the servers don't check hashes for userlevels.
-  def seed_userlevels(mode: nil, start: nil, stop: nil, exact: false)
+  def seed_userlevels(mode: nil, start: nil, stop: nil, exact: false, min_id: nil, max_id: nil)
     # Filter userlevel range to search
     userlevels = Userlevel.all
     userlevels = userlevels.where(mode: mode) if mode
@@ -523,6 +523,8 @@ class Mappack < ActiveRecord::Base
 
     # Find matching userlevels. Sort by match quality, and then by date.
     list = levels.where(userlevel: nil)
+                 .where(min_id ? "inner_id >= #{min_id}" : '')
+                 .where(max_id ? "inner_id <= #{max_id}" : '')
     list.each_with_index{ |l, i|
       dbg("Finding match for level #{i + 1} / #{list.length}...", progress: true)
       matches = userlevels.where(title: l.longname)
@@ -536,8 +538,12 @@ class Mappack < ActiveRecord::Base
   end
 
   # Report maps which couldn't be mapped to their corresponding userlevel
-  def nonmatching_userlevels
+  def nonmatching_userlevels(start: nil, stop: nil)
+    min_id = Userlevel.where("`date` >= '#{start}'").minimum(:id) if start
+    max_id = Userlevel.where("`date` < '#{stop}'").maximum(:id) if stop
     levels.where.not(userlevel: nil).where(forward: false)
+          .where(min_id ? "userlevel_id >= #{min_id}" : '')
+          .where(max_id ? "userlevel_id <= #{max_id}" : '')
   end
 
   # Set some of the mappack's info on command, which isn't parsed from the files
