@@ -451,9 +451,15 @@ def send_mappack_userlevels(event)
   end
 
   # Manually add matches
-  if flags.key?(:manual)
-    ids = flags[:manual].split(' ')
+  if flags.key?(:enable)
+    ids = flags[:enable].split(' ')
     mappack.levels.where(userlevel_id: ids).update_all(forward: true)
+  end
+
+  # Manually remove matches
+  if flags.key?(:disable)
+    ids = flags[:disable].split(' ')
+    mappack.levels.where(userlevel_id: ids).update_all(forward: false)
   end
 
   # Add automatic gold corrections. It assumes all added gold is forced, and
