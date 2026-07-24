@@ -2094,7 +2094,7 @@ class Feed
       description = ticket.at('description').content
       author = doc.search('ticket').first.at('reporter>name').content
       link = ASSEMBLA_URI_TICKET % [ticket.at('number').content.to_i]
-      date = Time.parse(ticket.at('updated-at').content)
+      date = Time.parse(ticket.at('created-on').content)
       FeedItem.new(title, description, author, link, date, nil)
     }
   end
