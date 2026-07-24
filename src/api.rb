@@ -27,7 +27,8 @@ module Twitch extend self
 #    'N'     => 12273,  # Commented because it's usually non-N related :(
     'N+'     => 18983,
     'Nv2'    => 105456,
-    'N++'    => 369385
+    'N++'    => 369385,
+    'N+∞x2'  => 1217665734
 #    'GTASA'  => 6521    # This is for testing purposes, since often there are no N streams live
   }
 
@@ -87,7 +88,7 @@ module Twitch extend self
   # TODO: Add attempts to the loop, raise if fail
   def get_twitch_game_id(name)
     get_twitch_token if !$twitch_token
-    uri = URI("https://api.twitch.tv/helix/games?name=#{name}")
+    uri = URI("https://api.twitch.tv/helix/games?name=#{CGI.escape(name)}")
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true
     loop do
