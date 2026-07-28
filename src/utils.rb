@@ -1601,8 +1601,7 @@ rescue
   nil
 end
 
-# Find an app emoji
-# Obsolete now that discordrb supports them, but still in use in the code
+# Find an app emoji. Obsolete now that discordrb supports them.
 def app_emoji(name)
   return if !APP_EMOJIS.key?(name)
   id = APP_EMOJIS[name][TEST ? :test : :prod]

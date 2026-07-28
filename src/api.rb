@@ -281,7 +281,7 @@ module Speedrun extend self
   SERIES_ID = 'g45kx54q'
   GAMES = {
     'm1mjnk12' => 'N++',
-    '268wr76p' => 'N+',
+    '268wr76p' => 'N+ (XBLA)',
     '369y7p31' => 'N+ (DS)',
     'pd052w31' => 'N+ (PSP)',
     'y654p8de' => 'N v1.4',
@@ -815,21 +815,23 @@ module Speedrun extend self
     header += " (#{vars})" unless vars.empty?
     list = boards[:runs].map{ |run|
       fields = format_run(run).merge(place: run[:place])
-      case game[:alias]
+      place_emoji = case game[:alias]
       when 'N++'
-        place_emoji = 'plus_' + run[:place].ordinalize
+        'plus'
+      when 'N+ (DS)'
+        'ds'
       when 'N v1.4', 'N v2.0'
-        place_emoji = 'gold_' + run[:place].ordinalize
+        'gold'
       else
-        place_emoji = 'trophy_' + run[:place].ordinalize
-      end
-      place = app_emoji(place_emoji) || EMOJI_NUMBERS[run[:place]] || "**#{run[:place]}**"
+        'trophy'
+      end + '_' + run[:place].ordinalize
+      place = $emojis[place_emoji] || EMOJI_NUMBERS[run[:place]] || "**#{run[:place]}**"
       players = mdurl('**' + run[:players].map{ |p| p[:name] }.join(', ') + '**', run[:uri])
       time = fields[:rta] + (fields[:igt] != '-' ? " (#{fields[:igt]} IGT)" : '')
       time = verbatim(time)
       plat_emoji = nil
       ['PC', 'PSP', 'PS', 'Xbox', 'Switch', '2DS', '3DS', 'DS'].each{ |plat|
-        break plat_emoji = app_emoji("plat_#{plat}") if fields[:platform][/#{plat}/i]
+        break plat_emoji = $emojis["plat_#{plat}"] if fields[:platform][/#{plat}/i]
       }
       plat_emoji = '💻' if ['N v1.4', 'N v2.0'].include?(GAMES[game[:id]])
       platform = plat_emoji || "(#{fields[:platform]})"
