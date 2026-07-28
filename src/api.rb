@@ -282,6 +282,8 @@ module Speedrun extend self
   GAMES = {
     'm1mjnk12' => 'N++',
     '268wr76p' => 'N+',
+    '369y7p31' => 'N+ (DS)',
+    'pd052w31' => 'N+ (PSP)',
     'y654p8de' => 'N v1.4',
     'm1mokp62' => 'N v2.0',
     'v1ponv46' => 'Cat Ext'
@@ -629,17 +631,18 @@ module Speedrun extend self
 
   # Check for new N runs that need to be notified
   def fetch_new_runs
+    base_time = Time.now - MAX_REPORT_AGE
     GAMES.map{ |id, name|
-      ['new', 'verified', 'rejected'].map{ |status|
+      ['verified', 'rejected', 'new'].map{ |status|
         sleep(0.5)
-        property = GlobalProperty.find_by(key: "last_#{status}_#{id}_speedrun")
-        threshold = Time.parse(property.value)
+        property = GlobalProperty.find_or_create_by(key: "last_#{status}_#{id}_speedrun")
+        threshold = Time.parse(property.value || base_time.to_s)
         new_threshold = threshold
         runs = fetch_runs(id, cache: false, status: status).select{ |run|
           time = run[status == 'verified' ? :date_verified : :date_submitted]
           next false if !time
           new_threshold = time if time > new_threshold
-          time > threshold && (status != 'rejected' ? time > Time.now - MAX_REPORT_AGE : true)
+          time > threshold && (status != 'rejected' ? time > base_time : true)
         }
         property.update(value: new_threshold)
         runs

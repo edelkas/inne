@@ -394,10 +394,13 @@ end
 # Check for newly submitted / verified / rejected speedruns submitted to Speedrun.com
 # and send notices
 def update_speedrun
-  Speedrun::fetch_new_runs.each{ |run|
-    embed = Speedrun::format_embed(run)
-    send_message($speedrun_channel, embeds: [embed])
+  new_runs = Speedrun::fetch_new_runs
+  new_runs.each_slice(DISCORD_EMBED_LIMIT){ |runs|
+    embeds = runs.map{ |run| Speedrun::format_embed(run) }
+    send_message($speedrun_channel, embeds: embeds)
+    sleep(0.5)
   }
+  succ("Reported #{new_runs.size} new speedruns") if new_runs.size > 0
 end
 
 # Monitor several N++-related RSS feeds (Steam, SteamDB) for news and send notices
