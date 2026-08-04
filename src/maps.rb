@@ -2186,7 +2186,7 @@ module Map
 
     anim = false if !FEATURE_ANIMATE
     gif = !nsim.empty?
-    basename = h.is_a?(Array) ? 'results' : sanitize_filename(h.name)
+    basename = h.is_a?(Array) ? 'results' : sanitize_filename(h.name.empty? ? '-' : h.name)
     filename =  "#{spoiler ? 'SPOILER_' : ''}#{basename}.#{gif ? 'gif' : 'png'}"
     memory = [] if BENCH_IMAGES
 
