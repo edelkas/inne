@@ -2,13 +2,17 @@
 # properties of an N++ map (map data parsing and formatting, screenshot,
 # trace and animation generation, etc). Three classes implement this module:
 # Level, Userlevel, and MappackLevel (the former by first calling .map).
+# It also contains the Palette class, each representing an in-game palette and
+# used to support custom palettes. It also contains all relevant file information.
 
 $load_time = Time.now
 
 #require 'chunky_png'
 require 'oily_png'    # C wrapper for ChunkyPNG
+require 'fileutils'
 require 'gifenc'      # Own gem to encode and decode GIFs
 require 'matplotlib/pyplot'
+require 'stringio'
 require 'zlib'
 
 module Map
@@ -143,95 +147,8 @@ module Map
   WIDTH   = DIM * (COLUMNS + 2)
   HEIGHT  = DIM * (ROWS + 2)
 
-  # Palette stuff
-  DEFAULT_PALETTE = "vasquez"
-  THEMES = [
-    "acid",           "airline",         "anniversary",  "argon",
-    "autumn",         "BASIC",           "berry",        "birthday cake",
-    "bloodmoon",      "blueprint",       "bordeaux",     "brink",
-    "burple",         "cacao",           "champagne",    "chemical",
-    "chococherry",    "classic",         "classy",       "clean",
-    "concrete",       "console",         "cowboy",       "dagobah",
-    "debugger",       "delicate",        "desert world", "disassembly",
-    "dorado",         "dusk",            "elephant",     "epaper",
-    "epaper invert",  "evening",         "F7200",        "florist",
-    "formal",         "galactic",        "gatecrasher",  "gothmode",
-    "grapefrukt",     "grappa",          "gunmetal",     "hazard",
-    "heirloom",       "holosphere",      "hope",         "hot",
-    "hyperspace",     "ice world",       "incorporated", "infographic",
-    "invert",         "jaune",           "juicy",        "kicks",
-    "lab",            "lava world",      "lemonade",     "lichen",
-    "lightcycle",     "line",            "m",            "machine",
-    "metoro",         "midnight",        "minus",        "mir",
-    "mono",           "moonbase",        "mustard",      "mute",
-    "nemk",           "neptune",         "neutrality",   "noctis",
-    "oceanographer",  "okinami",         "orbit",        "pale",
-    "papier",         "papier invert",   "party",        "petal",
-    "PICO-8",         "pinku",           "plus",         "porphyrous",
-    "poseidon",       "powder",          "pulse",        "pumpkin",
-    "QDUST",          "quench",          "regal",        "replicant",
-    "retro",          "rust",            "sakura",       "shift",
-    "shock",          "simulator",       "sinister",     "SNKRX",
-    "solarized dark", "solarized light", "starfighter",  "sunset",
-    "supernavy",      "synergy",         "talisman",     "ten",
-    "toothpaste",     "toxin",           "TR-808",       "tropical",
-    "tycho",          "vasquez",         "vectrex",      "vintage",
-    "virtual",        "vivid",           "void",         "waka",
-    "witchy",         "wizard",          "wyvern",       "xenon",
-    "yeti",           "custom"
-  ]
-
-  PALETTE_FILES = {
-    "background"           => { position:  0, size:  6 },
-    "ninja"                => { position:  1, size:  4 },
-    "entityMine"           => { position:  2, size:  4 },
-    "entityGold"           => { position:  3, size:  3 },
-    "entityDoorExit"       => { position:  4, size:  8 },
-    "entityDoorExitSwitch" => { position:  5, size:  5 },
-    "entityDoorRegular"    => { position:  6, size:  1 },
-    "entityDoorLocked"     => { position:  7, size:  8 },
-    "entityDoorTrap"       => { position:  8, size:  8 },
-    "entityLaunchPad"      => { position:  9, size:  2 },
-    "entityOneWayPlatform" => { position: 10, size:  2 },
-    "entityDroneChaingun"  => { position: 11, size:  2 },
-    "entityDroneLaser"     => { position: 12, size:  4 },
-    "entityDroneZap"       => { position: 13, size:  2 },
-    "entityDroneChaser"    => { position: 14, size:  2 },
-    "entityFloorGuard"     => { position: 15, size:  2 },
-    "entityBounceBlock"    => { position: 16, size:  2 },
-    "entityRocket"         => { position: 17, size:  4 },
-    "entityTurret"         => { position: 18, size:  5 },
-    "entityThwomp"         => { position: 19, size:  3 },
-    "entityEvilNinja"      => { position: 20, size:  2 },
-    "entityDualLaser"      => { position: 21, size:  2 },
-    "entityBoostPad"       => { position: 22, size:  2 },
-    "entityBat"            => { position: 23, size:  3 },
-    "entityEyeBat"         => { position: 24, size:  2 },
-    "entityShoveThwomp"    => { position: 25, size:  3 },
-    "headbands"            => { position: 26, size: 17 },
-    "explosions"           => { position: 27, size:  4 },
-    "timeBar"              => { position: 28, size:  8 },
-    "timeBarRace"          => { position: 29, size: 17 },
-    "fxNinja"              => { position: 30, size:  2 },
-    "fxDroneZap"           => { position: 31, size:  2 },
-    "fxFloorguardZap"      => { position: 32, size:  2 },
-    "menu"                 => { position: 33, size: 42 },
-    "editor"               => { position: 34, size: 10 }
-  }
-
-  # Palette file and X offsets for the main sections
+  # Master palette image: 195 colors x 130 palettes (see Palette class)
   PALETTE = ChunkyPNG::Image.from_file(PATH_PALETTES)
-  COLOR_OFFSET_TILES         =   0
-  COLOR_OFFSET_ENTITIES      =   6
-  COLOR_OFFSET_HEADBANDS     =  91
-  COLOR_OFFSET_EXPLOSIONS    = 108
-  COLOR_OFFSET_TIMEBAR       = 112
-  COLOR_OFFSET_TIMEBAR_RACE  = 120
-  COLOR_OFFSET_FX_NINJA      = 137
-  COLOR_OFFSET_FX_DRONE      = 139
-  COLOR_OFFSET_FX_FLOORGUARD = 141
-  COLOR_OFFSET_MENU          = 143
-  COLOR_OFFSET_EDITOR        = 185
 
   # Map file offsets (the first 2 are only present in files, NOT in queries)
   OFFSET_VERSION   = 0x0
@@ -297,9 +214,9 @@ module Map
   # store a custom palette.
   def self.change_custom_palette(json)
     palette = JSON.parse(json)
-    return false if PALETTE_FILES.keys.sort != palette.keys.sort
-    return false if palette.any?{ |k, v| !v.is_a?(Array) || v.size != PALETTE_FILES[k][:size] }
-    palette.sort_by{ |k, v| PALETTE_FILES[k][:position] }.map(&:last).flatten.each_with_index{ |color, i|
+    return false if Palette::FILES.keys.sort != palette.keys.sort
+    return false if palette.any?{ |k, v| !v.is_a?(Array) || v.size != Palette::FILES[k][:size] }
+    palette.sort_by{ |k, v| Palette::FILES[k][:position] }.map(&:last).flatten.each_with_index{ |color, i|
       PALETTE[i, PALETTE.height - 1] = ChunkyPNG::Color.from_hex(color)
     }
     true
@@ -2025,7 +1942,7 @@ module Map
     background = png2gif(png[:image], gif[:palette], bg_color)
 
     # Add timebars and legend
-    text_color = PALETTE[COLOR_OFFSET_MENU + 28, png[:palette_idx]]
+    text_color = PALETTE[Palette::OFFSET_MENU + 28, png[:palette_idx]]
     colors = {
       fg:     gif[:colors][:ninja],
       bg:     [gif[:palette][bg_color >> 8]] * info[:n],
@@ -2163,7 +2080,7 @@ module Map
   # Note: This function is forked to a new process to immediately free up all
   # the used memory.
   def self.screenshot(
-      theme =     DEFAULT_PALETTE,        # Palette to generate screenshot in
+      theme =     Palette::DEFAULT,       # Palette to generate screenshot in
       scale:      nil,                    # Explicit scale, otherwise it's determined from context
       vertical:   false,                  # Render episode screenshots vertically
       nsim:       [],                     # NSim objects (simulation results)
@@ -2194,8 +2111,8 @@ module Map
       memory << getmem if BENCH_IMAGES
 
       # Parse palette and scale
-      themes = THEMES.map(&:downcase)
-      palette_idx = themes.index(theme.downcase) || themes.index(DEFAULT_PALETTE.downcase)
+      themes = Palette::NAMES.map(&:downcase)
+      palette_idx = themes.index(theme.downcase) || themes.index(Palette::DEFAULT.downcase)
       ppc = scale || find_scale(h, anim)
       nsim.each{ |ns| ns.ppc = ppc }
 
@@ -2267,7 +2184,7 @@ module Map
     nil
   end
 
-  def screenshot(theme = DEFAULT_PALETTE, **kwargs)
+  def screenshot(theme = Palette::DEFAULT, **kwargs)
     Map.screenshot(theme, h: self, **kwargs)
   end
 
@@ -2277,27 +2194,27 @@ module Map
   # Note: This function is forked to a new process to immediately free up all
   # the used memory.
   def self.mpl_trace(
-      h:       nil,             # The highscoreable
-      theme:   DEFAULT_PALETTE, # Palette to generate screenshot in
-      bg:      nil,             # Background image (screenshot) file object
-      nsim:    nil,             # NSim objects (simulation results)
-      texts:   [],              # Names for the legend
+      h:       nil,              # The highscoreable
+      theme:   Palette::DEFAULT, # Palette to generate screenshot in
+      bg:      nil,              # Background image (screenshot) file object
+      nsim:    nil,              # NSim objects (simulation results)
+      texts:   [],               # Names for the legend
       markers: { jump: true, left: false, right: false} # Mark changes in replays
     )
     return if !nsim
 
     _fork do
       # Parse palette
-      themes = THEMES.map(&:downcase)
+      themes = Palette::NAMES.map(&:downcase)
       theme = theme.to_s.downcase
-      theme = DEFAULT_PALETTE.downcase if !themes.include?(theme)
+      theme = Palette::DEFAULT.downcase if !themes.include?(theme)
       palette_idx = themes.index(theme)
 
       # Setup parameters and Matplotlib
       n = [nsim.count, MAX_TRACES].min
       texts = texts.take(n)
       colors = n.times.map{ |i| ChunkyPNG::Color.to_hex(PALETTE[OBJECTS[0][:pal] + i, palette_idx]) }
-      text_color = ChunkyPNG::Color.to_hex(PALETTE[COLOR_OFFSET_MENU + 28, palette_idx])
+      text_color = ChunkyPNG::Color.to_hex(PALETTE[Palette::OFFSET_MENU + 28, palette_idx])
       Matplotlib.use('agg')
       mpl = Matplotlib::Pyplot
       mpl.ioff
@@ -2600,6 +2517,273 @@ module Map
   rescue => e
     lex(e, 'ntrace testing failed')
     nil
+  end
+end
+
+# Each object corresponds to an in-game color palette. An N++ palette defines a
+# total of 195 colors, some of which are unused in the game. They are stored as
+# 35 RGB TGA image files, inside a folder whose name is the in-game palette
+# name. The official palettes are instead baked into the game files, and their
+# names are reserved. Alpha layer appears to be ignored, but we store it.
+#
+# In the db, each color is stored packed as RGBA into a 4-byte integer, and all
+# colors in order (see FILES) are packed into a 780-byte binary string.
+# See also:
+# - Format documentation:
+#   * https://pastebin.com/E01pEhy4
+#   * https://www.youtube.com/watch?v=Ql8gf6PPcUY
+# - Palette creation tools:
+#   * https://coloration-cimn.onrender.com/
+#   * https://edelkas.github.io/npc-web/
+# - Custom palettes:
+#   * https://docs.google.com/spreadsheets/d/1I2f87Qhfs6rxzZq5dQRDbLKYyaGLqTdCkLqfNfrw1Mk
+#   * https://github.com/psenough/NPlusPlusAssistant/tree/palettes
+#   * https://github.com/Donfuy/plusplus-custom-palettes
+class Palette < ActiveRecord::Base
+  belongs_to :mappack
+  belongs_to :user
+
+  # The 129 official palettes. The first 62 are from Pre-UE, the next 61 from UE,
+  # and the final 6 from TEN++. The first 123 (Pre-UE + UE) are baked into the game,
+  # and their order matches this one. This is relevant e.g. for indexing into the
+  # nprofile. The final 6 were included as standard custom palettes.
+  NAMES = [
+    'BASIC',           'F7200',       'acid',          'airline',
+    'birthday cake',   'blueprint',   'bordeaux',      'chemical',
+    'chococherry',     'classic',     'clean',         'console',
+    'disassembly',     'dorado',      'dusk',          'epaper',
+    'epaper invert',   'evening',     'galactic',      'gothmode',
+    'holosphere',      'hot',         'infographic',   'invert',
+    'kicks',           'lightcycle',  'm',             'metoro',
+    'midnight',        'minus',       'mir',           'mono',
+    'moonbase',        'neptune',     'oceanographer', 'okinami',
+    'orbit',           'pale',        'papier',        'papier invert',
+    'party',           'pinku',       'plus',          'poseidon',
+    'pulse',           'quench',      'replicant',     'retro',
+    'shift',           'shock',       'simulator',     'solarized dark',
+    'solarized light', 'supernavy',   'toxin',         'vasquez',
+    'virtual',         'vivid',       'wizard',        'yeti',
+    'pumpkin',         'witchy',      'argon',         'autumn',
+    'berry',           'bloodmoon',   'brink',         'cacao',
+    'champagne',       'concrete',    'cowboy',        'dagobah',
+    'debugger',        'delicate',    'desert world',  'elephant',
+    'florist',         'formal',      'gatecrasher',   'grapefrukt',
+    'grappa',          'gunmetal',    'hazard',        'heirloom',
+    'hope',            'hyperspace',  'ice world',     'incorporated',
+    'jaune',           'juicy',       'lab',           'lava world',
+    'lemonade',        'lichen',      'line',          'machine',
+    'mustard',         'mute',        'nemk',          'neutrality',
+    'noctis',          'petal',       'PICO-8',        'porphyrous',
+    'QDUST',           'regal',       'rust',          'sakura',
+    'sinister',        'starfighter', 'sunset',        'synergy',
+    'talisman',        'toothpaste',  'TR-808',        'tycho',
+    'vectrex',         'vintage',     'void',          'waka',
+    'wyvern',          'xenon',       'powder',        'anniversary',
+    'burple',          'classy',      'SNKRX',         'ten',
+    'tropical'
+  ]
+  DEFAULT = "vasquez"
+
+  # The 35 TGA swatch files that constitute an in-game palette
+  FILES = {
+    "background"           => { position:  0, size:  6 },
+    "ninja"                => { position:  1, size:  4 },
+    "entityMine"           => { position:  2, size:  4 },
+    "entityGold"           => { position:  3, size:  3 },
+    "entityDoorExit"       => { position:  4, size:  8 },
+    "entityDoorExitSwitch" => { position:  5, size:  5 },
+    "entityDoorRegular"    => { position:  6, size:  1 },
+    "entityDoorLocked"     => { position:  7, size:  8 },
+    "entityDoorTrap"       => { position:  8, size:  8 },
+    "entityLaunchPad"      => { position:  9, size:  2 },
+    "entityOneWayPlatform" => { position: 10, size:  2 },
+    "entityDroneChaingun"  => { position: 11, size:  2 },
+    "entityDroneLaser"     => { position: 12, size:  4 },
+    "entityDroneZap"       => { position: 13, size:  2 },
+    "entityDroneChaser"    => { position: 14, size:  2 },
+    "entityFloorGuard"     => { position: 15, size:  2 },
+    "entityBounceBlock"    => { position: 16, size:  2 },
+    "entityRocket"         => { position: 17, size:  4 },
+    "entityTurret"         => { position: 18, size:  5 },
+    "entityThwomp"         => { position: 19, size:  3 },
+    "entityEvilNinja"      => { position: 20, size:  2 },
+    "entityDualLaser"      => { position: 21, size:  2 },
+    "entityBoostPad"       => { position: 22, size:  2 },
+    "entityBat"            => { position: 23, size:  3 },
+    "entityEyeBat"         => { position: 24, size:  2 },
+    "entityShoveThwomp"    => { position: 25, size:  3 },
+    "headbands"            => { position: 26, size: 17 },
+    "explosions"           => { position: 27, size:  4 },
+    "timeBar"              => { position: 28, size:  8 },
+    "timeBarRace"          => { position: 29, size: 17 },
+    "fxNinja"              => { position: 30, size:  2 },
+    "fxDroneZap"           => { position: 31, size:  2 },
+    "fxFloorguardZap"      => { position: 32, size:  2 },
+    "menu"                 => { position: 33, size: 42 },
+    "editor"               => { position: 34, size: 10 }
+  }
+  COLOR_COUNT       = FILES.values.sum{ |v| v[:size] } # 195
+  SWATCH_BLOCK_SIZE = 64 # Each swatch color block is 64x64 pixels
+  SWATCH_SAMPLE_X   = 32 # The color is sampled from pixel (32, 31) from each block
+  SWATCH_SAMPLE_Y   = 31
+
+  # TAG header specification, for parsing files
+  TGA_HEADER_SIZE = 18
+  TGA_HEADER_FORMAT = 'C3S<2CS<4C2'
+  TGAHeader = Struct.new(
+    :id_length, :colormap_type, :image_type, # (3 bytes)
+    :cm_origin, :cm_length, :cm_depth, # Color map specification (5 bytes)
+    :origin_x, :origin_y, :width, :height, :depth, :desc # Image specification (10 bytes)
+  )
+  TGA_TYPE_NONE            = 0
+  TGA_TYPE_COLORMAPPED     = 1
+  TGA_TYPE_TRUECOLOR       = 2
+  TGA_TYPE_GRAYSCALE       = 3
+  TGA_TYPE_RLE_COLORMAPPED = 9
+  TGA_TYPE_RLE_TRUECOLOR   = 10
+  TGA_TYPE_RLE_GRAYSCALE   = 11
+  TGA_FOOTER = "TRUEVISION-XFILE.\x00"
+
+  # X offsets (0-194) for each color section in the master palette file
+  OFFSET_TILES         =   0
+  OFFSET_ENTITIES      =   6
+  OFFSET_HEADBANDS     =  91
+  OFFSET_EXPLOSIONS    = 108
+  OFFSET_TIMEBAR       = 112
+  OFFSET_TIMEBAR_RACE  = 120
+  OFFSET_FX_NINJA      = 137
+  OFFSET_FX_DRONE      = 139
+  OFFSET_FX_FLOORGUARD = 141
+  OFFSET_MENU          = 143
+  OFFSET_EDITOR        = 185
+
+  # Parse one TGA swatch. Each swatch is a horizontal strip of 64x64 blocks. The game only
+  # samples the middle pixel of each block, and ignores the alpha layer if present. The
+  # original palettes were raw, whereas the TEN++ ones are RLE'd, so we need to support
+  # both, but we can ignore color-mapped ones.
+  # Returns an array of colors, each as a 4-byte integer (RGBA), or nil if error.
+  def self.parse_file(path)
+    return err("TGA file not found") unless File.file?(path)
+    file = File.open(path, 'rb')
+
+    # Parse TGA properties
+    tga = TGAHeader.new(*file.read(TGA_HEADER_SIZE).unpack(TGA_HEADER_FORMAT))
+    total_pixels = tga.width * tga.height
+    num_colors, pixel_size = tga.width / SWATCH_BLOCK_SIZE, tga.depth / 8
+    flip_x, flip_y, interlace = tga.desc[4] == 1, tga.desc[5] == 0, tga.desc[6, 2]
+
+    # Sanity checks
+    return err("Only RGB images are supported.")        if ![TGA_TYPE_TRUECOLOR, TGA_TYPE_RLE_TRUECOLOR].include?(tga.image_type)
+    return err("Color-mapped images not supported.")    if tga.colormap_type != 0
+    return err("Interlaced images not supported.")      if interlace > 0
+    return err("Pixel depth isn't a multiple of 8.")    if tga.depth % 8 != 0
+    return err("Pixel depth cannot hold true color.")   if tga.depth < 24
+    return err("Colormap depth isn't a multiple of 8.") if tga.cm_depth % 8 != 0
+
+    # Read pixel data
+    file.seek(tga.id_length + tga.cm_length * tga.cm_depth / 8, IO::SEEK_CUR)
+    pixel_data = file.read(total_pixels * pixel_size)
+    file.close
+
+    # Decode RLE
+    if tga.image_type == TGA_TYPE_RLE_TRUECOLOR
+      buffer = StringIO.new(pixel_data)
+      pixels = ''.b
+      pixel_count = 0
+      loop do
+        header_byte = buffer.read(1)
+        break unless header_byte
+        packet_header = header_byte.unpack1('C')
+        packet_size = (packet_header & 0x7F) + 1
+        if (packet_header & 0x80) == 0   # Raw packet
+          pixels << buffer.read(packet_size * pixel_size)
+        else                             # RLE packet
+          pixels << buffer.read(pixel_size) * packet_size
+        end
+        pixel_count += packet_size
+        break if pixel_count >= total_pixels || buffer.eof?
+      end
+      pixel_data = pixels
+    end
+    return err("Corrupt pixel data") if pixel_data.size != total_pixels * pixel_size
+
+    # Pixel data may be flipped
+    if flip_x
+      pixel_data = pixel_data.unpack("a#{pixel_size}" * total_pixels).each_slice(tga.width).map{ |row| row.reverse.join }
+      pixel_data.reverse! if flip_y
+      pixel_data = pixel_data.join
+    elsif flip_y
+      pixel_data = pixel_data.unpack("a#{pixel_size * tga.width}" * tga.height).reverse.join
+    end
+
+    # The game samples the "middle" pixel (32, 31) of each 64x64 block, ignores alpha layer
+    offset = SWATCH_SAMPLE_Y * pixel_size * tga.width + SWATCH_SAMPLE_X * pixel_size
+    step = SWATCH_BLOCK_SIZE * pixel_size
+    num_colors.times.map{ |i|
+      b, g, r, a = pixel_data.unpack("C#{pixel_size}", offset: offset + step * i)
+      r << 24 | g << 16 | b << 8 | (a || 0xFF)
+    }
+  end
+
+  # Given the path of a palette folder with all 35 TGA swatches, returns an array
+  # with all 195 colors in the order of the master palette (see FILES), each packed
+  # as a 4-byte integer (RGBA). Note though that the game ignores the alpha layer.
+  # Returns nil if any file fails to parse.
+  def self.parse_palette(path)
+    FILES.map{ |k, v|
+      colors = parse_file(File.join(path, k + '.tga'))
+      return err("Swatch #{k} doesn't have #{v[:size]} colors") if colors.size != v[:size]
+      colors
+    }.flatten
+  end
+
+  # Parse all 129 official palettes from the game files and generate the master
+  # palette PNG image that ships with outte. Returns true if successful, nil otherwise.
+  def self.generate_master_palette(path, output)
+    png = ChunkyPNG::Image.new(COLOR_COUNT, NAMES.size + 1, ChunkyPNG::Color::WHITE)
+    NAMES.each_with_index{ |palette, i|
+      dbg("Parsing palette #{i + 1} / #{NAMES.size}: #{palette}", progress: true)
+      colors = parse_palette(File.join(path, palette))
+      return err("Failed to parse palette #{palette}") unless colors
+      png.replace_row!(i, colors)
+    }
+    png.save(output, :fast_rgb)
+    log("Generated master palette", pad: true)
+    true
+  end
+
+  # Create Palette objects for all 129 official Metanet palettes. Since we don't
+  # have the actual files, we read from the shipped master palette PNG.
+  def self.seed_metanet_palettes
+    metanet = Mappack.find(0)
+    NAMES.each_with_index{ |palette, i|
+      metanet.add_palette(palette, Map::PALETTE.row(i).pack('L>*'))
+    }
+  end
+
+  # Generate the 35 TGA v2 swatches
+  def export(path: '.')
+    dir = File.join(path, sanitize_filename(name))
+    FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
+    buffer = StringIO.new(colors)
+    FILES.each{ |k, v|
+      # Dump header
+      tga = [
+        0, 0, TGA_TYPE_RLE_TRUECOLOR,                                # ID length, color map type, image type
+        0, 0, 0,                                                     # Color map specification
+        0, 0, SWATCH_BLOCK_SIZE * v[:size], SWATCH_BLOCK_SIZE, 24, 0 # X, Y, W, H, depth, descriptor
+      ].pack(TGA_HEADER_FORMAT)
+
+      # RLE with one run per color
+      tga << v[:size].times.map{ |color|
+        r, g, b, a = buffer.read(4).unpack('C4')
+        [0x80 | SWATCH_BLOCK_SIZE - 1, b, g, r].pack('C4')
+      }.join * SWATCH_BLOCK_SIZE
+
+      # Dump footer
+      tga << [0, 0, TGA_FOOTER].pack('L<2a*')
+      File.binwrite(File.join(dir, k + '.tga'), tga)
+    }
   end
 end
 

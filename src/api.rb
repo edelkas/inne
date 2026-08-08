@@ -3244,9 +3244,9 @@ class APIServer < Server
       return { msg: 'Provided palette data is corrupt' } if !changed
       palette = 'custom'
     elsif params['palette']
-      palette_idx = Map::THEMES.index(params['palette'])
+      palette_idx = Palette::NAMES.index(params['palette'])
       return { msg: "Palette #{params['palette']} doesn't exist" } if !palette_idx
-      palette = Map::THEMES[palette_idx]
+      palette = Palette::NAMES[palette_idx]
     else
       palette = 'vasquez'
     end

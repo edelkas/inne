@@ -3022,6 +3022,7 @@ class Role < ActiveRecord::Base
 end
 
 class User < ActiveRecord::Base
+  has_many :palettes
   belongs_to :mappack
 
   # TODO: Change this by a proper Rails association

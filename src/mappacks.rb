@@ -6,6 +6,7 @@
 $load_time = Time.now
 
 class Mappack < ActiveRecord::Base
+  has_many :palettes
   has_many :mappack_scores
   has_many :mappack_levels
   has_many :mappack_episodes
@@ -477,6 +478,12 @@ class Mappack < ActiveRecord::Base
       "Parsed #{challenge_count_total} challenges from #{level_count_total} levels "\
       "in #{file_count_total} files from #{tab_count_total} tabs for mappack #{code}"
     )
+  end
+
+  # Creates a palette object belonging to this mappack. Colors are packed as a RGBA binary string.
+  def add_palette(name, colors)
+    Palette.find_or_create_by(name: name, author: authors)
+           .update(mappack: self, date: date, colors: colors)
   end
 
   # Check additional requirements for scores submitted to this mappack

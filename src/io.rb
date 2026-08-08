@@ -936,7 +936,7 @@ end
 # The palette may or may not be quoted, but it MUST go at the end of the command
 # if it's not quoted. Only look in 'pal' if not nil. 'fallback' will default
 # to the default palette if no good matches, otherwise exception.
-def parse_palette(event, dflt = Map::DEFAULT_PALETTE, pal: nil, fallback: true, msg: nil)
+def parse_palette(event, dflt = Palette::DEFAULT, pal: nil, fallback: true, msg: nil)
   msg.prepend('palette ') if msg
   msg ||= parse_message(event)
   err = ""
@@ -947,7 +947,7 @@ def parse_palette(event, dflt = Map::DEFAULT_PALETTE, pal: nil, fallback: true, 
   ret = { msg: msg, palette: pal, error: err }
 
   if !ret[:palette].empty?
-    themes = Map::THEMES.map(&:downcase)
+    themes = Palette::NAMES.map(&:downcase)
 
     # If no perfect matches
     if !themes.include?(ret[:palette].downcase)

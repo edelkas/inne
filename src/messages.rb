@@ -516,7 +516,7 @@ def send_scores(event, offset: nil, date_change: nil)
 
   # Format body
   if use_embed
-    color = Map::PALETTE[2, Map::THEMES.index(palette)] >> 8
+    color = Map::PALETTE[2, Palette::NAMES.index(palette)] >> 8
     embed = Discordrb::Webhooks::Embed.new(
       title:       header[..-2],
       description: export ? nil : body,
@@ -2224,7 +2224,7 @@ def send_dmmc(event)
   edition    = parse_message(event)[/\d+/].to_i
   levels     = Userlevel.where_like('title', "MM#{edition}").order(:id).limit(100)
   count      = levels.count
-  palettes   = Userlevel::THEMES.dup
+  palettes   = Palette::NAMES.dup
   str        = ''
   zip_buffer = Zip::OutputStream.write_buffer{ |zip|
     levels.each_with_index{ |u, i|
