@@ -74,12 +74,76 @@ class Mappack < ActiveRecord::Base
   end
 
   # Update the digest file, which summarizes mappack info into a file that can
-  # be queried via the internet, containing the ID, code and version for each
-  # mappack, one per line.
+  # be queried via the internet.
   def self.digest
-    dig = Mappack.all.order(:id).pluck(:id, :code, :version).map{ |m|
-      m.join(' ') + "\n"
-    }.join
+    # Fetch score counts per mappack. For mappacks with forwarded scores, we also
+    # must tally the corresponding userlevel completion counts.
+    score_counts = MappackScore.where('rank_hs IS NOT NULL OR rank_sr IS NOT NULL')
+                               .group(:mappack_id)
+                               .pluck(:mappack_id, 'count(mappack_id)')
+                               .to_h
+
+    forwarded_counts = MappackLevel.joins('INNER JOIN userlevels ON mappack_levels.userlevel_id = userlevels.id')
+                                   .where(forward: true)
+                                   .group(:mappack_id)
+                                   .pluck(:mappack_id, 'sum(userlevels.completions)')
+                                   .to_h
+
+    # Fetch unique player counts per mappack, does not include those that only played
+    # forwarded userlevels without installing the pack
+    player_counts = MappackScore.group(:mappack_id)
+                                .pluck(:mappack_id, 'count(distinct player_id)')
+                                .to_h
+
+    # Fetch counts for the last month too, to measure recent activity
+    recent = Time.now - 1.month
+    recent_score_counts = MappackScore.where('(rank_hs IS NOT NULL OR rank_sr IS NOT NULL) AND date >= (?)', recent)
+                                      .group(:mappack_id)
+                                      .pluck(:mappack_id, 'count(mappack_id)')
+                                      .to_h
+    recent_player_counts = MappackScore.where('date >= (?)', recent)
+                                       .group(:mappack_id)
+                                       .pluck(:mappack_id, 'count(distinct player_id)')
+                                       .to_h
+
+    # Fetch all raw sizes on disk in one go
+    sizes = shell("du -b #{DIR_MAPPACKS}")[0]
+      .scan(/(\d+).+?(\d{3})_\w{3}_(\d)/)
+      .group_by{ |size, id, v| id }
+      .map{ |id, list|
+        version = list.max_by{ |size, id, v| v.to_i }
+        [version[1].to_i, version[0].to_i]
+      }.sort_by(&:first).to_h
+
+    # Pack a bunch of useful info into a hash and JSONify it, we use the last version of each mappack
+    dig = {
+      date: Time.now,
+      config: {},
+      tabs: Mappack.where(public: true).order(:id).map{ |mappack|
+        dir = mappack.folder
+        next unless dir
+        hash = JSON.parse(mappack.to_json)
+        hash[:disk] = {
+          raw_size: sizes[mappack.id].to_i,
+          files:    Dir.entries(dir)
+        }
+        hash[:properties] = {
+          modes:    mappack.levels.pluck('distinct mode').map{ |m| MODES[m] },
+          tabs:     mappack.levels.pluck('distinct tab').map{ |tab| TABS_NEW[tab.to_sym][:code] },
+          levels:   mappack.levels.count,
+          episodes: mappack.episodes.count,
+          stories:  mappack.stories.count
+        }
+        hash[:stats] = {
+          scores:         score_counts[mappack.id].to_i + forwarded_counts[mappack.id].to_i,
+          recent_scores:  recent_score_counts[mappack.id].to_i,
+          last_active:    mappack.scores.maximum(:date),
+          players:        player_counts[mappack.id].to_i,
+          recent_players: recent_player_counts[mappack.id].to_i
+        }
+        hash
+      }.compact
+    }.to_json
     File.write(PATH_MAPPACK_INFO, dig)
   rescue => e
     lex(e, 'Failed to generate mappack digest file')
@@ -87,11 +151,7 @@ class Mappack < ActiveRecord::Base
 
   # Return the folder that contains this mappack's files
   def folder(v: nil)
-    if !v
-      err("The mappack version needs to be provided.")
-      return
-    end
-
+    v = version || 1 if !v
     dir = File.join(DIR_MAPPACKS, "#{"%03d" % [id]}_#{code}_#{v}")
     Dir.exist?(dir) ? dir : nil
   end
@@ -304,6 +364,11 @@ class Mappack < ActiveRecord::Base
     MappackEpisode.update_hashes(mappack: self, pre: true)
     MappackStory.update_hashes(mappack: self, pre: true)
 
+    # Parse extra files (challenges, author names, dev scores, palettes)
+    read_challenges()
+    read_authors()
+    read_scores()
+
     # Log final results for entire mappack
     if file_errors + map_errors == 0
       succ("Successfully parsed mappack #{name_str}")
@@ -317,18 +382,19 @@ class Mappack < ActiveRecord::Base
   end
 
   # Read the author list and write to the db
-  def read_authors(v: nil)
+  # Manual means the function was called from a special command rather than automatically when seeding the mappack
+  def read_authors(v: nil, manual: false)
     v = version || 1 if !v
 
     # Integrity checks
     dir = folder(v: v)
     if !dir
-      err("Directory for mappack #{verbatim(code)} not found")
+      err("Directory for mappack #{verbatim(code)} not found") if manual
       return
     end
     path = File.join(dir, FILENAME_MAPPACK_AUTHORS)
     if !File.file?(path)
-      err("Authors file for mappack #{verbatim(code)} not found")
+      err("Authors file for mappack #{verbatim(code)} not found") if manual
       return
     end
 
@@ -352,19 +418,19 @@ class Mappack < ActiveRecord::Base
     lex(e, "Failed to read authors file for mappack #{verbatim(code)}")
   end
 
-  # Read the score list and write to the db
-  def read_scores(v: nil)
+  # Read the score list and write to the db (about 'manual', see #read_authors)
+  def read_scores(v: nil, manual: false)
     v = version || 1 if !v
 
     # Integrity checks
     dir = folder(v: v)
     if !dir
-      err("Directory for mappack #{verbatim(code)} not found")
+      err("Directory for mappack #{verbatim(code)} not found") if manual
       return
     end
     path = File.join(dir, FILENAME_MAPPACK_SCORES)
     if !File.file?(path)
-      err("Scores file for mappack #{verbatim(code)} not found")
+      err("Scores file for mappack #{verbatim(code)} not found") if manual
       return
     end
 
@@ -408,14 +474,14 @@ class Mappack < ActiveRecord::Base
     lex(e, "Failed to read scores file for mappack #{verbatim(code)}")
   end
 
-  # Read the challengelist and write to the db
-  def read_challenges(v: nil)
+  # Read the challengelist and write to the db (about 'manual', see #read_authors)
+  def read_challenges(v: nil, manual: false)
     v = version || 1 if !v
 
     # Integrity checks
     dir = folder(v: v)
     if !dir
-      err("Directory for mappack #{verbatim(code)} not found")
+      err("Directory for mappack #{verbatim(code)} not found") if manual
       return
     end
 

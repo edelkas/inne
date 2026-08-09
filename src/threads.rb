@@ -858,6 +858,9 @@ def start_general_tasks
   # Fetch and parse the video library
   Scheduler.add("Video library", freq: VIDEO_UPDATE_FREQUENCY, time: 'video') { Video.update(silent: true) } if DO_EVERYTHING || UPDATE_VIDEOS
 
+  # Update the mappack digest containing generic information about supported mappacks
+  Scheduler.add("Mappack digest", freq: MAPPACK_DIGEST_FREQUENCY){ Mappack.digest } if MAPPACK_DIGEST
+
   # Custom Leaderboard Engine (provides native leaderboard support for mappacks).
   if SOCKETS && CLE_ON && !DO_NOTHING
     $servers['cle'] = NPPServer.new

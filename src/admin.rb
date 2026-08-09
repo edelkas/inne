@@ -406,7 +406,7 @@ def send_mappack_authors(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found") if !mappack
-  mappack.read_authors
+  mappack.read_authors(manual: true)
   event << "Read #{mappack.code.upcase} mappack authors."
 rescue => e
   lex(e, "Error reading mappack authors.", event: event)
@@ -416,7 +416,7 @@ def send_mappack_scores(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found") if !mappack
-  mappack.read_scores
+  mappack.read_scores(manual: true)
   event << "Read #{mappack.code.upcase} mappack scores."
 rescue => e
   lex(e, "Error reading mappack scores.", event: event)
@@ -426,7 +426,7 @@ def send_mappack_challenges(event)
   flags = parse_flags(event)
   mappack = parse_mappack(flags[:mappack], explicit: true, vanilla: false)
   perror("Mappack not found") if !mappack
-  mappack.read_challenges
+  mappack.read_challenges(manual: true)
   event << "Read #{mappack.code.upcase} mappack challenges."
 rescue => e
   lex(e, "Error reading mappack challenges.", event: event)
