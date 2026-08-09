@@ -156,6 +156,38 @@ class Mappack < ActiveRecord::Base
     Dir.exist?(dir) ? dir : nil
   end
 
+  # Mappack file list getter. That way we can support changing the directory tree in the future.
+  def get_files(type, v: nil)
+    return unless dir = folder(v: v)
+    case type
+    when :levels
+      valid = TABS_NEW.map{ |k, v| v[:files].keys }.flatten.map{ |f| f + '.txt' }
+      Dir.entries(dir).map{ |f| File.join(dir, f) }.select{ |f|
+        File.file?(f) && valid.include?(File.basename(f))
+      }.sort
+    when :challenges
+      valid = TABS_NEW.select{ |k, v| v[:challenges] }.map{ |k, v| v[:files].keys }.flatten.map{ |f| f + 'codes.txt' }
+      Dir.entries(dir).map{ |f| File.join(dir, f) }.select{ |f|
+        File.file?(f) && valid.include?(File.basename(f))
+      }.sort
+    when :authors
+      path = File.join(dir, FILENAME_MAPPACK_AUTHORS)
+      File.file?(path) ? path : nil
+    when :scores
+      path = File.join(dir, FILENAME_MAPPACK_SCORES)
+      File.file?(path) ? path : nil
+    when :palettes
+      Dir.entries(dir).reject{ |f| f == '.' || f == '..' }.map{ |f| File.join(dir, f) }.select{ |f|
+        File.directory?(f)
+      }.sort
+    end
+  end
+
+  # Mappack file getter
+  def get_file(path)
+    File.binread(path)
+  end
+
   # TODO: Parse challenge files, in a separate function with its own command,
   # which is also called from the general seed and read functions.
 
@@ -174,21 +206,14 @@ class Mappack < ActiveRecord::Base
 
     # Check for mappack directory
     log("Parsing mappack #{name_str}...")
-    dir = folder(v: v)
-    perror("Directory for mappack #{name_str} not found, not reading", log: true) if !dir
-
-    # Fetch mappack files
-    files = Dir.entries(dir).select{ |f|
-      path = File.join(dir, f)
-      File.file?(path) && File.extname(path) == ".txt"
-    }.sort
-    alert("No appropriate files found in directory for mappack #{name_str}") if files.count == 0
+    paths = get_files(:levels)
+    alert("No appropriate files found in directory for mappack #{name_str}") if paths.empty?
 
     if !hard
       # Soft updates: Ensure the new tabs will replace the old ones precisely
       tabs_old = MappackLevel.where(mappack_id: id).distinct.pluck('`tab` AS `tab_int`').sort
-      tabs_new = files.map{ |f|
-        tab = TABS_NEW.values.find{ |att| att[:files].key?(f[0..-5]) }
+      tabs_new = paths.map{ |path|
+        tab = TABS_NEW.values.find{ |att| att[:files].key?(File.basename(path)[0..-5]) }
         tab ? tab[:mode] * 7 + tab[:tab] : nil
       }.compact.uniq.sort
       perror("Tabs for mappack #{code.upcase} do not coincide, cannot do soft update.", log: true) if tabs_old != tabs_new
@@ -207,8 +232,9 @@ class Mappack < ActiveRecord::Base
     file_errors = 0
     map_errors = 0
     changes = { name: 0, tiles: 0, objects: 0 } if !hard
-    files.each{ |f|
+    paths.each{ |path|
       # Find corresponding tab
+      f = File.basename(path)
       tab_code = f[0..-5]
       tab = TABS_NEW.values.find{ |att| att[:files].key?(tab_code) }
       if tab.nil?
@@ -217,7 +243,7 @@ class Mappack < ActiveRecord::Base
       end
 
       # Parse file
-      maps = Map.parse_metanet_file(File.join(dir, f), tab[:files][tab_code], name_str)
+      maps = Map.parse_metanet_file(path, tab[:files][tab_code], name_str, data: get_file(path))
       if maps.nil?
         file_errors += 1
         perror("Parsing of #{name_str} #{f} failed, ending soft update.", log: true) if !hard
@@ -365,9 +391,9 @@ class Mappack < ActiveRecord::Base
     MappackStory.update_hashes(mappack: self, pre: true)
 
     # Parse extra files (challenges, author names, dev scores, palettes)
-    read_challenges()
-    read_authors()
-    read_scores()
+    read_challenges(v: v)
+    read_authors(v: v)
+    read_scores(v: v)
 
     # Log final results for entire mappack
     if file_errors + map_errors == 0
@@ -384,22 +410,15 @@ class Mappack < ActiveRecord::Base
   # Read the author list and write to the db
   # Manual means the function was called from a special command rather than automatically when seeding the mappack
   def read_authors(v: nil, manual: false)
-    v = version || 1 if !v
-
     # Integrity checks
-    dir = folder(v: v)
-    if !dir
-      err("Directory for mappack #{verbatim(code)} not found") if manual
-      return
-    end
-    path = File.join(dir, FILENAME_MAPPACK_AUTHORS)
-    if !File.file?(path)
+    path = get_files(:authors)
+    if !path
       err("Authors file for mappack #{verbatim(code)} not found") if manual
       return
     end
 
     # Parse authors file
-    file = File.binread(path)
+    file = get_file(path)
     names = file.split("\n").map(&:strip)
     maps = levels.order(:id)
     if maps.size != names.size
@@ -420,22 +439,15 @@ class Mappack < ActiveRecord::Base
 
   # Read the score list and write to the db (about 'manual', see #read_authors)
   def read_scores(v: nil, manual: false)
-    v = version || 1 if !v
-
     # Integrity checks
-    dir = folder(v: v)
-    if !dir
-      err("Directory for mappack #{verbatim(code)} not found") if manual
-      return
-    end
-    path = File.join(dir, FILENAME_MAPPACK_SCORES)
-    if !File.file?(path)
+    path = get_files(:scores)
+    if !path
       err("Scores file for mappack #{verbatim(code)} not found") if manual
       return
     end
 
     # Parse scores file
-    file = File.binread(path)
+    file = get_file(path)
     scores = file.split("\n").map{ |l| round_score(l.strip.to_f) }
     maps = levels.order(:id)
     if maps.size != scores.size
@@ -476,12 +488,10 @@ class Mappack < ActiveRecord::Base
 
   # Read the challengelist and write to the db (about 'manual', see #read_authors)
   def read_challenges(v: nil, manual: false)
-    v = version || 1 if !v
-
     # Integrity checks
-    dir = folder(v: v)
-    if !dir
-      err("Directory for mappack #{verbatim(code)} not found") if manual
+    paths = get_files(:challenges)
+    if paths.empty?
+      err("Mappack #{code} has no challenge files") if manual
       return
     end
 
@@ -494,8 +504,8 @@ class Mappack < ActiveRecord::Base
     # Parse challenges
     TABS_NEW.each{ |_, tab|
       # Find tabs with all challenge files
-      files = tab[:files].map{ |name, count| [File.join(dir, name + 'codes.txt'), count] }
-      next unless files.all?{ |path, count| File.file?(path) }
+      files = tab[:files].map{ |name, count| [name + 'codes.txt', count] }
+      next unless files.all?{ |basename, count| paths.one?{ |path| File.basename(path) == basename } }
 
       # Logging variables
       challenge_count = 0
@@ -504,11 +514,11 @@ class Mappack < ActiveRecord::Base
 
       # Parse each challenge file
       level_id = TYPES['Level'][:slots] * id + tab[:start]
-      files.each{ |path, count|
+      files.each{ |basename, count|
         # Ensure count is correct
-        maps = File.read(path).split("\n")
+        maps = get_file(paths.find{ |path| File.basename(path) == basename }).split("\n")
         if maps.size != count
-          err("File #{File.basename(path)} for tab #{tab[:code]} has #{maps.size} maps instead of the expected #{count}")
+          err("File #{basename} for tab #{tab[:code]} has #{maps.size} maps instead of the expected #{count}")
           level_id += count
           next
         end

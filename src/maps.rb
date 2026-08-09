@@ -333,14 +333,14 @@ module Map
 
   # Parse a text file containing maps in Metanet format, one per line
   # This is the format used by the game to store the main campaign of levels
-  def self.parse_metanet_file(file, limit, pack)
+  def self.parse_metanet_file(file, limit, pack, data: nil)
     fn = File.basename(file)
-    if !File.file?(file)
+    if !data && !File.file?(file)
       err("File '#{fn}' not found parsing Metanet file")
       return
     end
 
-    maps = File.binread(file).split("\n").take(limit)
+    maps = (data || File.binread(file)).split("\n").take(limit)
     count = maps.count
     maps = maps.each_with_index.map{ |m, i|
       dbg("Parsing map #{"%-3d" % (i + 1)} / #{count} from #{fn} for #{pack}...", progress: true)
