@@ -106,26 +106,28 @@ class Mappack < ActiveRecord::Base
                                        .pluck(:mappack_id, 'count(distinct player_id)')
                                        .to_h
 
-    # Fetch all raw sizes on disk in one go
-    sizes = shell("du -b #{DIR_MAPPACKS}")[0]
-      .scan(/(\d+).+?(\d{3})_\w{3}_(\d)/)
-      .group_by{ |size, id, v| id }
-      .map{ |id, list|
-        version = list.max_by{ |size, id, v| v.to_i }
-        [version[1].to_i, version[0].to_i]
-      }.sort_by(&:first).to_h
-
     # Pack a bunch of useful info into a hash and JSONify it, we use the last version of each mappack
     dig = {
       date: Time.now,
-      config: {},
+      config: {
+        levels_dir:      DIR_MAPPACK_LEVELS,
+        palettes_dir:    DIR_MAPPACK_PALETTES,
+        level_files:     TABS_NEW.map{ |k, v| v[:files].keys }.flatten.map{ |f| f + '.txt' },
+        challenge_files: TABS_NEW.select{ |k, v| v[:challenges] }.map{ |k, v| v[:files].keys }.flatten.map{ |f| f + 'codes.txt' },
+        authors_file:    FILENAME_MAPPACK_AUTHORS,
+        scores_file:     FILENAME_MAPPACK_SCORES
+      },
       tabs: Mappack.where(public: true).order(:id).map{ |mappack|
-        dir = mappack.folder
-        next unless dir
+        next unless mappack.source
         hash = JSON.parse(mappack.to_json)
         hash[:disk] = {
-          raw_size: sizes[mappack.id].to_i,
-          files:    Dir.entries(dir)
+          raw_size:        mappack.get_size(false),
+          dl_size:         mappack.get_size(true),
+          level_files:     mappack.get_files(:levels).map{ |f| File.basename(f) },
+          challenge_files: mappack.get_files(:challenges).map{ |f| File.basename(f) },
+          palettes:        mappack.get_files(:palettes),
+          authors_file:    !!mappack.get_files(:authors),
+          scores_file:     !!mappack.get_files(:scores)
         }
         hash[:properties] = {
           modes:    mappack.levels.pluck('distinct mode').map{ |m| MODES[m] },
@@ -149,43 +151,60 @@ class Mappack < ActiveRecord::Base
     lex(e, 'Failed to generate mappack digest file')
   end
 
-  # Return the folder that contains this mappack's files
-  def folder(v: nil)
-    v = version || 1 if !v
-    dir = File.join(DIR_MAPPACKS, "#{"%03d" % [id]}_#{code}_#{v}")
-    Dir.exist?(dir) ? dir : nil
+  # Return the file or folder that contains this mappack's files
+  def source(v: nil)
+    src = File.join(DIR_MAPPACKS, '%03d_%s_%d.zip' % [id, code, v || version || 1])
+    File.file?(src) ? src : nil
+  end
+
+  # Retrieve the size of the mappack on disk
+  def get_size(download = true, v: nil)
+    return unless src = source(v: v)
+    return File.size(src) if download
+    zip = Zip::File.open(src)
+    zip.each_entry.sum(&:size)
+  ensure
+    zip&.close
   end
 
   # Mappack file list getter. That way we can support changing the directory tree in the future.
   def get_files(type, v: nil)
-    return unless dir = folder(v: v)
+    return unless src = source(v: v)
+    zip = Zip::File.open(src)
+    files = zip.entries.select{ |e| e.ftype == :file }.map(&:name)
+    folders = zip.entries.select{ |e| e.ftype == :directory }.map(&:name)
     case type
     when :levels
       valid = TABS_NEW.map{ |k, v| v[:files].keys }.flatten.map{ |f| f + '.txt' }
-      Dir.entries(dir).map{ |f| File.join(dir, f) }.select{ |f|
-        File.file?(f) && valid.include?(File.basename(f))
+      files.select{ |f|
+        File.dirname(f) == DIR_MAPPACK_LEVELS && valid.include?(File.basename(f))
       }.sort
     when :challenges
       valid = TABS_NEW.select{ |k, v| v[:challenges] }.map{ |k, v| v[:files].keys }.flatten.map{ |f| f + 'codes.txt' }
-      Dir.entries(dir).map{ |f| File.join(dir, f) }.select{ |f|
-        File.file?(f) && valid.include?(File.basename(f))
+      files.select{ |f|
+        File.dirname(f) == DIR_MAPPACK_LEVELS && valid.include?(File.basename(f))
       }.sort
     when :authors
-      path = File.join(dir, FILENAME_MAPPACK_AUTHORS)
-      File.file?(path) ? path : nil
+      files.include?(FILENAME_MAPPACK_AUTHORS) ? FILENAME_MAPPACK_AUTHORS : nil
     when :scores
-      path = File.join(dir, FILENAME_MAPPACK_SCORES)
-      File.file?(path) ? path : nil
+      files.include?(FILENAME_MAPPACK_SCORES) ? FILENAME_MAPPACK_SCORES : nil
     when :palettes
-      Dir.entries(dir).reject{ |f| f == '.' || f == '..' }.map{ |f| File.join(dir, f) }.select{ |f|
-        File.directory?(f)
+      folders.select{ |f|
+        File.dirname(f) == DIR_MAPPACK_PALETTES
       }.sort
     end
+  ensure
+    zip&.close
   end
 
   # Mappack file getter
-  def get_file(path)
-    File.binread(path)
+  def get_file(path, v: nil)
+    return unless src = source(v: v)
+    zip = Zip::File.open(src)
+    return unless entry = zip.find_entry(path)
+    entry.get_input_stream.read
+  ensure
+    zip&.close
   end
 
   # TODO: Parse challenge files, in a separate function with its own command,

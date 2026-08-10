@@ -243,8 +243,12 @@ PATH_NTRACE     = "#{DIR_UTILS}/ntrace/ntrace.py"
 PATH_STEAM_AUTH = "#{DIR_UTILS}/auth.py"
 PATH_STEAM_KEY  = "#{DIR_UTILS}/steam.pem"
 
+# Mappack directory tree
+DIR_MAPPACK_LEVELS = "Levels"
+DIR_MAPPACK_PALETTES = "Palettes"
 FILENAME_MAPPACK_AUTHORS = 'AUTHORS'
 FILENAME_MAPPACK_SCORES  = 'SCORES'
+
 FILENAME_LIMIT = 128 # Never surpass 259 (Windows' limit, google MAX_PATH)
 
 # <---------------------------------------------------------------------------->
