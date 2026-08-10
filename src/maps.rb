@@ -2624,8 +2624,8 @@ class Palette < ActiveRecord::Base
   }
   COLOR_COUNT       = FILES.values.sum{ |v| v[:size] } # 195
   SWATCH_BLOCK_SIZE = 64 # Each swatch color block is 64x64 pixels
-  SWATCH_SAMPLE_X   = 32 # The color is sampled from pixel (32, 31) from each block
-  SWATCH_SAMPLE_Y   = 31
+  SWATCH_SAMPLE_X   = 32 # The color is sampled from column 32 of each block
+  SWATCH_SAMPLE_Y   = 32 # The color is sampled from row 32 FROM THE BOTTOM (31 from the top, usually) of each block
 
   # TAG header specification, for parsing files
   TGA_HEADER_SIZE = 18
@@ -2657,7 +2657,8 @@ class Palette < ActiveRecord::Base
   OFFSET_MENU          = 143
   OFFSET_EDITOR        = 185
 
-  # Parse one TGA swatch. Each swatch is a horizontal strip of 64x64 blocks. The game only
+  # Parse one TGA swatch. Each swatch is a horizontal strip of 64x64 blocks.
+  # We store pixel data bottom to top, as is conventional for TGA. The game only
   # samples the middle pixel of each block, and ignores the alpha layer if present. The
   # original palettes were raw, whereas the TEN++ ones are RLE'd, so we need to support
   # both, but we can ignore color-mapped ones.
@@ -2670,7 +2671,7 @@ class Palette < ActiveRecord::Base
     tga = TGAHeader.new(*file.read(TGA_HEADER_SIZE).unpack(TGA_HEADER_FORMAT))
     total_pixels = tga.width * tga.height
     num_colors, pixel_size = tga.width / SWATCH_BLOCK_SIZE, tga.depth / 8
-    flip_x, flip_y, interlace = tga.desc[4] == 1, tga.desc[5] == 0, tga.desc[6, 2]
+    flip_x, flip_y, interlace = tga.desc[4] == 1, tga.desc[5] == 1, tga.desc[6, 2]
 
     # Sanity checks
     return err("Only RGB images are supported.")        if ![TGA_TYPE_TRUECOLOR, TGA_TYPE_RLE_TRUECOLOR].include?(tga.image_type)
@@ -2716,7 +2717,7 @@ class Palette < ActiveRecord::Base
       pixel_data = pixel_data.unpack("a#{pixel_size * tga.width}" * tga.height).reverse.join
     end
 
-    # The game samples the "middle" pixel (32, 31) of each 64x64 block, ignores alpha layer
+    # The game samples the "middle" pixel (32, 32) of each 64x64 block from the bottom
     offset = SWATCH_SAMPLE_Y * pixel_size * tga.width + SWATCH_SAMPLE_X * pixel_size
     step = SWATCH_BLOCK_SIZE * pixel_size
     num_colors.times.map{ |i|

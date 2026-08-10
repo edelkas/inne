@@ -114,7 +114,7 @@ PALETTE_NAMES.each_with_index{ |palette, y|
     tga = TGAHeader.new(*file.read(TGA_HEADER_SIZE).unpack(TGA_HEADER_FORMAT))
     total_pixels = tga.width * tga.height
     colors, pixel_size = tga.width / 64, tga.depth / 8
-    flip_x, flip_y, interlace = tga.desc[4] == 1, tga.desc[5] == 0, tga.desc[6, 2]
+    flip_x, flip_y, interlace = tga.desc[4] == 1, tga.desc[5] == 1, tga.desc[6, 2]
 
     # Sanity checks
     abort("Only RGB images are supported.")        if ![2, 10].include?(tga.image_type)
@@ -160,8 +160,8 @@ PALETTE_NAMES.each_with_index{ |palette, y|
       pixel_data = pixel_data.unpack("a#{pixel_size * tga.width}" * tga.height).reverse.join
     end
 
-    # The game samples the "middle" pixel (32, 31) of each 64x64 block, ignores alpha layer
-    offset = 31 * pixel_size * tga.width + 32 * pixel_size
+    # The game samples the "middle" pixel (32, 32) of each 64x64 block FROM THE BOTTOM
+    offset = 32 * pixel_size * tga.width + 32 * pixel_size
     step = 64 * pixel_size
     colors.times.each{ |i|
       b, g, r = pixel_data.unpack("C3", offset: offset + step * i)
