@@ -633,6 +633,13 @@ rescue => e
   lex(e, "Failed to download Google sheet #{id}")
 end
 
+# Generate a suitable link to GitHub. Raw links are direct downloads.
+def github_link(path = '', user: GITHUB_USER, repo: GITHUB_REPO, branch: GITHUB_BRANCH, raw: true)
+  link = "https://github.com/#{user}/#{repo}"
+  link << "/#{raw ? 'raw' : 'blob'}/#{branch}/#{path}" if !path.empty?
+  link
+end
+
 # <---------------------------------------------------------------------------->
 # <------                   (SEC4) SYSTEM OPERATIONS                     ------>
 # <---------------------------------------------------------------------------->

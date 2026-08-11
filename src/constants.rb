@@ -83,9 +83,9 @@ FAST_PERIOD = 7    # Days old until a Steam ID is marked as inactive
 UPDATE_SCORES_ON_LOTD = false # Update scores right before lotd (may delay post)
 
 # Github
-GITHUB_USER = 'edelkas'
-GITHUB_REPO = 'inne'
-GITHUB_LINK = "https://github.com/#{GITHUB_USER}/#{GITHUB_REPO}"
+GITHUB_USER   = 'edelkas'
+GITHUB_REPO   = 'inne'
+GITHUB_BRANCH = 'master'
 
 # Google
 GOOGLE_URL_SHEETS = 'https://docs.google.com/spreadsheets/d/%s/%s'     # id, action

@@ -330,7 +330,7 @@ module Speedrun extend self
     uri = uri(route, params)
     req = Net::HTTP::Get.new(uri)
     versions = [RUBY_VERSION, ActiveRecord.version, Discordrb::VERSION]
-    req['User-Agent'] = "inne++ Discord Bot (#{GITHUB_LINK}) Ruby/%s Rails/%s discordrb/%s" % versions
+    req['User-Agent'] = "inne++ Discord Bot (#{github_link}) Ruby/%s Rails/%s discordrb/%s" % versions
     req['Cache-Control'] = 'no-cache'
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, read_timeout: 1){ |http|
       http.request(req)
@@ -2563,7 +2563,7 @@ class APIServer < Server
     # Show inne repo status
     get(/^git$/) { |req, res|
       action_inc('api_git')
-      link = "<a href=\"#{GITHUB_LINK}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
+      link = "<a href=\"#{github_link}\">outte++ <img src=\"octicon/repo_12.svg\"></a>"
       body = build_page('git', "Latest changes to the #{link} repo in GitHub") { handle_git(req.query) }
       res.set_body(data: body, name: 'git.html')
     }
@@ -3137,9 +3137,9 @@ class APIServer < Server
 
     # Rows
     rows = commits.map{ |comm|
-      commit = "<a href=\"#{GITHUB_LINK}/commit/#{comm[:hash]}\" tooltip=\"#{comm[:hash]}\">#{comm[:hash][0, 7]}</a>"
+      commit = "<a href=\"#{github_link}/commit/#{comm[:hash]}\" tooltip=\"#{comm[:hash]}\">#{comm[:hash][0, 7]}</a>"
       author = "<a href=\"https://github.com/#{comm[:author][:name]}?tab=repositories/\">#{comm[:author][:name]}</a>"
-      branches = "<a href=\"#{GITHUB_LINK}/tree/#{comm[:hash]}\">master</a>"
+      branches = "<a href=\"#{github_link}/tree/#{comm[:hash]}\">master</a>"
       extended = comm[:extended].split("\n")[1..].join("\n")
       extended = 'No additional info' if extended.squish.empty?
       files = comm[:files].map{ |name, (add, del)| "#{name} (+#{add}, -#{del})" }.join("\n")

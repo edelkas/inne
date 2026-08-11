@@ -1,1 +1,1292 @@
-{"date":"2026-08-11T20:11:48.998+02:00","config":{"levels_dir":"Levels","palettes_dir":"Palettes","level_files":["SI.txt","S.txt","SL.txt","SS.txt","S2.txt","SS2.txt","SSS.txt","SSS2.txt","CI.txt","C.txt","C2.txt","CL.txt","CL2.txt","CT.txt","RI.txt","R.txt","R2.txt","RL.txt","RL2.txt","RT.txt"],"challenge_files":["Scodes.txt","SScodes.txt","S2codes.txt","SS2codes.txt","SSScodes.txt","SSS2codes.txt"],"authors_file":"AUTHORS","scores_file":"SCORES"},"tabs":[{"id":0,"name":"Metanet","code":"met","authors":"Metanet Software","date":"2015-07-28T00:00:00.000Z","version":2,"lotd":true,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":12732852,"dl_size":1837670,"level_files":["C.txt","C2.txt","CI.txt","CL.txt","CL2.txt","CT.txt","R.txt","R2.txt","RI.txt","RL.txt","RL2.txt","RT.txt","S.txt","S2.txt","SI.txt","SL.txt","SS.txt","SS2.txt","SSS.txt","SSS2.txt"],"challenge_files":["S2codes.txt","SS2codes.txt","SSS2codes.txt","SSScodes.txt","SScodes.txt","Scodes.txt"],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo","coop","race"],"tabs":["SI","S","SL","?","SU","!","?!","CI","C","CL","CT","RI","R","RL","RT"],"levels":4690,"episodes":880,"stories":65},"stats":{"scores":0,"recent_scores":0,"last_active":null,"players":0,"recent_players":0}},{"id":1,"name":"Community Tab Project","code":"ctp","authors":"CTP","date":"2023-08-10T00:00:00.000Z","version":2,"lotd":true,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":2620185,"dl_size":559717,"level_files":["S.txt","SI.txt","SS.txt"],"challenge_files":["SScodes.txt","Scodes.txt"],"palettes":[],"authors_file":true,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI","S","?"],"levels":845,"episodes":145,"stories":25},"stats":{"scores":62541,"recent_scores":177,"last_active":"2026-08-03T03:38:37.000Z","players":104,"recent_players":4}},{"id":2,"name":"Classic","code":"cla","authors":"NateyPooPoo","date":"2023-05-11T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":421669,"dl_size":61684,"level_files":["SI.txt"],"challenge_files":[],"palettes":["Palettes/classic darkmode/","Palettes/classic lightmode/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":4872,"recent_scores":0,"last_active":"2026-06-08T17:49:28.000Z","players":42,"recent_players":0}},{"id":3,"name":"HaxPack","code":"hax","authors":"Ham, l_d, RD, hooz","date":"2021-05-29T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":329149,"dl_size":67838,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":1509,"recent_scores":2,"last_active":"2026-07-15T11:14:32.000Z","players":19,"recent_players":1}},{"id":4,"name":"Duality","code":"dua","authors":"w95559w","date":"2023-05-24T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":258218,"dl_size":53498,"level_files":["C.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["coop"],"tabs":["C"],"levels":80,"episodes":16,"stories":0},"stats":{"scores":1649,"recent_scores":0,"last_active":"2026-06-06T02:11:47.000Z","players":16,"recent_players":0}},{"id":5,"name":"Ascend","code":"asc","authors":"kkstrong","date":"2023-11-29T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":441162,"dl_size":85014,"level_files":["SI.txt"],"challenge_files":[],"palettes":["Palettes/ascend summit/","Palettes/ascend zenith/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":2613,"recent_scores":0,"last_active":"2025-08-02T21:32:28.000Z","players":22,"recent_players":0}},{"id":6,"name":"Spectra","code":"spe","authors":"abho \u0026 MegalordX8","date":"2024-01-03T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":470039,"dl_size":89563,"level_files":["SI.txt"],"challenge_files":[],"palettes":["Palettes/cyberware/","Palettes/ultraviolet/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":2082,"recent_scores":0,"last_active":"2026-06-08T17:33:03.000Z","players":22,"recent_players":0}},{"id":7,"name":"Nova","code":"nov","authors":"abho \u0026 NateyPooPoo","date":"2023-03-03T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":505250,"dl_size":110869,"level_files":["SI.txt"],"challenge_files":[],"palettes":["Palettes/nova cosmic/","Palettes/nova orbit/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":656,"recent_scores":0,"last_active":"2025-03-17T11:50:23.000Z","players":6,"recent_players":0}},{"id":8,"name":"NeoMeta","code":"neo","authors":"abho","date":"2021-11-24T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":283138,"dl_size":52220,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":100,"episodes":20,"stories":4},"stats":{"scores":935,"recent_scores":0,"last_active":"2025-09-08T16:06:41.000Z","players":7,"recent_players":0}},{"id":9,"name":"Alkaline","code":"alk","authors":"MegalordX8","date":"2024-05-30T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":812949,"dl_size":149930,"level_files":["SI.txt"],"challenge_files":[],"palettes":["Palettes/parametric-blue/","Palettes/parametric-cyan/","Palettes/parametric-green/","Palettes/parametric-orange/","Palettes/parametric-purple/","Palettes/parametric-red/","Palettes/parametric-rose/","Palettes/parametric-tan/","Palettes/parametric-teal/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":3145,"recent_scores":0,"last_active":"2025-03-02T07:09:07.000Z","players":26,"recent_players":0}},{"id":10,"name":"Destab","code":"des","authors":"dest1ny","date":"2024-07-08T00:00:00.000Z","version":2,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":1185285,"dl_size":331277,"level_files":["S.txt"],"challenge_files":["Scodes.txt"],"palettes":["Palettes/aced/","Palettes/aroma/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["S"],"levels":250,"episodes":50,"stories":10},"stats":{"scores":6234,"recent_scores":0,"last_active":"2026-07-11T00:54:18.000Z","players":23,"recent_players":0}},{"id":11,"name":"Apex","code":"ape","authors":"abho","date":"2024-08-05T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":406356,"dl_size":80791,"level_files":["S.txt","SI.txt"],"challenge_files":["Scodes.txt"],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI","S"],"levels":140,"episodes":28,"stories":6},"stats":{"scores":2610,"recent_scores":0,"last_active":"2026-07-11T00:43:25.000Z","players":21,"recent_players":0}},{"id":12,"name":"Ion","code":"ion","authors":"NateyPooPoo","date":"2023-03-01T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":713019,"dl_size":148654,"level_files":["S.txt","SI.txt"],"challenge_files":[],"palettes":["Palettes/ion engine/","Palettes/ion forest/","Palettes/ion redshift/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI","S"],"levels":175,"episodes":35,"stories":7},"stats":{"scores":1574,"recent_scores":0,"last_active":"2025-05-09T02:18:33.000Z","players":10,"recent_players":0}},{"id":13,"name":"Slomac MEGA Pack","code":"slo","authors":"Slomac","date":"2024-09-20T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":1328779,"dl_size":268428,"level_files":["S.txt","SI.txt","SL.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI","S","SL"],"levels":375,"episodes":75,"stories":15},"stats":{"scores":5287,"recent_scores":0,"last_active":"2026-06-08T21:23:09.000Z","players":21,"recent_players":0}},{"id":14,"name":"Eon","code":"eon","authors":"NateyPooPoo","date":"2024-11-30T00:00:00.000Z","version":2,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":2830112,"dl_size":506824,"level_files":["S.txt"],"challenge_files":["Scodes.txt"],"palettes":["Palettes/eon bloom/","Palettes/eon blue/","Palettes/eon charcoal/","Palettes/eon data/","Palettes/eon ember/","Palettes/eon golden hour/","Palettes/eon gravity/","Palettes/eon hallway/","Palettes/eon hypercube/","Palettes/eon leaf/","Palettes/eon lightfield/","Palettes/eon neon/","Palettes/eon ocean/","Palettes/eon radius/","Palettes/eon red/","Palettes/eon/"],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["S"],"levels":600,"episodes":120,"stories":20},"stats":{"scores":17975,"recent_scores":7,"last_active":"2026-07-30T03:40:54.000Z","players":42,"recent_players":2}},{"id":15,"name":"Nitro","code":"nit","authors":"abho","date":"2022-03-26T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":414130,"dl_size":76839,"level_files":["S.txt","SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI","S"],"levels":140,"episodes":28,"stories":6},"stats":{"scores":1246,"recent_scores":6,"last_active":"2026-07-31T09:44:25.000Z","players":12,"recent_players":1}},{"id":16,"name":"Acidic","code":"aci","authors":"MegalordX8","date":"2025-02-24T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":347157,"dl_size":64588,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":1710,"recent_scores":0,"last_active":"2026-06-08T22:20:04.000Z","players":15,"recent_players":0}},{"id":17,"name":"Nv1++","code":"nv1","authors":"Metanet Software","date":"2005-05-15T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":1200701,"dl_size":165186,"level_files":["SL.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SL"],"levels":500,"episodes":100,"stories":20},"stats":{"scores":7903,"recent_scores":0,"last_active":"2026-06-11T22:05:26.000Z","players":28,"recent_players":0}},{"id":18,"name":"Max","code":"max","authors":"Natey \u0026 Slomac et al","date":"2025-06-19T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":true,"disk":{"raw_size":348046,"dl_size":54559,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":true,"scores_file":true},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":4652,"recent_scores":0,"last_active":"2026-06-04T21:08:31.000Z","players":37,"recent_players":0}},{"id":19,"name":"Legacy 2","code":"sl2","authors":"Metanet Software","date":"2015-07-28T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":566097,"dl_size":62778,"level_files":["SL.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SL"],"levels":240,"episodes":48,"stories":10},"stats":{"scores":3518,"recent_scores":0,"last_active":"2026-06-08T05:48:40.000Z","players":15,"recent_players":0}},{"id":20,"name":"Horizons","code":"hor","authors":"HamSandwich","date":"2025-08-14T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":335809,"dl_size":76096,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":2275,"recent_scores":0,"last_active":"2026-06-06T15:28:03.000Z","players":18,"recent_players":0}},{"id":21,"name":"Little Hops","code":"lit","authors":"LocoLynx","date":"2026-04-15T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":303809,"dl_size":37415,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":1368,"recent_scores":1,"last_active":"2026-07-21T17:55:38.000Z","players":12,"recent_players":1}},{"id":22,"name":"D-Day Tab","code":"ddt","authors":"N++ Community","date":"2026-05-14T00:00:00.000Z","version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":4378987,"dl_size":653137,"level_files":["S.txt","S2.txt","SL.txt","SS.txt"],"challenge_files":["S2codes.txt","Scodes.txt"],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["S","SL","?","SU"],"levels":1635,"episodes":303,"stories":58},"stats":{"scores":14834,"recent_scores":724,"last_active":"2026-08-03T05:11:46.000Z","players":13,"recent_players":7}},{"id":23,"name":null,"code":"act","authors":null,"date":null,"version":1,"lotd":false,"enabled":true,"public":true,"fractional":false,"disk":{"raw_size":390447,"dl_size":77805,"level_files":["SI.txt"],"challenge_files":[],"palettes":[],"authors_file":false,"scores_file":false},"properties":{"modes":["solo"],"tabs":["SI"],"levels":125,"episodes":25,"stories":5},"stats":{"scores":0,"recent_scores":0,"last_active":null,"players":0,"recent_players":0}}]}
+{
+  "config": {
+    "levels_dir": "Levels",
+    "palettes_dir": "Palettes",
+    "level_files": [
+      "SI.txt",
+      "S.txt",
+      "SL.txt",
+      "SS.txt",
+      "S2.txt",
+      "SS2.txt",
+      "SSS.txt",
+      "SSS2.txt",
+      "CI.txt",
+      "C.txt",
+      "C2.txt",
+      "CL.txt",
+      "CL2.txt",
+      "CT.txt",
+      "RI.txt",
+      "R.txt",
+      "R2.txt",
+      "RL.txt",
+      "RL2.txt",
+      "RT.txt"
+    ],
+    "challenge_files": [
+      "Scodes.txt",
+      "SScodes.txt",
+      "S2codes.txt",
+      "SS2codes.txt",
+      "SSScodes.txt",
+      "SSS2codes.txt"
+    ],
+    "authors_file": "AUTHORS",
+    "scores_file": "SCORES"
+  },
+  "tabs": [
+    {
+      "attributes": {
+        "id": 0,
+        "name": "Metanet",
+        "code": "met",
+        "authors": "Metanet Software",
+        "date": "2015-07-28T00:00:00.000Z",
+        "version": 2,
+        "lotd": true,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/000_met_2.zip",
+        "size": 1837670,
+        "md5": "552ae458569cc84c5b54304194140fc4"
+      },
+      "disk": {
+        "size": 12732852,
+        "level_files": [
+          "C.txt",
+          "C2.txt",
+          "CI.txt",
+          "CL.txt",
+          "CL2.txt",
+          "CT.txt",
+          "R.txt",
+          "R2.txt",
+          "RI.txt",
+          "RL.txt",
+          "RL2.txt",
+          "RT.txt",
+          "S.txt",
+          "S2.txt",
+          "SI.txt",
+          "SL.txt",
+          "SS.txt",
+          "SS2.txt",
+          "SSS.txt",
+          "SSS2.txt"
+        ],
+        "challenge_files": [
+          "S2codes.txt",
+          "SS2codes.txt",
+          "SSS2codes.txt",
+          "SSScodes.txt",
+          "SScodes.txt",
+          "Scodes.txt"
+        ],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo",
+          "coop",
+          "race"
+        ],
+        "tabs": [
+          "SI",
+          "S",
+          "SL",
+          "?",
+          "SU",
+          "!",
+          "?!",
+          "CI",
+          "C",
+          "CL",
+          "CT",
+          "RI",
+          "R",
+          "RL",
+          "RT"
+        ],
+        "levels": 4690,
+        "episodes": 880,
+        "stories": 65
+      },
+      "stats": {
+        "scores": 0,
+        "recent_scores": 0,
+        "last_active": null,
+        "players": 0,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 1,
+        "name": "Community Tab Project",
+        "code": "ctp",
+        "authors": "CTP",
+        "date": "2023-08-10T00:00:00.000Z",
+        "version": 2,
+        "lotd": true,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/001_ctp_2.zip",
+        "size": 559717,
+        "md5": "69130c04f330510da95e8c18d27bc04a"
+      },
+      "disk": {
+        "size": 2620185,
+        "level_files": [
+          "S.txt",
+          "SI.txt",
+          "SS.txt"
+        ],
+        "challenge_files": [
+          "SScodes.txt",
+          "Scodes.txt"
+        ],
+        "palettes": [],
+        "authors_file": true,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI",
+          "S",
+          "?"
+        ],
+        "levels": 845,
+        "episodes": 145,
+        "stories": 25
+      },
+      "stats": {
+        "scores": 62541,
+        "recent_scores": 177,
+        "last_active": "2026-08-03T03:38:37Z",
+        "players": 104,
+        "recent_players": 4
+      }
+    },
+    {
+      "attributes": {
+        "id": 2,
+        "name": "Classic",
+        "code": "cla",
+        "authors": "NateyPooPoo",
+        "date": "2023-05-11T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/002_cla_1.zip",
+        "size": 61684,
+        "md5": "1765adbc41c309925eb3c372ca6d49de"
+      },
+      "disk": {
+        "size": 421669,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [
+          "classic darkmode",
+          "classic lightmode"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 4872,
+        "recent_scores": 0,
+        "last_active": "2026-06-08T17:49:28Z",
+        "players": 42,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 3,
+        "name": "HaxPack",
+        "code": "hax",
+        "authors": "Ham, l_d, RD, hooz",
+        "date": "2021-05-29T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/003_hax_1.zip",
+        "size": 67838,
+        "md5": "8cce82fef9c5ca0c37802c6545f5dbf7"
+      },
+      "disk": {
+        "size": 329149,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 1509,
+        "recent_scores": 2,
+        "last_active": "2026-07-15T11:14:32Z",
+        "players": 19,
+        "recent_players": 1
+      }
+    },
+    {
+      "attributes": {
+        "id": 4,
+        "name": "Duality",
+        "code": "dua",
+        "authors": "w95559w",
+        "date": "2023-05-24T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/004_dua_1.zip",
+        "size": 53498,
+        "md5": "0dcc0dcf5fa1f1c0848a3f6055402e87"
+      },
+      "disk": {
+        "size": 258218,
+        "level_files": [
+          "C.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "coop"
+        ],
+        "tabs": [
+          "C"
+        ],
+        "levels": 80,
+        "episodes": 16,
+        "stories": 0
+      },
+      "stats": {
+        "scores": 1649,
+        "recent_scores": 0,
+        "last_active": "2026-06-06T02:11:47Z",
+        "players": 16,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 5,
+        "name": "Ascend",
+        "code": "asc",
+        "authors": "kkstrong",
+        "date": "2023-11-29T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/005_asc_1.zip",
+        "size": 85014,
+        "md5": "2b53c019839448072da5885378a3455d"
+      },
+      "disk": {
+        "size": 441162,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [
+          "ascend summit",
+          "ascend zenith"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 2613,
+        "recent_scores": 0,
+        "last_active": "2025-08-02T21:32:28Z",
+        "players": 22,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 6,
+        "name": "Spectra",
+        "code": "spe",
+        "authors": "abho & MegalordX8",
+        "date": "2024-01-03T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/006_spe_1.zip",
+        "size": 89563,
+        "md5": "22ba71372b2e720dffeff37e526e9363"
+      },
+      "disk": {
+        "size": 470039,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [
+          "cyberware",
+          "ultraviolet"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 2082,
+        "recent_scores": 0,
+        "last_active": "2026-06-08T17:33:03Z",
+        "players": 22,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 7,
+        "name": "Nova",
+        "code": "nov",
+        "authors": "abho & NateyPooPoo",
+        "date": "2023-03-03T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/007_nov_1.zip",
+        "size": 110869,
+        "md5": "b04dc00cf2967db55d4ff59d3afb5e15"
+      },
+      "disk": {
+        "size": 505250,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [
+          "nova cosmic",
+          "nova orbit"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 656,
+        "recent_scores": 0,
+        "last_active": "2025-03-17T11:50:23Z",
+        "players": 6,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 8,
+        "name": "NeoMeta",
+        "code": "neo",
+        "authors": "abho",
+        "date": "2021-11-24T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/008_neo_1.zip",
+        "size": 52220,
+        "md5": "dd2e118f4bb0113f90b85fd984b609f6"
+      },
+      "disk": {
+        "size": 283138,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 100,
+        "episodes": 20,
+        "stories": 4
+      },
+      "stats": {
+        "scores": 935,
+        "recent_scores": 0,
+        "last_active": "2025-09-08T16:06:41Z",
+        "players": 7,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 9,
+        "name": "Alkaline",
+        "code": "alk",
+        "authors": "MegalordX8",
+        "date": "2024-05-30T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/009_alk_1.zip",
+        "size": 149930,
+        "md5": "6e500f9b36500974a9bfac8740f8b1c5"
+      },
+      "disk": {
+        "size": 812949,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [
+          "parametric-blue",
+          "parametric-cyan",
+          "parametric-green",
+          "parametric-orange",
+          "parametric-purple",
+          "parametric-red",
+          "parametric-rose",
+          "parametric-tan",
+          "parametric-teal"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 3145,
+        "recent_scores": 0,
+        "last_active": "2025-03-02T07:09:07Z",
+        "players": 26,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 10,
+        "name": "Destab",
+        "code": "des",
+        "authors": "dest1ny",
+        "date": "2024-07-08T00:00:00.000Z",
+        "version": 2,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/010_des_2.zip",
+        "size": 331277,
+        "md5": "d05ec464f6b35ee792850e6076c2a315"
+      },
+      "disk": {
+        "size": 1185285,
+        "level_files": [
+          "S.txt"
+        ],
+        "challenge_files": [
+          "Scodes.txt"
+        ],
+        "palettes": [
+          "aced",
+          "aroma"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "S"
+        ],
+        "levels": 250,
+        "episodes": 50,
+        "stories": 10
+      },
+      "stats": {
+        "scores": 6234,
+        "recent_scores": 0,
+        "last_active": "2026-07-11T00:54:18Z",
+        "players": 23,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 11,
+        "name": "Apex",
+        "code": "ape",
+        "authors": "abho",
+        "date": "2024-08-05T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/011_ape_1.zip",
+        "size": 80791,
+        "md5": "2ee1d74979bd4d03a7041c39665ada19"
+      },
+      "disk": {
+        "size": 406356,
+        "level_files": [
+          "S.txt",
+          "SI.txt"
+        ],
+        "challenge_files": [
+          "Scodes.txt"
+        ],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI",
+          "S"
+        ],
+        "levels": 140,
+        "episodes": 28,
+        "stories": 6
+      },
+      "stats": {
+        "scores": 2610,
+        "recent_scores": 0,
+        "last_active": "2026-07-11T00:43:25Z",
+        "players": 21,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 12,
+        "name": "Ion",
+        "code": "ion",
+        "authors": "NateyPooPoo",
+        "date": "2023-03-01T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/012_ion_1.zip",
+        "size": 148654,
+        "md5": "8413c37b6543ab0645f39922bcf4b5b7"
+      },
+      "disk": {
+        "size": 713019,
+        "level_files": [
+          "S.txt",
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [
+          "ion engine",
+          "ion forest",
+          "ion redshift"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI",
+          "S"
+        ],
+        "levels": 175,
+        "episodes": 35,
+        "stories": 7
+      },
+      "stats": {
+        "scores": 1574,
+        "recent_scores": 0,
+        "last_active": "2025-05-09T02:18:33Z",
+        "players": 10,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 13,
+        "name": "Slomac MEGA Pack",
+        "code": "slo",
+        "authors": "Slomac",
+        "date": "2024-09-20T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/013_slo_1.zip",
+        "size": 268428,
+        "md5": "66dd978f8ac385f7fbea690113390d9c"
+      },
+      "disk": {
+        "size": 1328779,
+        "level_files": [
+          "S.txt",
+          "SI.txt",
+          "SL.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI",
+          "S",
+          "SL"
+        ],
+        "levels": 375,
+        "episodes": 75,
+        "stories": 15
+      },
+      "stats": {
+        "scores": 5287,
+        "recent_scores": 0,
+        "last_active": "2026-06-08T21:23:09Z",
+        "players": 21,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 14,
+        "name": "Eon",
+        "code": "eon",
+        "authors": "NateyPooPoo",
+        "date": "2024-11-30T00:00:00.000Z",
+        "version": 2,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/014_eon_2.zip",
+        "size": 506824,
+        "md5": "2d65498051c2ec660f6377dd7eabf78f"
+      },
+      "disk": {
+        "size": 2830112,
+        "level_files": [
+          "S.txt"
+        ],
+        "challenge_files": [
+          "Scodes.txt"
+        ],
+        "palettes": [
+          "eon bloom",
+          "eon blue",
+          "eon charcoal",
+          "eon data",
+          "eon ember",
+          "eon golden hour",
+          "eon gravity",
+          "eon hallway",
+          "eon hypercube",
+          "eon leaf",
+          "eon lightfield",
+          "eon neon",
+          "eon ocean",
+          "eon radius",
+          "eon red",
+          "eon"
+        ],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "S"
+        ],
+        "levels": 600,
+        "episodes": 120,
+        "stories": 20
+      },
+      "stats": {
+        "scores": 17975,
+        "recent_scores": 7,
+        "last_active": "2026-07-30T03:40:54Z",
+        "players": 42,
+        "recent_players": 2
+      }
+    },
+    {
+      "attributes": {
+        "id": 15,
+        "name": "Nitro",
+        "code": "nit",
+        "authors": "abho",
+        "date": "2022-03-26T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/015_nit_1.zip",
+        "size": 76839,
+        "md5": "1c53e944623b5077d7db46595cb2f18c"
+      },
+      "disk": {
+        "size": 414130,
+        "level_files": [
+          "S.txt",
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI",
+          "S"
+        ],
+        "levels": 140,
+        "episodes": 28,
+        "stories": 6
+      },
+      "stats": {
+        "scores": 1246,
+        "recent_scores": 6,
+        "last_active": "2026-07-31T09:44:25Z",
+        "players": 12,
+        "recent_players": 1
+      }
+    },
+    {
+      "attributes": {
+        "id": 16,
+        "name": "Acidic",
+        "code": "aci",
+        "authors": "MegalordX8",
+        "date": "2025-02-24T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/016_aci_1.zip",
+        "size": 64588,
+        "md5": "8cf544f1b1f5fceba5c23d1a19f7a7d6"
+      },
+      "disk": {
+        "size": 347157,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 1710,
+        "recent_scores": 0,
+        "last_active": "2026-06-08T22:20:04Z",
+        "players": 15,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 17,
+        "name": "Nv1++",
+        "code": "nv1",
+        "authors": "Metanet Software",
+        "date": "2005-05-15T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/017_nv1_1.zip",
+        "size": 165186,
+        "md5": "ad1cd93848dc0c6d192573c073c8c071"
+      },
+      "disk": {
+        "size": 1200701,
+        "level_files": [
+          "SL.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SL"
+        ],
+        "levels": 500,
+        "episodes": 100,
+        "stories": 20
+      },
+      "stats": {
+        "scores": 7903,
+        "recent_scores": 0,
+        "last_active": "2026-06-11T22:05:26Z",
+        "players": 28,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 18,
+        "name": "Max",
+        "code": "max",
+        "authors": "Natey & Slomac et al",
+        "date": "2025-06-19T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": true
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/018_max_1.zip",
+        "size": 54559,
+        "md5": "a2b6b86bfc492794fae9e3bcb9be2b93"
+      },
+      "disk": {
+        "size": 348046,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": true,
+        "scores_file": true
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 4652,
+        "recent_scores": 0,
+        "last_active": "2026-06-04T21:08:31Z",
+        "players": 37,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 19,
+        "name": "Legacy 2",
+        "code": "sl2",
+        "authors": "Metanet Software",
+        "date": "2015-07-28T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/019_sl2_1.zip",
+        "size": 62778,
+        "md5": "91890006764965c563ccb012aae3dc5f"
+      },
+      "disk": {
+        "size": 566097,
+        "level_files": [
+          "SL.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SL"
+        ],
+        "levels": 240,
+        "episodes": 48,
+        "stories": 10
+      },
+      "stats": {
+        "scores": 3518,
+        "recent_scores": 0,
+        "last_active": "2026-06-08T05:48:40Z",
+        "players": 15,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 20,
+        "name": "Horizons",
+        "code": "hor",
+        "authors": "HamSandwich",
+        "date": "2025-08-14T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/020_hor_1.zip",
+        "size": 76096,
+        "md5": "6434ce9d841d0d8843c7a5df1a8c8458"
+      },
+      "disk": {
+        "size": 335809,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 2275,
+        "recent_scores": 0,
+        "last_active": "2026-06-06T15:28:03Z",
+        "players": 18,
+        "recent_players": 0
+      }
+    },
+    {
+      "attributes": {
+        "id": 21,
+        "name": "Little Hops",
+        "code": "lit",
+        "authors": "LocoLynx",
+        "date": "2026-04-15T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/021_lit_1.zip",
+        "size": 37415,
+        "md5": "c684d7f09cae02fe9b9f79d7aa727a8b"
+      },
+      "disk": {
+        "size": 303809,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 1368,
+        "recent_scores": 1,
+        "last_active": "2026-07-21T17:55:38Z",
+        "players": 12,
+        "recent_players": 1
+      }
+    },
+    {
+      "attributes": {
+        "id": 22,
+        "name": "D-Day Tab",
+        "code": "ddt",
+        "authors": "N++ Community",
+        "date": "2026-05-14T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/022_ddt_1.zip",
+        "size": 653137,
+        "md5": "62905da822839afa453651659e219651"
+      },
+      "disk": {
+        "size": 4378987,
+        "level_files": [
+          "S.txt",
+          "S2.txt",
+          "SL.txt",
+          "SS.txt"
+        ],
+        "challenge_files": [
+          "S2codes.txt",
+          "Scodes.txt"
+        ],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "S",
+          "SL",
+          "?",
+          "SU"
+        ],
+        "levels": 1635,
+        "episodes": 303,
+        "stories": 58
+      },
+      "stats": {
+        "scores": 14834,
+        "recent_scores": 711,
+        "last_active": "2026-08-03T05:11:46Z",
+        "players": 13,
+        "recent_players": 7
+      }
+    },
+    {
+      "attributes": {
+        "id": 23,
+        "name": "Action",
+        "code": "act",
+        "authors": "Filip✝",
+        "date": "2026-08-11T00:00:00.000Z",
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/023_act_1.zip",
+        "size": 77805,
+        "md5": "746bebf404466cf04d9faff365fcda48"
+      },
+      "disk": {
+        "size": 390447,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
+        "scores": 0,
+        "recent_scores": 0,
+        "last_active": null,
+        "players": 0,
+        "recent_players": 0
+      }
+    }
+  ],
+  "signature": {
+    "md5": "42d75a399ec6eb6c8889487eb3b51378",
+    "date": "2026-08-11T21:35:46Z"
+  }
+}

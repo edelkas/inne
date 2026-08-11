@@ -74,8 +74,15 @@ class Mappack < ActiveRecord::Base
   end
 
   # Update the digest file, which summarizes mappack info into a file that can
-  # be queried via the internet.
+  # be queried via the internet. Only write to disk when core information has
+  # changed (e.g. new mappack) using a signature. Returns whether the digest
+  # has been updated or not.
   def self.digest
+    # Get current digest signature to detect changes
+    if File.file?(PATH_MAPPACK_INFO)
+      old_signature = JSON.parse(File.read(PATH_MAPPACK_INFO))['signature']['md5'].downcase rescue nil
+    end
+
     # Fetch score counts per mappack. For mappacks with forwarded scores, we also
     # must tally the corresponding userlevel completion counts.
     score_counts = MappackScore.where('rank_hs IS NOT NULL OR rank_sr IS NOT NULL')
@@ -105,10 +112,10 @@ class Mappack < ActiveRecord::Base
                                        .group(:mappack_id)
                                        .pluck(:mappack_id, 'count(distinct player_id)')
                                        .to_h
+    last_active = MappackScore.group(:mappack_id).pluck(:mappack_id, 'max(date)').to_h
 
     # Pack a bunch of useful info into a hash and JSONify it, we use the last version of each mappack
     dig = {
-      date: Time.now,
       config: {
         levels_dir:      DIR_MAPPACK_LEVELS,
         palettes_dir:    DIR_MAPPACK_PALETTES,
@@ -119,13 +126,18 @@ class Mappack < ActiveRecord::Base
       },
       tabs: Mappack.where(public: true).order(:id).map{ |mappack|
         next unless mappack.source
-        hash = JSON.parse(mappack.to_json)
+        hash = {}
+        hash[:attributes] = JSON.parse(mappack.to_json)
+        hash[:download] = {
+          link: github_link(mappack.source),
+          size: mappack.get_size(true),
+          md5:  Digest::MD5.file(mappack.source).hexdigest
+        }
         hash[:disk] = {
-          raw_size:        mappack.get_size(false),
-          dl_size:         mappack.get_size(true),
+          size:            mappack.get_size(false),
           level_files:     mappack.get_files(:levels).map{ |f| File.basename(f) },
           challenge_files: mappack.get_files(:challenges).map{ |f| File.basename(f) },
-          palettes:        mappack.get_files(:palettes),
+          palettes:        mappack.get_files(:palettes).map{ |f| File.basename(f) },
           authors_file:    !!mappack.get_files(:authors),
           scores_file:     !!mappack.get_files(:scores)
         }
@@ -136,17 +148,31 @@ class Mappack < ActiveRecord::Base
           episodes: mappack.episodes.count,
           stories:  mappack.stories.count
         }
-        hash[:stats] = {
-          scores:         score_counts[mappack.id].to_i + forwarded_counts[mappack.id].to_i,
-          recent_scores:  recent_score_counts[mappack.id].to_i,
-          last_active:    mappack.scores.maximum(:date),
-          players:        player_counts[mappack.id].to_i,
-          recent_players: recent_player_counts[mappack.id].to_i
-        }
         hash
       }.compact
-    }.to_json
-    File.write(PATH_MAPPACK_INFO, dig)
+    }
+
+    # Update digest on disk if signature changed. We add stats now, because they're chaging all the
+    # time and we'd end up commiting new digests constantly.
+    new_signature = md5(dig.to_json, hex: true).downcase
+    return false if new_signature == old_signature
+    dig[:tabs].each{ |hash|
+      id = hash[:attributes]['id']
+      hash[:stats] = {
+        scores:         score_counts[id].to_i + forwarded_counts[id].to_i,
+        recent_scores:  recent_score_counts[id].to_i,
+        last_active:    last_active[id]&.utc&.iso8601,
+        players:        player_counts[id].to_i,
+        recent_players: recent_player_counts[id].to_i
+      }
+    }
+    dig[:signature] = {
+      md5: new_signature,
+      date: Time.now.utc.iso8601
+    }
+    File.write(PATH_MAPPACK_INFO, JSON.pretty_generate(dig))
+    log("Updated mappack digest: #{new_signature}")
+    true
   rescue => e
     lex(e, 'Failed to generate mappack digest file')
   end
