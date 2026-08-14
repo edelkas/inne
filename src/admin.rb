@@ -1513,6 +1513,31 @@ def add_score_correction(event)
   event << "Added %+d gold correction to %s" % [flags[:gold], h.format_name]
 end
 
+# Tranfer mappack scores from one player to another. Useful when scores were
+# wrongly submitted with another account, e.g. when authentication failed.
+def transfer_scores(event)
+  flags = parse_flags(event)
+  perror("Specify the players with `-from` and `-to`") unless flags[:from] && flags[:to]
+  perror("Specify the score ID range with `-start` and `-end`") unless flags[:start] && flags[:end]
+  perror("Invalid ID range") if flags[:start].to_i > flags[:end].to_i
+  from_player = parse_player_explicit(flags[:from])
+  to_player = parse_player_explicit(flags[:to])
+  scores = MappackScore.where(player: from_player, id: (flags[:start]..flags[:end]))
+  score_count = scores.count
+  highscoreables = scores.map(&:highscoreable).uniq
+  highscoreable_count = highscoreables.count
+  scores.update_all(player_id: to_player.id, metanet_id: to_player.metanet_id)
+  highscoreables.each_with_index{ |h, i|
+    dbg("Patching score #{i + 1} / #{highscoreables.size}...", progress: true)
+    frac = h.mappack.fractional && h.is_level?
+    ['hs', 'sr'].each{ |board|
+      from_player.update_rank(h, board, frac: frac)
+      to_player.update_rank(h, board, frac: frac)
+    }
+  }
+  event << "Patched #{score_count} scores in #{highscoreable_count} boards."
+end
+
 # Special commands can only be executed by the botmaster, and are intended to
 # manage the bot on the fly without having to restart it, or to print sensitive
 # information.
@@ -1583,6 +1608,7 @@ def respond_special(event)
   return test_steam_info(event)          if cmd == 'steam_embeds'
   return seed_steam(event)               if cmd == 'steam_seed'
   return submit_score(event)             if cmd == 'submit'
+  return transfer_scores(event)          if cmd == 'transfer_scores'
   return send_tasks(event)               if cmd == 'tasks'
   return send_test(event)                if cmd == 'test'
   return send_color_test(event)          if cmd == 'test_color'
