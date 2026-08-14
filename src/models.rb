@@ -2324,6 +2324,9 @@ class Player < ActiveRecord::Base
     raise 'Invalid response' if invalid && !LOCAL_LOGIN
     locally = false
 
+    # Store Steam auth ticket
+    steam_ticket = SteamTicket.add_ascii(req.query['steam_auth']) if !req.query['steam_auth'].blank?
+
     if !invalid  # Parse server response and register player in database
       json = JSON.parse(res)
       player = Player.find_or_create_by(metanet_id: json['user_id'].to_i)
@@ -2333,24 +2336,21 @@ class Player < ActiveRecord::Base
         last_active: Time.now,
         active:      true
       )
-      steam_auth = req.query['steam_auth']
-      SteamTicket.add_ascii(steam_auth) if !steam_auth.blank?
     else         # If no response was received, attempt to log in locally
       locally = true
 
       # Parse any param we can find
       ids = [req.parts['user_id'].to_i, req.query['user_id'].to_i].uniq
       ids.reject!{ |id| id <= 0 || id >= 10000000 }
-      steamid = req.query['steam_id'].to_s
+      steamid = (req.query['steam_id'] || steam_ticket&.steam_id).to_s
       raise "No parameters found" if ids.empty? && steamid.empty?
 
       # Try to locate player in the database based on those params
-      player = nil
+      player = Player.find_by(steam_id: steamid)
       ids.each{ |id|
         player = Player.find_by(metanet_id: id)
         break if !player.nil?
-      }
-      player = Player.find_by(steam_id: steamid) if !player
+      } unless player
 
       # Initialize response
       json = {}
