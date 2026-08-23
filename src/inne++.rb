@@ -92,6 +92,7 @@
 
 $boot_time = Time.now
 $load_time = Time.now # Reset on each file load
+ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
 
 # We use some gems directly from Github repositories. This is supported by
 # Bundler but not by RubyGems directly. The next two lines makes these gems
@@ -217,9 +218,6 @@ def initialize_vars
       }.to_h
     ]
   }.to_h
-
-  # Set environment variables
-  ENV['DISCORDRB_NONACL'] = '1' # Prevent libsodium warning message
 
   # Create additional needed folders
   [DIR_LOGS].each{ |d| Dir.mkdir(d) unless Dir.exist?(d) }

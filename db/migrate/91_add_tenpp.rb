@@ -4,9 +4,12 @@
 # will fetch those in too. The new solo levels are visually split in 2 tabs,
 # but internally they're a single tab (index 6, codenamed "DLC"), so that's
 # what we do here as well, to prevent breaking compatibility.
+require_relative '../../src/maps.rb'
+require_relative '../../src/mappacks.rb'
+
 class AddTenpp < ActiveRecord::Migration[5.1]
   def change
-    dir = Mappack.find(0).folder(v: 2)
+    mappack = Mappack.find(0)
     tab = TABS_NEW[:ST]
     tab_id = tab[:mode] * 7 + tab[:tab]
     letters = ('A'..'Z').to_a.reject{ |letter| letter == 'N' }
@@ -15,8 +18,8 @@ class AddTenpp < ActiveRecord::Migration[5.1]
     level_id = tab[:start]
     tab[:files].each{ |filename, count|
       code = filename == 'SSS' ? '?!' : '!?'
-      path = File.join(dir, filename  + '.txt')
-      File.read(path).scan(/\$(.+?)#/).map(&:first).each_with_index{ |title, i|
+      file = mappack.get_file(File.join(DIR_MAPPACK_LEVELS, filename  + '.txt'))
+                    .scan(/\$(.+?)#/).map(&:first).each_with_index{ |title, i|
         Level.find_or_create_by(id: level_id).update(
           name:        code + '-' + letters[i],
           completed:   false,

@@ -1,8 +1,10 @@
 # Incorporate metanet_id to userlevel scores so that we can query them like we
 # do for archived vanilla scores.
+require_relative '../../src/maps.rb'
+require_relative '../../src/userlevels.rb'
 class AddMetanetIdToUserlevels < ActiveRecord::Migration[5.1]
-  def change
-    add_column :userlevel_scores, :metanet_id, :integer
+  def up
+    add_column :userlevel_scores, :metanet_id, :integer unless column_exists?(:userlevel_scores, :metanet_id)
 
     max = UserlevelScore.maximum(:id) + 1
     size = 1000
@@ -18,5 +20,9 @@ class AddMetanetIdToUserlevels < ActiveRecord::Migration[5.1]
       }
       puts
     end
+  end
+
+  def down
+    remove_column :userlevel_scores, :metanet_id
   end
 end
