@@ -173,7 +173,7 @@
       },
       "stats": {
         "scores": 62649,
-        "recent_scores": 155,
+        "recent_scores": 154,
         "last_active": "2026-08-20T23:50:41Z",
         "players": 104,
         "recent_players": 6
@@ -302,7 +302,11 @@
         "challenge_files": [],
         "palettes": [],
         "authors_file": false,
-        "scores_file": false
+        "scores_file": false,
+        "bind": [
+          1,
+          2
+        ]
       },
       "properties": {
         "modes": [
@@ -1230,9 +1234,9 @@
         "stories": 58
       },
       "stats": {
-        "scores": 14979,
-        "recent_scores": 621,
-        "last_active": "2026-08-23T08:56:14Z",
+        "scores": 14993,
+        "recent_scores": 631,
+        "last_active": "2026-08-23T22:56:05Z",
         "players": 16,
         "recent_players": 8
       }
@@ -1287,10 +1291,10 @@
     {
       "attributes": {
         "id": 24,
-        "name": null,
+        "name": "Zivatar",
         "code": "ziv",
-        "authors": null,
-        "date": null,
+        "authors": "flux͢ɕdrive",
+        "date": "2026-08-23T00:00:00.000Z",
         "version": 1,
         "lotd": false,
         "enabled": true,
@@ -1324,16 +1328,16 @@
         "stories": 5
       },
       "stats": {
-        "scores": 0,
-        "recent_scores": 0,
-        "last_active": null,
-        "players": 0,
-        "recent_players": 0
+        "scores": 72,
+        "recent_scores": 72,
+        "last_active": "2026-08-23T23:13:23Z",
+        "players": 3,
+        "recent_players": 3
       }
     }
   ],
   "signature": {
-    "md5": "151e630dd1add73bc29ae4185d8a8639",
-    "date": "2026-08-23T16:43:44Z"
+    "md5": "ee888760e94d49e3f5caaecc1c9c9afc",
+    "date": "2026-08-23T23:36:56Z"
   }
 }
