@@ -172,11 +172,11 @@
         "stories": 25
       },
       "stats": {
-        "scores": 62541,
-        "recent_scores": 177,
-        "last_active": "2026-08-03T03:38:37Z",
+        "scores": 62649,
+        "recent_scores": 155,
+        "last_active": "2026-08-20T23:50:41Z",
         "players": 104,
-        "recent_players": 4
+        "recent_players": 6
       }
     },
     {
@@ -269,9 +269,9 @@
         "stories": 5
       },
       "stats": {
-        "scores": 1509,
-        "recent_scores": 2,
-        "last_active": "2026-07-15T11:14:32Z",
+        "scores": 1554,
+        "recent_scores": 50,
+        "last_active": "2026-08-12T07:19:33Z",
         "players": 19,
         "recent_players": 1
       }
@@ -513,11 +513,11 @@
         "stories": 4
       },
       "stats": {
-        "scores": 935,
-        "recent_scores": 0,
-        "last_active": "2025-09-08T16:06:41Z",
-        "players": 7,
-        "recent_players": 0
+        "scores": 953,
+        "recent_scores": 18,
+        "last_active": "2026-08-03T22:17:11Z",
+        "players": 8,
+        "recent_players": 1
       }
     },
     {
@@ -843,9 +843,9 @@
         "stories": 20
       },
       "stats": {
-        "scores": 17975,
-        "recent_scores": 7,
-        "last_active": "2026-07-30T03:40:54Z",
+        "scores": 17976,
+        "recent_scores": 5,
+        "last_active": "2026-08-07T20:30:10Z",
         "players": 42,
         "recent_players": 2
       }
@@ -1127,11 +1127,11 @@
         "stories": 5
       },
       "stats": {
-        "scores": 2275,
-        "recent_scores": 0,
-        "last_active": "2026-06-06T15:28:03Z",
-        "players": 18,
-        "recent_players": 0
+        "scores": 2312,
+        "recent_scores": 37,
+        "last_active": "2026-08-20T00:51:03Z",
+        "players": 19,
+        "recent_players": 1
       }
     },
     {
@@ -1174,10 +1174,10 @@
         "stories": 5
       },
       "stats": {
-        "scores": 1368,
-        "recent_scores": 1,
-        "last_active": "2026-07-21T17:55:38Z",
-        "players": 12,
+        "scores": 1428,
+        "recent_scores": 60,
+        "last_active": "2026-08-18T19:33:12Z",
+        "players": 13,
         "recent_players": 1
       }
     },
@@ -1230,11 +1230,11 @@
         "stories": 58
       },
       "stats": {
-        "scores": 14834,
-        "recent_scores": 711,
-        "last_active": "2026-08-03T05:11:46Z",
-        "players": 13,
-        "recent_players": 7
+        "scores": 14979,
+        "recent_scores": 621,
+        "last_active": "2026-08-23T08:56:14Z",
+        "players": 16,
+        "recent_players": 8
       }
     },
     {
@@ -1277,6 +1277,53 @@
         "stories": 5
       },
       "stats": {
+        "scores": 1619,
+        "recent_scores": 1619,
+        "last_active": "2026-08-21T11:33:06Z",
+        "players": 14,
+        "recent_players": 14
+      }
+    },
+    {
+      "attributes": {
+        "id": 24,
+        "name": null,
+        "code": "ziv",
+        "authors": null,
+        "date": null,
+        "version": 1,
+        "lotd": false,
+        "enabled": true,
+        "public": true,
+        "fractional": false
+      },
+      "download": {
+        "link": "https://github.com/edelkas/inne/raw/master/db/mappacks/024_ziv_1.zip",
+        "size": 55605,
+        "md5": "6d73e030cf1d84746bbfc88be2f6a55f"
+      },
+      "disk": {
+        "size": 333020,
+        "level_files": [
+          "SI.txt"
+        ],
+        "challenge_files": [],
+        "palettes": [],
+        "authors_file": false,
+        "scores_file": false
+      },
+      "properties": {
+        "modes": [
+          "solo"
+        ],
+        "tabs": [
+          "SI"
+        ],
+        "levels": 125,
+        "episodes": 25,
+        "stories": 5
+      },
+      "stats": {
         "scores": 0,
         "recent_scores": 0,
         "last_active": null,
@@ -1286,7 +1333,7 @@
     }
   ],
   "signature": {
-    "md5": "42d75a399ec6eb6c8889487eb3b51378",
-    "date": "2026-08-11T21:35:46Z"
+    "md5": "151e630dd1add73bc29ae4185d8a8639",
+    "date": "2026-08-23T16:43:44Z"
   }
 }
