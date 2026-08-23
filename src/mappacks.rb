@@ -141,6 +141,7 @@ class Mappack < ActiveRecord::Base
           authors_file:    !!mappack.get_files(:authors),
           scores_file:     !!mappack.get_files(:scores)
         }
+        hash[:disk][:bind] = [1, 2] if mappack.code == 'dua'
         hash[:properties] = {
           modes:    mappack.levels.pluck('distinct mode').map{ |m| MODES[m] },
           tabs:     mappack.levels.pluck('distinct tab').map{ |tab| TABS_NEW[tab.to_sym][:code] },
